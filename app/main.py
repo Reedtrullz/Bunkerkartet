@@ -584,7 +584,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ]
         try:
             route: RouteResult = fetch_openrouteservice(settings.ors_api_key, coordinates)
-        except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError) as error:
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as error:
             raise HTTPException(502, f"routing provider error: {error}")
         warnings = ["A route does not grant permission to enter land or structures."]
         if _distance_m(coordinates[0], route.coordinates[0]) > 50 or _distance_m(

@@ -1,4 +1,5 @@
 from app.routes import build_gpx, normalize_ors_response
+import pytest
 
 
 def test_build_gpx_contains_trackpoints_and_escapes_route_name():
@@ -35,3 +36,12 @@ def test_normalize_ors_response_extracts_summary_and_coordinates():
     assert route.distance_m == 1200
     assert route.duration_s == 900
     assert route.coordinates == [(10.4, 63.4), (10.5, 63.5)]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [[], {}, {"features": [None]}, {"features": [{"geometry": {"type": "LineString", "coordinates": []}}]}],
+)
+def test_malformed_provider_payload_is_a_controlled_value_error(payload):
+    with pytest.raises(ValueError):
+        normalize_ors_response(payload)

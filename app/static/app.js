@@ -84,8 +84,9 @@ function renderMap() {
     details.addEventListener("click", () => { marker.closePopup(); loadDetail(site.id); });
     const add = document.createElement("button");
     add.className = "small";
-    text(add, state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
-    add.disabled = state.routeSiteIds.includes(site.id);
+    const routeReady = site.latitude != null && site.longitude != null;
+    text(add, !routeReady ? "No coordinates" : state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
+    add.disabled = !routeReady || state.routeSiteIds.includes(site.id);
     add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add);
     popup.append(actions);
@@ -129,8 +130,9 @@ function renderSiteList() {
     details.addEventListener("click", () => loadDetail(site.id));
     const add = document.createElement("button");
     add.className = "small";
-    text(add, state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
-    add.disabled = state.routeSiteIds.includes(site.id);
+    const routeReady = site.latitude != null && site.longitude != null;
+    text(add, !routeReady ? "No coordinates" : state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
+    add.disabled = !routeReady || state.routeSiteIds.includes(site.id);
     add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add);
     item.append(actions);

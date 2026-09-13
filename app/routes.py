@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from html import escape
 import json
-from urllib.error import HTTPError, URLError
+import math
 from urllib.request import Request, urlopen
 
 
@@ -18,11 +18,17 @@ class RouteResult:
 
 
 def normalize_ors_response(payload: dict) -> RouteResult:
+    if not isinstance(payload, dict):
+        raise ValueError("routing provider returned invalid JSON object")
     features = payload.get("features")
     if not isinstance(features, list) or not features:
         raise ValueError("routing provider returned no route")
     feature = features[0]
+    if not isinstance(feature, dict):
+        raise ValueError("routing provider returned invalid feature")
     geometry = feature.get("geometry", {})
+    if not isinstance(geometry, dict):
+        raise ValueError("routing provider returned invalid geometry")
     coordinates = geometry.get("coordinates")
     if geometry.get("type") != "LineString" or not isinstance(coordinates, list):
         raise ValueError("routing provider returned invalid geometry")
@@ -31,16 +37,25 @@ def normalize_ors_response(payload: dict) -> RouteResult:
     for coordinate in coordinates:
         if not isinstance(coordinate, list) or len(coordinate) < 2:
             raise ValueError("routing provider returned invalid coordinate")
-        lon, lat = float(coordinate[0]), float(coordinate[1])
+        try:
+            lon, lat = float(coordinate[0]), float(coordinate[1])
+        except (TypeError, ValueError) as error:
+            raise ValueError("routing provider returned invalid coordinate") from error
         if not -180 <= lon <= 180 or not -90 <= lat <= 90:
             raise ValueError("routing provider returned out-of-range coordinate")
         normalized.append((lon, lat))
     if len(normalized) < 2:
         raise ValueError("routing provider returned too few coordinates")
 
-    summary = feature.get("properties", {}).get("summary", {})
-    distance_m = float(summary["distance"])
-    duration_s = float(summary["duration"])
+    properties = feature.get("properties", {})
+    summary = properties.get("summary", {}) if isinstance(properties, dict) else {}
+    try:
+        distance_m = float(summary["distance"])
+        duration_s = float(summary["duration"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("routing provider returned invalid summary") from error
+    if not math.isfinite(distance_m) or not math.isfinite(duration_s):
+        raise ValueError("routing provider returned non-finite summary values")
     if distance_m < 0 or duration_s < 0:
         raise ValueError("routing provider returned negative summary values")
     return RouteResult(distance_m, duration_s, normalized)
@@ -81,4 +96,3 @@ def build_gpx(name: str, coordinates: list[tuple[float, float]]) -> str:
         f"<trk><name>{escape(name)}</name><trkseg>{trackpoints}</trkseg></trk>"
         "</gpx>\n"
     )
-
