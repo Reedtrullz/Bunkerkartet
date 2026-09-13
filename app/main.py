@@ -38,6 +38,7 @@ SITE_ACCESSES = (
     "dangerous",
     "unsafe",
 )
+CONFIDENCE_LEVELS = ("high", "medium", "low", "unknown")
 LOCATION_BASES = (
     "explicit_coordinate",
     "address",
@@ -81,6 +82,7 @@ class SitePatch(BaseModel):
         "dangerous",
         "unsafe",
     ] | None = None
+    confidence: Literal["high", "medium", "low", "unknown"] | None = None
     condition: str | None = Field(default=None, max_length=1000)
     warnings: list[str] | None = None
     short_rationale: str | None = Field(default=None, max_length=2000)
@@ -90,7 +92,7 @@ class SitePatch(BaseModel):
     def require_complete_coordinate_pair(self) -> "SitePatch":
         if (self.latitude is None) != (self.longitude is None):
             raise ValueError("latitude and longitude must be edited together")
-        for field in ("name", "site_kind", "precision", "location_basis", "status", "access", "warnings"):
+        for field in ("name", "site_kind", "precision", "location_basis", "status", "access", "confidence", "warnings"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
         return self
@@ -239,6 +241,7 @@ def _site_values(record: ImportRecord, warnings: list[str]) -> tuple[object, ...
         record.location_basis,
         "candidate",
         record.access,
+        record.confidence,
         record.condition,
         dump_json(warnings),
         record.short_rationale,
@@ -314,10 +317,10 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                     """
                     INSERT INTO sites
                         (external_key, name, site_kind, latitude, longitude, precision,
-                         uncertainty_m, location_basis, status, access, condition,
+                         uncertainty_m, location_basis, status, access, confidence, condition,
                          warnings_json, short_rationale, observed_location_text,
                          created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (*_site_values(record, warnings), timestamp, timestamp),
                 )
@@ -329,7 +332,7 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                     """
                     UPDATE sites SET name = ?, site_kind = ?, latitude = ?, longitude = ?,
                         precision = ?, uncertainty_m = ?, location_basis = ?, status = ?,
-                        access = ?, condition = ?, warnings_json = ?, short_rationale = ?,
+                        access = ?, confidence = ?, condition = ?, warnings_json = ?, short_rationale = ?,
                         observed_location_text = ?, updated_at = ?
                     WHERE id = ?
                     """,
@@ -343,6 +346,7 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                         record.location_basis,
                         "candidate",
                         record.access,
+                        record.confidence,
                         record.condition,
                         dump_json(warnings),
                         record.short_rationale,
@@ -495,10 +499,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return [site_from_row(row) for row in connection.execute(query, values).fetchall()]
 
     @app.get("/api/review/candidates", dependencies=[Depends(admin_guard)])
-    def candidates() -> list[dict[str, object]]:
+    def candidates(
+        confidence: str | None = Query(default=None),
+        access: str | None = Query(default=None),
+        uncertainty_band: Literal["under-100", "100-500", "over-500", "unknown"] | None = Query(default=None),
+        source_type: str | None = Query(default=None, max_length=100),
+    ) -> list[dict[str, object]]:
+        if confidence is not None and confidence not in CONFIDENCE_LEVELS:
+            raise HTTPException(400, "invalid candidate confidence")
+        if access is not None and access not in SITE_ACCESSES:
+            raise HTTPException(400, "invalid candidate access")
+        conditions = ["sites.status = 'candidate'", "sites.merged_into_id IS NULL"]
+        values: list[object] = []
+        if confidence:
+            conditions.append("COALESCE(sites.confidence, 'unknown') = ?")
+            values.append(confidence)
+        if access:
+            conditions.append("sites.access = ?")
+            values.append(access)
+        if uncertainty_band == "under-100":
+            conditions.append("sites.uncertainty_m IS NOT NULL AND sites.uncertainty_m <= 100")
+        elif uncertainty_band == "100-500":
+            conditions.append("sites.uncertainty_m > 100 AND sites.uncertainty_m <= 500")
+        elif uncertainty_band == "over-500":
+            conditions.append("sites.uncertainty_m > 500")
+        elif uncertainty_band == "unknown":
+            conditions.append("sites.uncertainty_m IS NULL")
+        if source_type and source_type.strip():
+            conditions.append(
+                "EXISTS ("
+                "SELECT 1 FROM evidence "
+                "JOIN sources ON sources.id = evidence.source_id "
+                "WHERE evidence.site_id = sites.id "
+                "AND lower(sources.source_type) = lower(?)"
+                ")"
+            )
+            values.append(source_type.strip())
         with database.connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM sites WHERE status = 'candidate' AND merged_into_id IS NULL ORDER BY id"
+                f"SELECT * FROM sites WHERE {' AND '.join(conditions)} ORDER BY id",
+                values,
             ).fetchall()
             return [_site_detail(connection, row) for row in rows]
 

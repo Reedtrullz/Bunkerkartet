@@ -23,6 +23,9 @@ record remains a candidate until review. Reusing a committed `batch_id` is
 idempotent, and imports never replace reviewed site fields. The complete
 versioned contract is in [`app/imports.py`](app/imports.py).
 
+The candidate queue can be narrowed by confidence, access, uncertainty radius,
+and source type; each row also exposes its evidence count and detail view.
+
 For external forum/newspaper research, use the small [research import
 kit](research/README.md): give an LLM the extraction prompt, save its JSON
 response, validate it locally, then preview and commit it in the app.

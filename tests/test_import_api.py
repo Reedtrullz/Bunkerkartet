@@ -164,6 +164,38 @@ def test_candidate_review_accept_reject_restore_and_duplicate_warning(tmp_path):
     ).json()["site"]["status"] == "candidate"
 
 
+def test_candidate_review_filters_combine_curator_fields(tmp_path):
+    api = client(tmp_path)
+    broad = package("batch-broad", name="Broad lead", external_key="forum:broad")
+    broad["records"][0]["sources"][0]["url"] = "https://example.com/forum/broad"
+    broad["records"][0].update(
+        confidence="low",
+        access="permission_required",
+        uncertainty_m=800,
+        sources=[{**broad["records"][0]["sources"][0], "source_type": "forum"}],
+    )
+    narrow = package("batch-narrow", name="Narrow lead", external_key="web:narrow")
+    narrow["records"][0]["sources"][0]["url"] = "https://example.com/website/narrow"
+    narrow["records"][0].update(
+        confidence="medium",
+        access="public",
+        uncertainty_m=80,
+        sources=[{**narrow["records"][0]["sources"][0], "source_type": "website"}],
+    )
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=broad).status_code == 200
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=narrow).status_code == 200
+
+    response = api.get(
+        "/api/review/candidates?confidence=low&access=permission_required"
+        "&uncertainty_band=over-500&source_type=forum",
+        headers=auth(),
+    )
+
+    assert response.status_code == 200
+    assert [site["external_key"] for site in response.json()] == ["forum:broad"]
+    assert response.json()[0]["confidence"] == "low"
+
+
 def test_editing_warnings_updates_the_json_column(tmp_path):
     api = client(tmp_path)
     assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200

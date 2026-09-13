@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS sites (
     location_basis TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'candidate',
     access TEXT NOT NULL DEFAULT 'unknown',
+    confidence TEXT,
     condition TEXT,
     warnings_json TEXT NOT NULL DEFAULT '[]',
     short_rationale TEXT,
@@ -115,6 +116,36 @@ class Database:
     def initialize(self) -> None:
         with self.connect() as connection:
             connection.executescript(SCHEMA)
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(sites)").fetchall()
+            }
+            if "confidence" not in columns:
+                connection.execute("ALTER TABLE sites ADD COLUMN confidence TEXT")
+            connection.execute(
+                """
+                UPDATE sites
+                SET confidence = (
+                    SELECT json_extract(import_records.payload_json, '$.confidence')
+                    FROM import_records
+                    WHERE import_records.site_id = sites.id
+                      AND json_valid(import_records.payload_json) = 1
+                      AND json_extract(import_records.payload_json, '$.confidence')
+                          IN ('high', 'medium', 'low', 'unknown')
+                    ORDER BY import_records.id DESC
+                    LIMIT 1
+                )
+                WHERE sites.confidence IS NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM import_records
+                    WHERE import_records.site_id = sites.id
+                      AND json_valid(import_records.payload_json) = 1
+                      AND json_extract(import_records.payload_json, '$.confidence')
+                          IN ('high', 'medium', 'low', 'unknown')
+                  )
+                """
+            )
             connection.execute("PRAGMA user_version = 1")
 
 

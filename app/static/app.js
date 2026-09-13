@@ -157,6 +157,7 @@ async function loadSites() {
       : status || kind
         ? "No sites match the current filters."
         : "Authenticated. No site records imported yet.");
+    await loadCandidates();
   } catch (error) { setStatus(error.message); }
 }
 
@@ -230,16 +231,35 @@ async function commitImport() {
 async function loadCandidates() {
   if (!state.token) return;
   try {
-    const candidates = await api("/api/review/candidates");
+    const params = new URLSearchParams();
+    const confidence = $("review-confidence-filter").value;
+    const access = $("review-access-filter").value;
+    const uncertaintyBand = $("review-uncertainty-filter").value;
+    const sourceType = $("review-source-filter").value.trim();
+    if (confidence) params.set("confidence", confidence);
+    if (access) params.set("access", access);
+    if (uncertaintyBand) params.set("uncertainty_band", uncertaintyBand);
+    if (sourceType) params.set("source_type", sourceType);
+    const candidates = await api(`/api/review/candidates?${params}`);
     const list = $("candidate-list"); list.replaceChildren();
+    text($("candidate-summary"), `${candidates.length} candidate${candidates.length === 1 ? "" : "s"} in this view.`);
     if (!candidates.length) {
       const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "No candidates waiting for review."); list.append(empty); return;
     }
     candidates.forEach((site) => {
       const item = document.createElement("article"); item.className = "candidate-item";
       const title = document.createElement("strong"); text(title, site.name); item.append(title);
-      const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${site.site_kind} | ${site.precision}`); item.append(meta);
+      const uncertainty = site.uncertainty_m == null ? "uncertainty unknown" : `${Math.round(site.uncertainty_m)} m`;
+      const sourceCount = (site.sources || []).length;
+      const meta = document.createElement("div"); meta.className = "site-meta";
+      text(meta, `${site.site_kind} | ${site.confidence || "unknown"} | ${uncertainty} | ${site.access} | ${sourceCount} source${sourceCount === 1 ? "" : "s"}`); item.append(meta);
+      if (site.warnings?.length) {
+        const warnings = document.createElement("div"); warnings.className = "warning";
+        text(warnings, `${site.warnings.length} warning${site.warnings.length === 1 ? "" : "s"}`); item.append(warnings);
+      }
       const actions = document.createElement("div"); actions.className = "candidate-actions";
+      const details = document.createElement("button"); details.className = "small"; text(details, "Details");
+      details.addEventListener("click", () => loadDetail(site.id)); actions.append(details);
       [["Accept", "accept", ""], ["Reject", "reject", "danger"]].forEach(([label, action, style]) => {
         const button = document.createElement("button"); button.className = `small ${style}`; text(button, label);
         button.addEventListener("click", async () => {
@@ -304,6 +324,10 @@ $("import-file").addEventListener("change", (event) => { if (event.target.files[
 $("preview-import").addEventListener("click", previewImport);
 $("commit-import").addEventListener("click", commitImport);
 $("refresh-candidates").addEventListener("click", loadCandidates);
+$("review-confidence-filter").addEventListener("change", loadCandidates);
+$("review-access-filter").addEventListener("change", loadCandidates);
+$("review-uncertainty-filter").addEventListener("change", loadCandidates);
+$("review-source-filter").addEventListener("change", loadCandidates);
 $("pick-start").addEventListener("click", () => { state.pickingStart = true; setStatus("Click the map to set the route start."); });
 $("use-location").addEventListener("click", () => {
   if (!navigator.geolocation) { setStatus("Location is not available in this browser."); return; }

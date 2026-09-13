@@ -69,6 +69,42 @@
           <h2>Candidate review</h2>
           <button id="refresh-candidates">Refresh</button>
         </div>
+        <div class="filter-grid">
+          <label>Confidence
+            <select id="review-confidence-filter">
+              <option value="">All confidence</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </label>
+          <label>Access
+            <select id="review-access-filter">
+              <option value="">All access</option>
+              <option value="public">Public</option>
+              <option value="private">Private</option>
+              <option value="restricted">Restricted</option>
+              <option value="permission_required">Permission required</option>
+              <option value="unknown">Unknown</option>
+              <option value="dangerous">Dangerous</option>
+              <option value="unsafe">Unsafe</option>
+            </select>
+          </label>
+          <label>Uncertainty
+            <select id="review-uncertainty-filter">
+              <option value="">Any radius</option>
+              <option value="under-100">Up to 100 m</option>
+              <option value="100-500">101-500 m</option>
+              <option value="over-500">Over 500 m</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </label>
+          <label>Source type
+            <input id="review-source-filter" type="search" placeholder="forum, newspaper...">
+          </label>
+        </div>
+        <div id="candidate-summary" class="site-meta"></div>
         <div id="candidate-list" class="candidate-list"></div>
       </section>
 
