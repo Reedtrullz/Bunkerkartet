@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "example-import-2026-09-13",
+  "generated_at": "2026-09-13T20:00:00+02:00",
+  "records": [
+    {
+      "external_key": "example:trondheim-site",
+      "name": "Example bunker candidate",
+      "site_kind": "bunker",
+      "geometry": {
+        "latitude": 63.4305,
+        "longitude": 10.3951
+      },
+      "precision": "approximate",
+      "uncertainty_m": 500,
+      "location_basis": "landmark_description",
+      "status": "candidate",
+      "access": "unknown",
+      "sources": [
+        {
+          "url": "https://example.com/source",
+          "title": "Example source",
+          "source_type": "example",
+          "excerpt": "Example fixture only; replace this source with researched evidence.",
+          "access_date": "2026-09-13"
+        }
+      ],
+      "confidence": "unknown",
+      "short_rationale": "Example fixture for the import contract.",
+      "condition": "Unknown",
+      "warnings": [
+        "Example only; do not use as a field location."
+      ],
+      "related_site_keys": []
+    }
+  ]
+}
