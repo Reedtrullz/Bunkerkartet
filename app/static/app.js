@@ -152,7 +152,11 @@ async function loadSites() {
     state.sites = await api(`/api/sites?${params}`);
     renderSiteList();
     renderMap();
-    setStatus(`${state.sites.length} site${state.sites.length === 1 ? "" : "s"} loaded.`);
+    setStatus(state.sites.length
+      ? `${state.sites.length} site${state.sites.length === 1 ? "" : "s"} loaded.`
+      : status || kind
+        ? "No sites match the current filters."
+        : "Authenticated. No site records imported yet.");
   } catch (error) { setStatus(error.message); }
 }
 
