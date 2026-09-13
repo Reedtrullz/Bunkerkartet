@@ -10,9 +10,8 @@
         that:
           - bunkerkartet_image_tag is match('^[0-9a-f]{40}$')
           - bunkerkartet_image_digest is match('^sha256:[0-9a-f]{64}$')
-          - bunkerkartet_registry_username is defined
-          - bunkerkartet_registry_token is defined
-        fail_msg: "Provide a 40-character commit SHA, published image digest, and GHCR credentials outside Git."
+          - (bunkerkartet_registry_username is not defined and bunkerkartet_registry_token is not defined) or (bunkerkartet_registry_username is defined and bunkerkartet_registry_token is defined)
+        fail_msg: "Provide a 40-character commit SHA and published image digest; provide both GHCR credentials or neither."
 
     - name: Log in to GHCR
       ansible.builtin.command:
@@ -20,6 +19,7 @@
         stdin: "{{ bunkerkartet_registry_token }}"
       no_log: true
       changed_when: true
+      when: bunkerkartet_registry_username is defined and bunkerkartet_registry_token is defined
 
     - name: Pull the requested image tag
       ansible.builtin.command:

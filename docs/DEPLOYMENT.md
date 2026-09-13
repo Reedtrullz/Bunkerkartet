@@ -21,20 +21,20 @@ the published artifact; the digest is the enforced runtime identity.
 ## Ansible preparation
 
 Copy `deploy/inventory.example.yml` to an ignored `deploy/inventory.yml`, then
-replace the placeholder host, commit SHA, and published image digest. Provide
-the server's GHCR username and read-only package token through an Ansible Vault
-file or another external secret source. Do not put registry credentials in the
+replace the placeholder host, commit SHA, and published image digest. Public
+GHCR packages can be pulled anonymously. If the package is private, provide the
+server's GHCR username and read-only package token through an Ansible Vault file
+or another external secret source. Do not put registry credentials in the
 application `.env` or in Git.
 
 ```bash
-ansible-playbook -i deploy/inventory.yml deploy/site.yml \
-  -e @/path/to/bunkerkartet-registry-vault.yml
+ansible-playbook -i deploy/inventory.yml deploy/site.yml
 ```
 
-The playbook requires a 40-character commit SHA, a `sha256:` digest, and
-registry credentials. It logs in, pulls the SHA tag, verifies that it resolves
-to the expected digest, writes the digest-pinned Compose file, and checks both
-`/api/health` and its reported version. It does not configure DNS, Caddy, or
+The playbook requires a 40-character commit SHA and a `sha256:` digest. It
+optionally logs in, pulls the SHA tag, verifies that it resolves to the expected
+digest, writes the digest-pinned Compose file, and checks both `/api/health` and
+its reported version. It does not configure DNS, Caddy, or application
 credentials.
 
 ## Caddy
