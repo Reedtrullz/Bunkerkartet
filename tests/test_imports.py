@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -50,6 +50,33 @@ def test_valid_package_is_parsed_with_candidate_status_and_unknown_access():
     assert parsed.generated_at == datetime(2026, 9, 13, 12, tzinfo=timezone.utc)
 
 
+def test_json_source_dates_are_parsed_and_preserved():
+    parsed = validate_import_package(
+        package(
+            record(
+                sources=[
+                    {
+                        **source(),
+                        "publication_date": "1944-01-01",
+                        "access_date": "2026-09-13",
+                    }
+                ]
+            )
+        )
+    )
+
+    assert parsed.records[0].sources[0].publication_date == date(1944, 1, 1)
+    assert parsed.records[0].sources[0].access_date == date(2026, 9, 13)
+
+
+@pytest.mark.parametrize("generated_at", [123, {}, None])
+def test_invalid_generated_at_types_are_validation_errors(generated_at):
+    payload = package()
+    payload["generated_at"] = generated_at
+    with pytest.raises(ValidationError):
+        validate_import_package(payload)
+
+
 def test_missing_sources_rejects_record_without_provenance():
     with pytest.raises(ValidationError):
         validate_import_package(package(record(sources=[])))
@@ -76,6 +103,11 @@ def test_geometry_is_required_unless_precision_is_unknown():
         validate_import_package(package(record(geometry=None, precision="approximate")))
 
     parsed = validate_import_package(package(record(geometry=None, precision="unknown")))
+    assert parsed.records[0].geometry is None
+
+    missing_geometry = record(precision="unknown")
+    missing_geometry.pop("geometry")
+    parsed = validate_import_package(package(missing_geometry))
     assert parsed.records[0].geometry is None
 
 

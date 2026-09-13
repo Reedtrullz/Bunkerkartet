@@ -21,12 +21,24 @@ class SourceEvidence(StrictModel):
     publication_date: date | None = None
     access_date: date | None = None
 
+    @field_validator("publication_date", "access_date", mode="before")
+    @classmethod
+    def parse_iso_date(cls, value: date | str | None) -> date | None:
+        if value is None or isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            try:
+                return date.fromisoformat(value)
+            except ValueError as exc:
+                raise ValueError("date must be ISO 8601 YYYY-MM-DD") from exc
+        raise ValueError("date must be an ISO 8601 YYYY-MM-DD string")
+
 
 class ImportRecord(StrictModel):
     external_key: str = Field(min_length=1, max_length=300)
     name: str = Field(min_length=1, max_length=500)
     site_kind: str = Field(min_length=1, max_length=100)
-    geometry: Geometry | None
+    geometry: Geometry | None = None
     precision: Literal["exact", "approximate", "unknown"]
     uncertainty_m: float | None = Field(default=None, ge=0)
     location_basis: Literal[
@@ -71,6 +83,8 @@ class ImportPackage(StrictModel):
     @field_validator("generated_at", mode="before")
     @classmethod
     def parse_and_require_timezone(cls, value: datetime | str) -> datetime:
+        if not isinstance(value, (datetime, str)):
+            raise ValueError("generated_at must be an ISO 8601 datetime")
         if isinstance(value, str):
             try:
                 value = datetime.fromisoformat(value.replace("Z", "+00:00"))
