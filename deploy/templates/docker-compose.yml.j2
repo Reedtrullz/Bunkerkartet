@@ -1,6 +1,6 @@
 services:
   bunkerkartet:
-    image: {{ bunkerkartet_image_repository }}:{{ bunkerkartet_image_tag }}
+    image: {{ bunkerkartet_image_repository }}@{{ bunkerkartet_image_digest }}
     restart: unless-stopped
     env_file:
       - .env
@@ -14,3 +14,4 @@ services:
 
 volumes:
   bunkerkartet-data:
+    name: bunkerkartet-data

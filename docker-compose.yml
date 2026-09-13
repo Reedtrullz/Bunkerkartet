@@ -1,6 +1,6 @@
 services:
   bunkerkartet:
-    image: ${IMAGE_REPOSITORY:-ghcr.io/reedtrullz/bunkerkartet}:${IMAGE_TAG:?set IMAGE_TAG to an immutable commit SHA}
+    image: ${IMAGE_REPOSITORY:-ghcr.io/reedtrullz/bunkerkartet}@${IMAGE_DIGEST:?set IMAGE_DIGEST to the published sha256 digest}
     restart: unless-stopped
     env_file:
       - .env
@@ -14,3 +14,4 @@ services:
 
 volumes:
   bunkerkartet-data:
+    name: bunkerkartet-data

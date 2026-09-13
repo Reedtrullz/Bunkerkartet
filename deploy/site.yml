@@ -5,6 +5,41 @@
   vars:
     app_dir: "{{ bunkerkartet_app_dir | default('/opt/bunkerkartet') }}"
   tasks:
+    - name: Validate release coordinates
+      ansible.builtin.assert:
+        that:
+          - bunkerkartet_image_tag is match('^[0-9a-f]{40}$')
+          - bunkerkartet_image_digest is match('^sha256:[0-9a-f]{64}$')
+          - bunkerkartet_registry_username is defined
+          - bunkerkartet_registry_token is defined
+        fail_msg: "Provide a 40-character commit SHA, published image digest, and GHCR credentials outside Git."
+
+    - name: Log in to GHCR
+      ansible.builtin.command:
+        cmd: docker login ghcr.io --username "{{ bunkerkartet_registry_username }}" --password-stdin
+        stdin: "{{ bunkerkartet_registry_token }}"
+      no_log: true
+      changed_when: true
+
+    - name: Pull the requested image tag
+      ansible.builtin.command:
+        cmd: docker pull "{{ bunkerkartet_image_repository }}:{{ bunkerkartet_image_tag }}"
+      register: image_pull
+      changed_when: "'Downloaded newer image' in image_pull.stdout or 'Pull complete' in image_pull.stdout"
+
+    - name: Inspect the pulled image
+      ansible.builtin.command:
+        cmd: docker image inspect "{{ bunkerkartet_image_repository }}:{{ bunkerkartet_image_tag }}"
+      register: image_inspect
+      changed_when: false
+
+    - name: Assert the tag resolves to the expected digest
+      ansible.builtin.assert:
+        that:
+          - "(image_inspect.stdout | from_json | first).RepoDigests | length > 0"
+          - "((image_inspect.stdout | from_json | first).RepoDigests | first) == bunkerkartet_image_repository ~ '@' ~ bunkerkartet_image_digest"
+        fail_msg: "The pulled commit tag did not resolve to the expected image digest."
+
     - name: Create application directory
       ansible.builtin.file:
         path: "{{ app_dir }}"
