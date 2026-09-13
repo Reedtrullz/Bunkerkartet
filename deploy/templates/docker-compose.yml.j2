@@ -1,0 +1,16 @@
+services:
+  bunkerkartet:
+    image: {{ bunkerkartet_image_repository }}:{{ bunkerkartet_image_tag }}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BUNKERKARTET_DATA_DIR: /app/data
+      APP_VERSION: {{ bunkerkartet_image_tag }}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - bunkerkartet-data:/app/data
+
+volumes:
+  bunkerkartet-data:

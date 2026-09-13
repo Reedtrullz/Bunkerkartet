@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.superpowers
+data
+.env
+.env.*
+!.env.example
+tests
+docs
+README.md

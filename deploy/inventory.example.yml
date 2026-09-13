@@ -1,0 +1,9 @@
+all:
+  hosts:
+    bunkerkartet:
+      ansible_host: 203.0.113.10
+      ansible_user: deploy
+      ansible_ssh_extra_args: -o IdentitiesOnly=yes
+      bunkerkartet_app_dir: /opt/bunkerkartet
+      bunkerkartet_image_repository: ghcr.io/reedtrullz/bunkerkartet
+      bunkerkartet_image_tag: REPLACE_WITH_COMMIT_SHA

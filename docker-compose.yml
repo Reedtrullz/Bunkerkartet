@@ -1,0 +1,16 @@
+services:
+  bunkerkartet:
+    image: ${IMAGE_REPOSITORY:-ghcr.io/reedtrullz/bunkerkartet}:${IMAGE_TAG:?set IMAGE_TAG to an immutable commit SHA}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BUNKERKARTET_DATA_DIR: /app/data
+      APP_VERSION: ${APP_VERSION:?set APP_VERSION to the deployed commit SHA}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    volumes:
+      - bunkerkartet-data:/app/data
+
+volumes:
+  bunkerkartet-data:

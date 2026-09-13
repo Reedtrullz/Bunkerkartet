@@ -1,0 +1,39 @@
+---
+- name: Prepare Bunkerkartet
+  hosts: all
+  become: true
+  vars:
+    app_dir: "{{ bunkerkartet_app_dir | default('/opt/bunkerkartet') }}"
+  tasks:
+    - name: Create application directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install Compose definition
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ app_dir }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Start the pinned image
+      ansible.builtin.command:
+        cmd: docker compose up -d --remove-orphans
+        chdir: "{{ app_dir }}"
+      register: compose_up
+      changed_when: "'Started' in compose_up.stdout or 'Created' in compose_up.stdout or 'Recreated' in compose_up.stdout"
+
+    - name: Verify health and deployed version
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8000/api/health
+        return_content: true
+        status_code: 200
+      register: health
+      until: health.json.status == 'healthy' and health.json.version == bunkerkartet_image_tag
+      retries: 12
+      delay: 5
