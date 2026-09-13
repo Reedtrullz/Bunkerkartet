@@ -33,11 +33,15 @@
       register: image_inspect
       changed_when: false
 
+    - name: Read all digests from the pulled image
+      ansible.builtin.set_fact:
+        image_repo_digests: "{{ (image_inspect.stdout | from_json | first).RepoDigests }}"
+
     - name: Assert the tag resolves to the expected digest
       ansible.builtin.assert:
         that:
-          - "(image_inspect.stdout | from_json | first).RepoDigests | length > 0"
-          - "((image_inspect.stdout | from_json | first).RepoDigests | first) == bunkerkartet_image_repository ~ '@' ~ bunkerkartet_image_digest"
+          - "image_repo_digests | length > 0"
+          - "bunkerkartet_image_repository ~ '@' ~ bunkerkartet_image_digest in image_repo_digests"
         fail_msg: "The pulled commit tag did not resolve to the expected image digest."
 
     - name: Create application directory
