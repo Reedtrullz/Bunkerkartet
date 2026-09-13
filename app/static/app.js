@@ -3,6 +3,7 @@ const state = {
   sites: [],
   pendingImport: null,
   routeSiteIds: [],
+  prioritySites: [],
   start: null,
   pickingStart: false,
 };
@@ -14,6 +15,7 @@ L.tileLayer(
 ).addTo(map);
 const markerLayer = L.layerGroup().addTo(map);
 const uncertaintyLayer = L.layerGroup().addTo(map);
+const observationLayer = L.layerGroup().addTo(map);
 let routeLayer = null;
 let startMarker = null;
 
@@ -31,6 +33,7 @@ const STATUS_LABELS = {
 };
 
 const statusLabel = (status) => STATUS_LABELS[status] || status;
+const outcomeLabel = (outcome) => outcome.replaceAll("_", " ");
 
 function labeledControl(label, control, className = "") {
   const wrapper = document.createElement("label");
@@ -87,11 +90,14 @@ function statusColor(status) {
   }[status] || "#c65d2e";
 }
 
-function siteById(id) { return state.sites.find((site) => site.id === id); }
+function siteById(id) {
+  return state.sites.find((site) => site.id === id) || state.prioritySites.find((site) => site.id === id);
+}
 
 function renderMap() {
   markerLayer.clearLayers();
   uncertaintyLayer.clearLayers();
+  observationLayer.clearLayers();
   const bounds = [];
   state.sites.forEach((site) => {
     if (site.latitude == null || site.longitude == null) return;
@@ -137,6 +143,26 @@ function renderMap() {
     popup.append(actions);
     marker.bindPopup(popup);
     marker.on("click", () => loadDetail(site.id));
+    (site.observation_points || []).forEach((observation) => {
+      if (observation.latitude == null || observation.longitude == null) return;
+      const observationPoint = [observation.latitude, observation.longitude];
+      bounds.push(observationPoint);
+      const observationMarker = L.circleMarker(observationPoint, {
+        color: "#2f7456",
+        fillColor: "#fff",
+        fillOpacity: 1,
+        radius: 5,
+        weight: 2,
+      }).addTo(observationLayer);
+      const popup = document.createElement("div");
+      const heading = document.createElement("strong"); text(heading, "Field observation"); popup.append(heading);
+      const meta = document.createElement("div"); meta.className = "site-meta";
+      text(meta, `${observation.observed_at} | ${outcomeLabel(observation.outcome)}`); popup.append(meta);
+      const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Open site");
+      details.addEventListener("click", () => { observationMarker.closePopup(); loadDetail(site.id); });
+      popup.append(details);
+      observationMarker.bindPopup(popup);
+    });
   });
   if (bounds.length) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
 }
@@ -203,6 +229,7 @@ async function loadSites() {
         ? "No sites match the current filters."
         : "Authenticated. No site records imported yet.");
     await loadCandidates();
+    await loadFieldPriority();
   } catch (error) { setStatus(error.message); }
 }
 
@@ -295,10 +322,20 @@ function renderObservations(site, root) {
   const observations = document.createElement("ul"); observations.className = "observation-list";
   (site.field_observations || []).forEach((observation) => {
     const item = document.createElement("li");
-    const title = document.createElement("strong"); text(title, `${observation.observed_at} | ${observation.outcome.replaceAll("_", " ")}`); item.append(title);
+    const title = document.createElement("strong"); text(title, `${observation.observed_at} | ${outcomeLabel(observation.outcome)}`); item.append(title);
     const note = document.createElement("p"); text(note, observation.note); item.append(note);
     if (observation.observed_location_text) { const location = document.createElement("div"); location.className = "site-meta"; text(location, observation.observed_location_text); item.append(location); }
     if (observation.access_notes) { const access = document.createElement("div"); access.className = "site-meta"; text(access, `Access: ${observation.access_notes}`); item.append(access); }
+    if (observation.latitude != null && observation.longitude != null) {
+      const coordinates = document.createElement("div"); coordinates.className = "site-meta";
+      text(coordinates, `Coordinate: ${observation.latitude.toFixed(5)}, ${observation.longitude.toFixed(5)}`); item.append(coordinates);
+      if (observation.outcome === "found") {
+        const actions = document.createElement("div"); actions.className = "candidate-actions";
+        const adopt = document.createElement("button"); adopt.className = "small"; adopt.type = "button"; adopt.title = "Use this observation coordinate as the site marker";
+        text(adopt, "Adopt coordinate"); adopt.addEventListener("click", () => adoptObservationLocation(site.id, observation.id));
+        actions.append(adopt); item.append(actions);
+      }
+    }
     if (observation.photo_urls?.length) {
       const photos = document.createElement("div"); photos.className = "observation-links";
       observation.photo_urls.forEach((url, index) => { const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noreferrer"; text(link, `Photo ${index + 1}`); photos.append(link); });
@@ -341,6 +378,16 @@ function renderObservations(site, root) {
     } catch (error) { setStatus(error.message); }
   });
   section.append(form); root.append(section);
+}
+
+async function adoptObservationLocation(siteId, observationId) {
+  if (!window.confirm("Adopt this field observation coordinate for the site?")) return;
+  try {
+    await api(`/api/sites/${siteId}/observations/${observationId}/adopt-location`, { method: "POST" });
+    setStatus("Observation coordinate adopted.");
+    await loadSites();
+    await loadDetail(siteId);
+  } catch (error) { setStatus(error.message); }
 }
 
 async function loadDetail(id) {
@@ -442,6 +489,35 @@ async function loadCandidates() {
   } catch (error) { text($("candidate-list"), error.message); }
 }
 
+function renderFieldPriority() {
+  const list = $("field-priority-list"); list.replaceChildren();
+  const sites = state.prioritySites;
+  text($("field-priority-summary"), `${sites.length} public site${sites.length === 1 ? "" : "s"} in shortlist.`);
+  if (!sites.length) {
+    const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "No sites meet the field shortlist."); list.append(empty); return;
+  }
+  sites.forEach((site) => {
+    const item = document.createElement("article"); item.className = `site-item status-${site.status}`;
+    const head = document.createElement("div"); head.className = "site-item-head";
+    const name = document.createElement("h3"); text(name, site.name);
+    const badge = document.createElement("span"); badge.className = "badge"; text(badge, statusLabel(site.status)); head.append(name, badge); item.append(head);
+    const uncertainty = site.uncertainty_m == null ? "uncertainty unknown" : `${Math.round(site.uncertainty_m)} m`;
+    const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${site.confidence || "unknown"} | ${uncertainty} | ${site.access}`); item.append(meta);
+    const actions = document.createElement("div"); actions.className = "site-actions";
+    const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Details"); details.addEventListener("click", () => loadDetail(site.id));
+    const add = document.createElement("button"); add.className = "small"; add.type = "button"; text(add, state.routeSiteIds.includes(site.id) ? "Added" : "Add route"); add.disabled = state.routeSiteIds.includes(site.id); add.addEventListener("click", () => addRouteSite(site.id));
+    actions.append(details, add); item.append(actions); list.append(item);
+  });
+}
+
+async function loadFieldPriority() {
+  if (!state.token) return;
+  try {
+    state.prioritySites = await api("/api/field-priority?limit=12");
+    renderFieldPriority();
+  } catch (error) { text($("field-priority-list"), error.message); }
+}
+
 function updateRouteStart(point, label) {
   state.start = point;
   if (startMarker) startMarker.remove();
@@ -494,6 +570,7 @@ $("import-file").addEventListener("change", (event) => { if (event.target.files[
 $("preview-import").addEventListener("click", previewImport);
 $("commit-import").addEventListener("click", commitImport);
 $("refresh-candidates").addEventListener("click", loadCandidates);
+$("refresh-field-priority").addEventListener("click", loadFieldPriority);
 $("review-confidence-filter").addEventListener("change", loadCandidates);
 $("review-access-filter").addEventListener("change", loadCandidates);
 $("review-uncertainty-filter").addEventListener("change", loadCandidates);

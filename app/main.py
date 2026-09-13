@@ -175,6 +175,25 @@ def _source_rows(connection: sqlite3.Connection, site_id: int) -> list[dict[str,
     return [dict(row) for row in rows]
 
 
+def _observation_points(connection: sqlite3.Connection, site_id: int) -> list[dict[str, object]]:
+    rows = connection.execute(
+        """
+        SELECT id, observed_at, outcome, latitude, longitude
+        FROM field_observations
+        WHERE site_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL
+        ORDER BY observed_at DESC, id DESC
+        """,
+        (site_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _site_summary(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
+    site = site_from_row(row)
+    site["observation_points"] = _observation_points(connection, int(row["id"]))
+    return site
+
+
 def _site_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
     site = site_from_row(row)
     site["sources"] = _source_rows(connection, int(row["id"]))
@@ -189,6 +208,17 @@ def _site_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, 
         (int(row["id"]),),
     ).fetchall()
     site["field_observations"] = [observation_from_row(item) for item in observations]
+    site["observation_points"] = [
+        {
+            "id": observation["id"],
+            "observed_at": observation["observed_at"],
+            "outcome": observation["outcome"],
+            "latitude": observation["latitude"],
+            "longitude": observation["longitude"],
+        }
+        for observation in site["field_observations"]
+        if observation["latitude"] is not None and observation["longitude"] is not None
+    ]
     return site
 
 
@@ -534,7 +564,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             values.append(site_kind)
         query = f"SELECT * FROM sites WHERE {' AND '.join(conditions)} ORDER BY name, id"
         with database.connect() as connection:
-            return [site_from_row(row) for row in connection.execute(query, values).fetchall()]
+            return [_site_summary(connection, row) for row in connection.execute(query, values).fetchall()]
+
+    @app.get("/api/field-priority", dependencies=[Depends(admin_guard)])
+    def field_priority(limit: int = Query(default=12, ge=1, le=50)) -> list[dict[str, object]]:
+        # ponytail: public-only shortlist avoids inferring permission from unknown access.
+        with database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM sites
+                WHERE merged_into_id IS NULL
+                  AND status IN ('candidate', 'likely')
+                  AND access = 'public'
+                  AND latitude IS NOT NULL AND longitude IS NOT NULL
+                ORDER BY
+                  CASE COALESCE(confidence, 'unknown')
+                    WHEN 'high' THEN 0
+                    WHEN 'medium' THEN 1
+                    WHEN 'low' THEN 2
+                    ELSE 3
+                  END,
+                  CASE WHEN uncertainty_m IS NULL THEN 1 ELSE 0 END,
+                  uncertainty_m,
+                  name,
+                  id
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [_site_detail(connection, row) for row in rows]
 
     @app.get("/api/review/candidates", dependencies=[Depends(admin_guard)])
     def candidates(
@@ -661,6 +719,69 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "observation": observation_from_row(observation_row),
                 "site": _site_detail(connection, updated),
             }
+
+    @app.post(
+        "/api/sites/{site_id}/observations/{observation_id}/adopt-location",
+        dependencies=[Depends(admin_guard)],
+    )
+    def adopt_observation_location(site_id: int, observation_id: int) -> dict[str, object]:
+        with database.connect() as connection:
+            row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
+            if row is None:
+                raise HTTPException(404, "site not found")
+            observation = connection.execute(
+                "SELECT * FROM field_observations WHERE id = ? AND site_id = ?",
+                (observation_id, site_id),
+            ).fetchone()
+            if observation is None:
+                raise HTTPException(404, "observation not found")
+            if observation["outcome"] != "found":
+                raise HTTPException(409, "only a found observation can update the site coordinate")
+            if observation["latitude"] is None or observation["longitude"] is None:
+                raise HTTPException(409, "observation has no coordinate")
+            timestamp = now_iso()
+            rationale = (row["short_rationale"] or "").strip()
+            update_note = (
+                f"Field observation #{observation_id} recorded {observation['observed_at']} "
+                "was used to update the map coordinate."
+            )
+            rationale = f"{rationale} {update_note}".strip()[:2000]
+            connection.execute(
+                """
+                UPDATE sites
+                SET latitude = ?, longitude = ?, location_basis = ?, short_rationale = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    observation["latitude"],
+                    observation["longitude"],
+                    "explicit_coordinate",
+                    rationale,
+                    timestamp,
+                    site_id,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO site_events (site_id, event_type, payload_json, created_at)
+                VALUES (?, 'coordinate_adopted', ?, ?)
+                """,
+                (
+                    site_id,
+                    dump_json(
+                        {
+                            "observation_id": observation_id,
+                            "old_latitude": row["latitude"],
+                            "old_longitude": row["longitude"],
+                            "new_latitude": observation["latitude"],
+                            "new_longitude": observation["longitude"],
+                        }
+                    ),
+                    timestamp,
+                ),
+            )
+            updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
+            return {"status": "coordinate_adopted", "site": _site_detail(connection, updated)}
 
     @app.post("/api/sites/{site_id}/review", dependencies=[Depends(admin_guard)])
     def review_site(site_id: int, request: ReviewRequest) -> dict[str, object]:

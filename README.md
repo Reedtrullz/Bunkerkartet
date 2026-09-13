@@ -32,6 +32,12 @@ outcome, observed coordinates, access notes, and external photo URLs; saving an
 observation does not promote a site automatically.
 
 Photo URLs are references only. The app does not copy or host image files.
+Recorded observations with coordinates appear as separate map points. A found
+observation can be reviewed from the site detail and adopted as the site
+coordinate; the existing uncertainty is preserved and the change is audited.
+The field shortlist contains only sites explicitly marked `public`, with
+candidate or researched status and coordinates, ordered by confidence and
+uncertainty. Unknown access is intentionally excluded.
 
 For external forum/newspaper research, use the small [research import
 kit](research/README.md): give an LLM the extraction prompt, save its JSON

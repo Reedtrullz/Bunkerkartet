@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from app.config import Settings
@@ -213,6 +215,138 @@ def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
     )
     assert confirmed.status_code == 200
     assert confirmed.json()["site"]["status"] == "trusted"
+
+
+def test_site_list_exposes_observation_points(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+
+    observed = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Observed from the public path.",
+            "latitude": 63.401,
+            "longitude": 10.401,
+        },
+    )
+    assert observed.status_code == 201
+    observation_id = observed.json()["observation"]["id"]
+
+    sites = api.get("/api/sites", headers=auth())
+
+    assert sites.status_code == 200
+    assert sites.json()[0]["observation_points"] == [
+        {
+            "id": observation_id,
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "latitude": 63.401,
+            "longitude": 10.401,
+        }
+    ]
+
+
+def test_found_observation_coordinate_can_be_adopted_with_audit_event(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    observed = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Entrance found beside the marked path.",
+            "latitude": 63.401,
+            "longitude": 10.401,
+        },
+    )
+    observation_id = observed.json()["observation"]["id"]
+
+    adopted = api.post(
+        f"/api/sites/{site_id}/observations/{observation_id}/adopt-location",
+        headers=auth(),
+    )
+
+    assert adopted.status_code == 200
+    assert adopted.json()["site"]["latitude"] == 63.401
+    assert adopted.json()["site"]["longitude"] == 10.401
+    assert adopted.json()["site"]["precision"] == "approximate"
+    assert adopted.json()["site"]["location_basis"] == "explicit_coordinate"
+    assert f"Field observation #{observation_id}" in adopted.json()["site"]["short_rationale"]
+    with api.app.state.database.connect() as connection:
+        event = connection.execute(
+            "SELECT event_type, payload_json FROM site_events WHERE site_id = ? ORDER BY id DESC LIMIT 1",
+            (site_id,),
+        ).fetchone()
+    assert event["event_type"] == "coordinate_adopted"
+    assert json.loads(event["payload_json"]) == {
+        "observation_id": observation_id,
+        "old_latitude": 63.4,
+        "old_longitude": 10.4,
+        "new_latitude": 63.401,
+        "new_longitude": 10.401,
+    }
+
+
+def test_only_found_observation_with_coordinates_can_be_adopted(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    not_found = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "not_found",
+            "note": "No structure at the candidate point.",
+            "latitude": 63.401,
+            "longitude": 10.401,
+        },
+    ).json()["observation"]["id"]
+    no_coordinate = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "A feature was seen, but no GPS point was recorded.",
+        },
+    ).json()["observation"]["id"]
+
+    assert api.post(
+        f"/api/sites/{site_id}/observations/{not_found}/adopt-location", headers=auth()
+    ).status_code == 409
+    assert api.post(
+        f"/api/sites/{site_id}/observations/{no_coordinate}/adopt-location", headers=auth()
+    ).status_code == 409
+
+
+def test_field_priority_returns_only_public_sites_in_research_order(tmp_path):
+    api = client(tmp_path)
+    records = [
+        ("public-medium", "Medium public", "public", "medium", 250),
+        ("public-low", "Low public", "public", "low", 50),
+        ("private-high", "Private high", "private", "high", 10),
+        ("unknown-high", "Unknown high", "unknown", "high", 10),
+    ]
+    for key, name, access, confidence, uncertainty in records:
+        payload = package(f"batch-{key}", name=name, external_key=f"field:{key}")
+        payload["records"][0]["sources"][0]["url"] = f"https://example.com/field/{key}"
+        payload["records"][0].update(access=access, confidence=confidence, uncertainty_m=uncertainty)
+        assert api.post("/api/admin/imports/commit", headers=auth(), json=payload).status_code == 200
+
+    response = api.get("/api/field-priority?limit=10", headers=auth())
+
+    assert response.status_code == 200
+    assert [site["external_key"] for site in response.json()] == [
+        "field:public-medium",
+        "field:public-low",
+    ]
 
 
 def test_candidate_review_filters_combine_curator_fields(tmp_path):
