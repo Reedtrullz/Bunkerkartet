@@ -23,6 +23,7 @@ def test_database_initialization_creates_v1_tables(tmp_path):
         "import_batches",
         "import_records",
         "route_plans",
+        "field_observations",
     }.issubset(names)
 
 

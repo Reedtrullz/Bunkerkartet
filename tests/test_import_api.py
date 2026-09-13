@@ -164,6 +164,57 @@ def test_candidate_review_accept_reject_restore_and_duplicate_warning(tmp_path):
     ).json()["site"]["status"] == "candidate"
 
 
+def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+
+    researched = api.post(
+        f"/api/sites/{site_id}/review",
+        headers=auth(),
+        json={"action": "research"},
+    )
+    assert researched.status_code == 200
+    assert researched.json()["site"]["status"] == "likely"
+
+    observed = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Concrete entrance and a partly buried ventilation shaft observed.",
+            "latitude": 63.4001,
+            "longitude": 10.4001,
+            "observed_location_text": "On the east side of the ridge.",
+            "access_notes": "Stay on the public path; entrance is not entered.",
+            "photo_urls": ["https://example.com/field-photo.jpg"],
+        },
+    )
+    assert observed.status_code == 201
+    assert observed.json()["site"]["status"] == "likely"
+    assert observed.json()["site"]["field_observations"][0]["outcome"] == "found"
+    assert observed.json()["site"]["field_observations"][0]["photo_urls"] == [
+        "https://example.com/field-photo.jpg"
+    ]
+
+    field_verified = api.post(
+        f"/api/sites/{site_id}/review",
+        headers=auth(),
+        json={"action": "field_verify"},
+    )
+    assert field_verified.status_code == 200
+    assert field_verified.json()["site"]["status"] == "field-verified"
+
+    confirmed = api.post(
+        f"/api/sites/{site_id}/review",
+        headers=auth(),
+        json={"action": "confirm"},
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["site"]["status"] == "trusted"
+
+
 def test_candidate_review_filters_combine_curator_fields(tmp_path):
     api = client(tmp_path)
     broad = package("batch-broad", name="Broad lead", external_key="forum:broad")

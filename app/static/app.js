@@ -20,6 +20,51 @@ let startMarker = null;
 const $ = (id) => document.getElementById(id);
 const text = (node, value) => { node.textContent = value ?? ""; return node; };
 
+const STATUS_LABELS = {
+  candidate: "Candidate",
+  approximate: "Approximate",
+  likely: "Researched",
+  trusted: "Confirmed",
+  "field-verified": "Field verified",
+  "destroyed-or-filled": "Destroyed or filled",
+  rejected: "Rejected",
+};
+
+const statusLabel = (status) => STATUS_LABELS[status] || status;
+
+function labeledControl(label, control, className = "") {
+  const wrapper = document.createElement("label");
+  if (className) wrapper.className = className;
+  text(wrapper, label);
+  wrapper.append(control);
+  return wrapper;
+}
+
+function selectControl(values, selected, labels = {}) {
+  const select = document.createElement("select");
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    text(option, labels[value] || statusLabel(value));
+    option.selected = value === selected;
+    select.append(option);
+  });
+  return select;
+}
+
+function inputControl(type, value = "") {
+  const input = document.createElement("input");
+  input.type = type;
+  input.value = value ?? "";
+  return input;
+}
+
+function textareaControl(value = "") {
+  const textarea = document.createElement("textarea");
+  text(textarea, value ?? "");
+  return textarea;
+}
+
 function setStatus(message) { text($("map-status"), message); }
 
 async function api(path, options = {}) {
@@ -74,7 +119,7 @@ function renderMap() {
     popup.append(heading);
     const meta = document.createElement("div");
     meta.className = "site-meta";
-    text(meta, `${site.site_kind} | ${site.status}`);
+    text(meta, `${site.site_kind} | ${statusLabel(site.status)}`);
     popup.append(meta);
     const actions = document.createElement("div");
     actions.className = "site-actions";
@@ -115,7 +160,7 @@ function renderSiteList() {
     text(name, site.name);
     const badge = document.createElement("span");
     badge.className = "badge";
-    text(badge, site.status);
+    text(badge, statusLabel(site.status));
     head.append(name, badge);
     item.append(head);
     const meta = document.createElement("div");
@@ -161,38 +206,163 @@ async function loadSites() {
   } catch (error) { setStatus(error.message); }
 }
 
+async function runReviewAction(id, action) {
+  try {
+    await api(`/api/sites/${id}/review`, { method: "POST", body: JSON.stringify({ action }) });
+    await loadSites();
+    await loadDetail(id);
+  } catch (error) { setStatus(error.message); }
+}
+
+function renderLifecycleActions(site, root) {
+  const section = document.createElement("section");
+  section.className = "detail-section";
+  const heading = document.createElement("h3"); text(heading, "Lifecycle"); section.append(heading);
+  const actions = document.createElement("div"); actions.className = "candidate-actions";
+  const transitions = {
+    candidate: [["Mark researched", "research", ""]],
+    likely: [["Mark field verified", "field_verify", ""]],
+    "field-verified": [["Confirm", "confirm", ""]],
+  };
+  (transitions[site.status] || []).forEach(([label, action, style]) => {
+    const button = document.createElement("button"); button.className = `small ${style}`; button.type = "button"; text(button, label);
+    button.addEventListener("click", () => runReviewAction(site.id, action)); actions.append(button);
+  });
+  if (site.status !== "rejected") {
+    const reject = document.createElement("button"); reject.className = "small danger"; reject.type = "button"; text(reject, "Reject");
+    reject.addEventListener("click", () => runReviewAction(site.id, "reject")); actions.append(reject);
+  } else {
+    const restore = document.createElement("button"); restore.className = "small"; restore.type = "button"; text(restore, "Restore candidate");
+    restore.addEventListener("click", () => runReviewAction(site.id, "restore")); actions.append(restore);
+  }
+  section.append(actions); root.append(section);
+}
+
+function renderSiteEditor(site, root) {
+  const section = document.createElement("section"); section.className = "detail-section";
+  const heading = document.createElement("h3"); text(heading, "Curate site"); section.append(heading);
+  const form = document.createElement("form"); form.className = "detail-form";
+  const grid = document.createElement("div"); grid.className = "detail-grid";
+  const name = inputControl("text", site.name); name.name = "name";
+  const kind = inputControl("text", site.site_kind); kind.name = "site_kind";
+  const status = selectControl(["candidate", "approximate", "likely", "field-verified", "trusted", "destroyed-or-filled", "rejected"], site.status); status.name = "status";
+  const confidence = selectControl(["unknown", "low", "medium", "high"], site.confidence || "unknown"); confidence.name = "confidence";
+  const access = selectControl(["unknown", "public", "private", "restricted", "permission_required", "dangerous", "unsafe"], site.access); access.name = "access";
+  const precision = selectControl(["exact", "approximate", "unknown"], site.precision); precision.name = "precision";
+  const uncertainty = inputControl("number", site.uncertainty_m); uncertainty.name = "uncertainty_m"; uncertainty.min = "0"; uncertainty.step = "1";
+  const basis = selectControl(["explicit_coordinate", "address", "map_reference", "landmark_description", "llm_inference"], site.location_basis); basis.name = "location_basis";
+  const latitude = inputControl("number", site.latitude); latitude.name = "latitude"; latitude.step = "0.000001"; latitude.min = "-90"; latitude.max = "90";
+  const longitude = inputControl("number", site.longitude); longitude.name = "longitude"; longitude.step = "0.000001"; longitude.min = "-180"; longitude.max = "180";
+  [["Name", name], ["Type", kind], ["Status", status], ["Confidence", confidence], ["Access", access], ["Precision", precision], ["Uncertainty (m)", uncertainty], ["Location basis", basis], ["Latitude", latitude], ["Longitude", longitude]]
+    .forEach(([label, control]) => grid.append(labeledControl(label, control)));
+  form.append(grid);
+  const condition = inputControl("text", site.condition || ""); condition.name = "condition";
+  const rationale = textareaControl(site.short_rationale || ""); rationale.name = "short_rationale";
+  const observedText = textareaControl(site.observed_location_text || ""); observedText.name = "observed_location_text";
+  const warnings = textareaControl((site.warnings || []).join("\n")); warnings.name = "warnings";
+  form.append(labeledControl("Condition", condition));
+  form.append(labeledControl("Coordinate rationale", rationale));
+  form.append(labeledControl("Observed location", observedText));
+  form.append(labeledControl("Warnings (one per line)", warnings));
+  const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Save site changes"); form.append(save);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const numberOrNull = (value) => value === "" ? null : Number(value);
+    try {
+      await api(`/api/sites/${site.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: name.value.trim(), site_kind: kind.value.trim(), status: status.value,
+          confidence: confidence.value, access: access.value, precision: precision.value,
+          uncertainty_m: numberOrNull(uncertainty.value), location_basis: basis.value,
+          latitude: numberOrNull(latitude.value), longitude: numberOrNull(longitude.value),
+          condition: condition.value.trim(), short_rationale: rationale.value.trim(),
+          observed_location_text: observedText.value.trim(),
+          warnings: warnings.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+        }),
+      });
+      setStatus("Site changes saved.");
+      await loadSites();
+      await loadDetail(site.id);
+    } catch (error) { setStatus(error.message); }
+  });
+  section.append(form); root.append(section);
+}
+
+function renderObservations(site, root) {
+  const section = document.createElement("section"); section.className = "detail-section";
+  const heading = document.createElement("h3"); text(heading, "Field observations"); section.append(heading);
+  const observations = document.createElement("ul"); observations.className = "observation-list";
+  (site.field_observations || []).forEach((observation) => {
+    const item = document.createElement("li");
+    const title = document.createElement("strong"); text(title, `${observation.observed_at} | ${observation.outcome.replaceAll("_", " ")}`); item.append(title);
+    const note = document.createElement("p"); text(note, observation.note); item.append(note);
+    if (observation.observed_location_text) { const location = document.createElement("div"); location.className = "site-meta"; text(location, observation.observed_location_text); item.append(location); }
+    if (observation.access_notes) { const access = document.createElement("div"); access.className = "site-meta"; text(access, `Access: ${observation.access_notes}`); item.append(access); }
+    if (observation.photo_urls?.length) {
+      const photos = document.createElement("div"); photos.className = "observation-links";
+      observation.photo_urls.forEach((url, index) => { const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noreferrer"; text(link, `Photo ${index + 1}`); photos.append(link); });
+      item.append(photos);
+    }
+    observations.append(item);
+  });
+  if (!observations.children.length) { const empty = document.createElement("p"); empty.className = "empty-state"; text(empty, "No field observations recorded."); section.append(empty); }
+  else section.append(observations);
+
+  const form = document.createElement("form"); form.className = "observation-form";
+  const observedAt = inputControl("date", new Date().toISOString().slice(0, 10)); observedAt.name = "observed_at"; observedAt.required = true;
+  const outcome = selectControl(["found", "not_found", "inaccessible", "needs_follow_up"], "found", { found: "Found", not_found: "Not found", inaccessible: "Inaccessible", needs_follow_up: "Needs follow-up" }); outcome.name = "outcome";
+  const note = textareaControl(); note.name = "note"; note.required = true; note.placeholder = "What was observed?";
+  const latitude = inputControl("number"); latitude.name = "latitude"; latitude.step = "0.000001"; latitude.min = "-90"; latitude.max = "90";
+  const longitude = inputControl("number"); longitude.name = "longitude"; longitude.step = "0.000001"; longitude.min = "-180"; longitude.max = "180";
+  const location = textareaControl(); location.name = "observed_location_text";
+  const access = textareaControl(); access.name = "access_notes";
+  const photos = textareaControl(); photos.name = "photo_urls"; photos.placeholder = "One photo URL per line";
+  const grid = document.createElement("div"); grid.className = "detail-grid";
+  grid.append(labeledControl("Date", observedAt), labeledControl("Outcome", outcome), labeledControl("Observed latitude", latitude), labeledControl("Observed longitude", longitude));
+  form.append(grid, labeledControl("Observation note", note), labeledControl("Observed location", location), labeledControl("Access notes", access), labeledControl("Photo URLs", photos));
+  const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Save observation"); form.append(save);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const numberOrUndefined = (value) => value === "" ? undefined : Number(value);
+    try {
+      await api(`/api/sites/${site.id}/observations`, {
+        method: "POST",
+        body: JSON.stringify({
+          observed_at: observedAt.value, outcome: outcome.value, note: note.value.trim(),
+          latitude: numberOrUndefined(latitude.value), longitude: numberOrUndefined(longitude.value),
+          observed_location_text: location.value.trim() || undefined, access_notes: access.value.trim() || undefined,
+          photo_urls: photos.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+        }),
+      });
+      setStatus("Field observation saved.");
+      await loadSites();
+      await loadDetail(site.id);
+    } catch (error) { setStatus(error.message); }
+  });
+  section.append(form); root.append(section);
+}
+
 async function loadDetail(id) {
   try {
     const site = await api(`/api/sites/${id}`);
     const root = $("site-detail");
     root.replaceChildren();
-    const copy = document.createElement("dl");
-    copy.className = "detail-copy";
-    [["Name", site.name], ["Type", site.site_kind], ["Status", site.status],
+    const copy = document.createElement("dl"); copy.className = "detail-copy";
+    [["Name", site.name], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
+      ["Confidence", site.confidence || "Unknown"],
       ["Precision", `${site.precision}${site.uncertainty_m == null ? "" : ` (${site.uncertainty_m} m)`}`],
       ["Access", site.access], ["Basis", site.location_basis], ["Condition", site.condition || "Unknown"]]
-      .forEach(([label, value]) => {
-        const dt = document.createElement("dt"); text(dt, label);
-        const dd = document.createElement("dd"); text(dd, value); copy.append(dt, dd);
-      });
-    if (site.short_rationale) {
-      const rationale = document.createElement("p"); text(rationale, site.short_rationale); copy.append(rationale);
-    }
-    if (site.warnings?.length) {
-      const warning = document.createElement("p"); warning.className = "warning";
-      text(warning, site.warnings.join(" | ")); copy.append(warning);
-    }
+      .forEach(([label, value]) => { const dt = document.createElement("dt"); text(dt, label); const dd = document.createElement("dd"); text(dd, value); copy.append(dt, dd); });
+    if (site.short_rationale) { const rationale = document.createElement("p"); text(rationale, site.short_rationale); copy.append(rationale); }
+    if (site.warnings?.length) { const warning = document.createElement("p"); warning.className = "warning"; text(warning, site.warnings.join(" | ")); copy.append(warning); }
     const sourcesTitle = document.createElement("dt"); text(sourcesTitle, "Sources"); copy.append(sourcesTitle);
-    const sources = document.createElement("dd");
-    const sourceList = document.createElement("ul"); sourceList.className = "source-list";
-    (site.sources || []).forEach((source) => {
-      const li = document.createElement("li");
-      const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer";
-      text(link, source.title || source.url); li.append(link);
-      const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt);
-      sourceList.append(li);
-    });
+    const sources = document.createElement("dd"); const sourceList = document.createElement("ul"); sourceList.className = "source-list";
+    (site.sources || []).forEach((source) => { const li = document.createElement("li"); const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
     sources.append(sourceList); copy.append(sources); root.append(copy);
+    renderLifecycleActions(site, root);
+    renderSiteEditor(site, root);
+    renderObservations(site, root);
   } catch (error) { text($("site-detail"), error.message); }
 }
 
@@ -260,7 +430,7 @@ async function loadCandidates() {
       const actions = document.createElement("div"); actions.className = "candidate-actions";
       const details = document.createElement("button"); details.className = "small"; text(details, "Details");
       details.addEventListener("click", () => loadDetail(site.id)); actions.append(details);
-      [["Accept", "accept", ""], ["Reject", "reject", "danger"]].forEach(([label, action, style]) => {
+      [["Mark researched", "research", ""], ["Reject", "reject", "danger"]].forEach(([label, action, style]) => {
         const button = document.createElement("button"); button.className = `small ${style}`; text(button, label);
         button.addEventListener("click", async () => {
           try { await api(`/api/sites/${site.id}/review`, { method: "POST", body: JSON.stringify({ action }) }); await loadSites(); await loadCandidates(); }

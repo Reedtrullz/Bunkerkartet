@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 import hmac
 import json
 import math
@@ -11,11 +11,11 @@ from typing import Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, model_validator
 from urllib.error import HTTPError, URLError
 
 from app.config import Settings
-from app.db import Database, dump_json, now_iso, site_from_row
+from app.db import Database, dump_json, now_iso, observation_from_row, site_from_row
 from app.imports import ImportPackage, ImportRecord, validate_import_package
 from app.routes import RouteResult, build_gpx, fetch_openrouteservice
 
@@ -98,10 +98,37 @@ class SitePatch(BaseModel):
         return self
 
 
+class FieldObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observed_at: date
+    outcome: Literal["found", "not_found", "inaccessible", "needs_follow_up"]
+    note: str = Field(min_length=1, max_length=4000)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    observed_location_text: str | None = Field(default=None, max_length=2000)
+    access_notes: str | None = Field(default=None, max_length=2000)
+    photo_urls: list[HttpUrl] = Field(default_factory=list, max_length=12)
+
+    @model_validator(mode="after")
+    def require_complete_coordinate_pair(self) -> "FieldObservation":
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude must be recorded together")
+        return self
+
+
 class ReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["accept", "reject", "restore", "merge"]
+    action: Literal[
+        "accept",
+        "research",
+        "field_verify",
+        "confirm",
+        "reject",
+        "restore",
+        "merge",
+    ]
     target_site_id: int | None = Field(default=None, gt=0)
 
 
@@ -151,6 +178,17 @@ def _source_rows(connection: sqlite3.Connection, site_id: int) -> list[dict[str,
 def _site_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
     site = site_from_row(row)
     site["sources"] = _source_rows(connection, int(row["id"]))
+    observations = connection.execute(
+        """
+        SELECT id, site_id, observed_at, outcome, note, latitude, longitude,
+               observed_location_text, access_notes, photo_urls_json, created_at
+        FROM field_observations
+        WHERE site_id = ?
+        ORDER BY observed_at DESC, id DESC
+        """,
+        (int(row["id"]),),
+    ).fetchall()
+    site["field_observations"] = [observation_from_row(item) for item in observations]
     return site
 
 
@@ -579,6 +617,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             return _site_detail(connection, updated)
 
+    @app.post(
+        "/api/sites/{site_id}/observations",
+        status_code=201,
+        dependencies=[Depends(admin_guard)],
+    )
+    def add_field_observation(site_id: int, observation: FieldObservation) -> dict[str, object]:
+        timestamp = now_iso()
+        payload = observation.model_dump(mode="json")
+        with database.connect() as connection:
+            row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
+            if row is None:
+                raise HTTPException(404, "site not found")
+            cursor = connection.execute(
+                """
+                INSERT INTO field_observations
+                    (site_id, observed_at, outcome, note, latitude, longitude,
+                     observed_location_text, access_notes, photo_urls_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    site_id,
+                    observation.observed_at.isoformat(),
+                    observation.outcome,
+                    observation.note,
+                    observation.latitude,
+                    observation.longitude,
+                    observation.observed_location_text,
+                    observation.access_notes,
+                    dump_json(payload["photo_urls"]),
+                    timestamp,
+                ),
+            )
+            observation_row = connection.execute(
+                "SELECT * FROM field_observations WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+            connection.execute(
+                "INSERT INTO site_events (site_id, event_type, payload_json, created_at) VALUES (?, 'observation', ?, ?)",
+                (site_id, dump_json(payload), timestamp),
+            )
+            updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
+            return {
+                "observation": observation_from_row(observation_row),
+                "site": _site_detail(connection, updated),
+            }
+
     @app.post("/api/sites/{site_id}/review", dependencies=[Depends(admin_guard)])
     def review_site(site_id: int, request: ReviewRequest) -> dict[str, object]:
         with database.connect() as connection:
@@ -610,9 +693,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else:
                 status = {
                     "accept": "likely",
+                    "research": "likely",
+                    "field_verify": "field-verified",
+                    "confirm": "trusted",
                     "reject": "rejected",
                     "restore": "candidate",
                 }[request.action]
+                if request.action == "field_verify" and row["status"] not in {
+                    "likely",
+                    "field-verified",
+                    "trusted",
+                }:
+                    raise HTTPException(409, "research the site before field verification")
+                if request.action == "confirm" and row["status"] not in {
+                    "field-verified",
+                    "trusted",
+                }:
+                    raise HTTPException(409, "field verification is required before confirmation")
                 connection.execute(
                     "UPDATE sites SET status = ?, updated_at = ? WHERE id = ?",
                     (status, now_iso(), site_id),

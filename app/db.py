@@ -83,6 +83,27 @@ CREATE TABLE IF NOT EXISTS site_events (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS field_observations (
+    id INTEGER PRIMARY KEY,
+    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    observed_at TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    note TEXT NOT NULL,
+    latitude REAL,
+    longitude REAL,
+    observed_location_text TEXT,
+    access_notes TEXT,
+    photo_urls_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    CHECK (outcome IN ('found', 'not_found', 'inaccessible', 'needs_follow_up')),
+    CHECK ((latitude IS NULL) = (longitude IS NULL)),
+    CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),
+    CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180)
+);
+
+CREATE INDEX IF NOT EXISTS idx_field_observations_site
+    ON field_observations(site_id, observed_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS route_plans (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
@@ -165,4 +186,10 @@ def load_json(value: str | None, default: object) -> object:
 def site_from_row(row: sqlite3.Row) -> dict[str, object]:
     result = dict(row)
     result["warnings"] = load_json(result.pop("warnings_json", None), [])
+    return result
+
+
+def observation_from_row(row: sqlite3.Row) -> dict[str, object]:
+    result = dict(row)
+    result["photo_urls"] = load_json(result.pop("photo_urls_json", None), [])
     return result
