@@ -187,3 +187,23 @@ def test_edit_rejects_null_for_required_site_fields(tmp_path):
     )
 
     assert response.status_code == 422
+
+
+def test_merge_transfers_evidence_without_duplicate_failure(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    second = package("batch-2", external_key="forum:2")
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    sites = api.get("/api/sites", headers=auth()).json()
+
+    response = api.post(
+        f"/api/sites/{sites[0]['id']}/review",
+        headers=auth(),
+        json={"action": "merge", "target_site_id": sites[1]["id"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "merged"
+    target = api.get(f"/api/sites/{sites[1]['id']}", headers=auth()).json()
+    assert len(target["sources"]) == 1
