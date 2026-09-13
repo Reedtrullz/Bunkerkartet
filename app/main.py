@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from urllib.error import HTTPError, URLError
@@ -433,8 +433,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     @app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        return FileResponse(static_dir / "index.html")
+    def index() -> HTMLResponse:
+        html = (static_dir / "index.html").read_text()
+        html = html.replace('/static/app.js"', f'/static/app.js?v={settings.app_version}"')
+        return HTMLResponse(html)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
