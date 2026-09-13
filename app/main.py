@@ -420,6 +420,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.database = database
 
+    @app.middleware("http")
+    async def disable_frontend_caching(request, call_next):
+        response = await call_next(request)
+        if request.url.path in {"/", "/static/app.js", "/static/styles.css"}:
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     def admin_guard(authorization: str | None = Header(default=None)) -> None:
         _require_admin(settings, authorization)
 

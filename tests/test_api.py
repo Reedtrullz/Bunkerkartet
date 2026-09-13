@@ -36,3 +36,5 @@ def test_root_serves_map_frontend(tmp_path):
 
     assert response.status_code == 200
     assert "Bunkerkartet" in response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert client.get("/static/app.js").headers["cache-control"] == "no-store"
