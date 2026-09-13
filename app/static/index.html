@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bunkerkartet</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <strong>Bunkerkartet</strong>
+      <span>Trondheim field map</span>
+    </div>
+    <div class="auth-bar">
+      <label for="admin-token">Admin token</label>
+      <input id="admin-token" type="password" autocomplete="off" spellcheck="false">
+      <button id="load-sites" class="primary">Load map</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="panel controls-panel">
+        <div class="panel-heading">
+          <h1>Sites</h1>
+          <button id="refresh-sites" class="icon-button" title="Refresh sites" aria-label="Refresh sites">Refresh</button>
+        </div>
+        <div class="filter-grid">
+          <label>Status
+            <select id="status-filter">
+              <option value="">All visible</option>
+              <option value="candidate">Candidate</option>
+              <option value="likely">Likely</option>
+              <option value="trusted">Trusted</option>
+              <option value="field-verified">Field verified</option>
+              <option value="destroyed-or-filled">Destroyed or filled</option>
+            </select>
+          </label>
+          <label>Type
+            <input id="kind-filter" type="search" placeholder="bunker, cave...">
+          </label>
+        </div>
+        <div id="site-list" class="site-list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel detail-panel">
+        <div class="panel-heading"><h2>Site detail</h2></div>
+        <div id="site-detail" class="empty-state">Select a marker or site.</div>
+      </section>
+
+      <section class="panel import-panel">
+        <div class="panel-heading"><h2>Import JSON</h2></div>
+        <input id="import-file" type="file" accept="application/json,.json">
+        <div class="button-row">
+          <button id="preview-import" disabled>Preview</button>
+          <button id="commit-import" class="primary" disabled>Commit</button>
+        </div>
+        <pre id="import-result" class="result-box" aria-live="polite"></pre>
+      </section>
+
+      <section class="panel review-panel">
+        <div class="panel-heading">
+          <h2>Candidate review</h2>
+          <button id="refresh-candidates">Refresh</button>
+        </div>
+        <div id="candidate-list" class="candidate-list"></div>
+      </section>
+
+      <section class="panel route-panel">
+        <div class="panel-heading"><h2>Walking route</h2></div>
+        <div class="button-row">
+          <button id="pick-start">Set start on map</button>
+          <button id="use-location">Use location</button>
+        </div>
+        <div id="route-start" class="route-start">Start: map center</div>
+        <ol id="route-stops" class="route-stops"></ol>
+        <button id="create-route" class="primary" disabled>Create route</button>
+        <div id="route-result" class="route-result" aria-live="polite"></div>
+      </section>
+    </aside>
+    <section class="map-shell">
+      <div id="map" aria-label="Map of Trondheim sites"></div>
+      <div id="map-status" class="map-status" aria-live="polite">Enter the admin token to load sites.</div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
