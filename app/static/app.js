@@ -289,7 +289,7 @@ async function createRoute() {
   } catch (error) { text($("route-result"), error.message); }
 }
 
-$("admin-token").addEventListener("keydown", (event) => { if (event.key === "Enter") loadSites(); });
+$("auth-form").addEventListener("submit", (event) => { event.preventDefault(); loadSites(); });
 $("load-sites").addEventListener("click", loadSites);
 $("refresh-sites").addEventListener("click", loadSites);
 $("status-filter").addEventListener("change", loadSites);
