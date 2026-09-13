@@ -52,4 +52,5 @@ jobs:
           push: true
           tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
       - name: Record published digest
-        run: echo "Published image: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "Published image: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
