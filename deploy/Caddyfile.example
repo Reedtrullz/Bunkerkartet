@@ -1,4 +1,4 @@
 # Public TLS proxy. Keep the app bound to loopback in Compose.
-bunkerkartet.example.com {
+bunker.reidar.tech {
     reverse_proxy 127.0.0.1:8000
 }

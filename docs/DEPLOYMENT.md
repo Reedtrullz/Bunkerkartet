@@ -39,11 +39,12 @@ credentials.
 
 ## Caddy
 
-Copy the relevant block from `deploy/Caddyfile.example` into the host Caddy
-configuration, replace the hostname, and reload Caddy using the host's normal
-service manager. Caddy is the only public entry point; Compose binds port 8000
-to loopback. The named data volume is explicitly `bunkerkartet-data`, so backup
-commands do not depend on the Compose project directory.
+Copy the block from `deploy/Caddyfile.example` into the host Caddy
+configuration and reload Caddy using the host's normal service manager. It is
+prepared for `bunker.reidar.tech`. Caddy is the only public entry point; Compose
+binds port 8000 to loopback. The named data volume is explicitly
+`bunkerkartet-data`, so backup commands do not depend on the Compose project
+directory.
 
 ## SQLite backup
 
