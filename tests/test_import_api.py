@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
@@ -95,6 +96,95 @@ def test_import_preview_and_idempotent_commit(tmp_path):
     assert sites.status_code == 200
     assert len(sites.json()) == 1
     assert sites.json()[0]["status"] == "candidate"
+
+
+def test_preview_exposes_stable_payload_hash(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    second = json.loads(json.dumps(first))
+    second["records"][0]["short_rationale"] = "Changed rationale."
+
+    first_preview = api.post("/api/admin/imports/preview", headers=auth(), json=first)
+    second_preview = api.post("/api/admin/imports/preview", headers=auth(), json=second)
+
+    assert first_preview.status_code == second_preview.status_code == 200
+    assert len(first_preview.json()["payload_hash"]) == 64
+    assert first_preview.json()["payload_hash"] != second_preview.json()["payload_hash"]
+
+
+def test_same_batch_with_different_payload_is_rejected(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    changed = json.loads(json.dumps(first))
+    changed["records"][0]["sources"][0]["excerpt"] = "Different excerpt."
+
+    response = api.post("/api/admin/imports/commit", headers=auth(), json=changed)
+
+    assert response.status_code == 409
+    assert api.get("/api/sites", headers=auth()).json()[0]["name"] == "Leira bunker"
+
+
+def test_same_source_url_keeps_each_import_excerpt(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    first["records"][0]["sources"][0]["excerpt"] = "First site-specific excerpt."
+    second = package("batch-2")
+    second["records"][0]["sources"][0]["excerpt"] = "Second site-specific excerpt."
+
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+
+    sources = api.get("/api/sites/1", headers=auth()).json()["sources"]
+    assert [source["excerpt"] for source in sources] == [
+        "First site-specific excerpt.",
+        "Second site-specific excerpt.",
+    ]
+
+
+def test_legacy_credential_url_is_withheld_from_detail(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    sentinel = "synthetic-legacy-secret"
+    with sqlite3.connect(tmp_path / "bunkerkartet.sqlite3") as connection:
+        connection.execute(
+            "UPDATE sources SET url = ? WHERE url = ?",
+            (f"https://example.com/map?token={sentinel}", "https://example.com/forum/1"),
+        )
+
+    response = api.get("/api/sites/1", headers=auth())
+
+    assert response.status_code == 200
+    source = response.json()["sources"][0]
+    assert source["url"] is None
+    assert source["url_status"] == "legacy reference withheld; review required"
+    assert sentinel not in response.text
+
+
+def test_legacy_credential_photo_url_is_withheld_from_detail(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    sentinel = "synthetic-legacy-photo-secret"
+    observation = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={"observed_at": "2026-09-14", "outcome": "found", "note": "Observed."},
+    )
+    observation_id = observation.json()["observation"]["id"]
+    with sqlite3.connect(tmp_path / "bunkerkartet.sqlite3") as connection:
+        connection.execute(
+            "UPDATE field_observations SET photo_urls_json = ? WHERE id = ?",
+            (json.dumps([f"https://example.com/photo?token={sentinel}"]), observation_id),
+        )
+
+    response = api.get(f"/api/sites/{site_id}", headers=auth())
+
+    assert response.status_code == 200
+    observation = response.json()["field_observations"][0]
+    assert observation["photo_urls"] == []
+    assert observation["photo_urls_status"] == "legacy reference withheld; review required"
+    assert sentinel not in response.text
 
 
 def test_import_rejects_duplicate_external_keys_before_commit(tmp_path):
@@ -814,7 +904,7 @@ def test_merge_transfers_evidence_without_duplicate_failure(tmp_path):
     assert response.status_code == 200
     assert response.json()["status"] == "merged"
     target = api.get(f"/api/sites/{sites[1]['id']}", headers=auth()).json()
-    assert len(target["sources"]) == 1
+    assert len(target["sources"]) == 2
     assert len(target["field_observations"]) == 1
 
 

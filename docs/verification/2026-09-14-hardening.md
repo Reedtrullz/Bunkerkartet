@@ -82,6 +82,25 @@ git diff --check -> 0
 
 Non-claims: the restore exercise used a newly generated empty synthetic database. It does not prove production backup completeness, recovery-point coverage, live-volume behavior, or deploy success. The verifier is intentionally read-only; it does not repair or upgrade a database.
 
+L04 review remediation:
+
+- Schema migrations now run behind explicit `BEGIN IMMEDIATE`/commit/rollback; an injected failure after the first v2 `ALTER TABLE` leaves no added column/table and a clean retry succeeds.
+- Restore preflight accepts the harmless `./` root entry produced by the documented `tar -C /data .` backup, rejects duplicate/traversal/link/unexpected members, and stages outside the target volume before verification and replacement.
+- Synthetic archive coverage uses a non-empty database made with the documented tar shape plus malicious traversal, symlink, and duplicate-member archives; `10 passed` in the focused DB/archive tests.
+
+## L05 — Evidence preservation and batch identity
+
+Status: implemented locally; no historical production values were rewritten.
+
+- Schema v2 adds immutable `evidence_items` and `import_batches.payload_hash`; v1 evidence is preserved as `legacy_unresolved` rows and v2 migrations are retryable.
+- Same-URL imports retain each site-specific excerpt/provenance item; source identity metadata fills only missing fields rather than overwriting known values.
+- Preview exposes a deterministic SHA-256 payload hash. Commits use `BEGIN IMMEDIATE`; an identical committed retry is idempotent, while a changed payload with the same batch ID returns 409.
+- Legacy credential-bearing source URLs and observation photo URLs are withheld in read responses with a safe status; raw values are not returned or made clickable. Historical values are not auto-sanitized.
+
+Verification: focused L05/API/DB tests `46 passed, 1 warning`; full suite including 7 browser smoke tests `102 passed, 1 warning`; Node 22 syntax and `git diff --check` passed.
+
+Non-claims: this does not approve or classify any legacy source, prove source ownership, or validate field observations. L06 preview freshness and later schema versions remain outstanding.
+
 ## Review follow-up — stale GeoJSON auth and observation input
 
 - Direct GeoJSON fetches now check the captured auth epoch immediately after `fetch`, before a delayed old 401 can clear a newer session.

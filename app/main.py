@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from html import escape as escape_html
+import hashlib
 import hmac
 import json
 import math
@@ -212,16 +213,32 @@ def _route_warnings(
 def _source_rows(connection: sqlite3.Connection, site_id: int) -> list[dict[str, object]]:
     rows = connection.execute(
         """
-        SELECT sources.url, sources.title, sources.source_type, sources.excerpt,
-               sources.published_at, sources.accessed_at, evidence.role
+        SELECT sources.url, sources.title, sources.source_type,
+               COALESCE(evidence_items.excerpt, sources.excerpt) AS excerpt,
+               COALESCE(evidence_items.published_at, sources.published_at) AS published_at,
+               COALESCE(evidence_items.accessed_at, sources.accessed_at) AS accessed_at,
+               COALESCE(evidence_items.role, evidence.role) AS role,
+               evidence_items.id AS evidence_id,
+               evidence_items.content_kind, evidence_items.provenance_status
         FROM evidence
         JOIN sources ON sources.id = evidence.source_id
+        LEFT JOIN evidence_items ON evidence_items.legacy_evidence_id = evidence.id
+            OR (evidence_items.source_id = evidence.source_id AND evidence_items.site_id = evidence.site_id)
         WHERE evidence.site_id = ?
-        ORDER BY sources.id
+        ORDER BY evidence_items.id, sources.id
         """,
         (site_id,),
     ).fetchall()
-    return [dict(row) for row in rows]
+    result: list[dict[str, object]] = []
+    for row in rows:
+        source = dict(row)
+        try:
+            source["url"] = validate_reference_url(source["url"])
+        except ValueError:
+            source["url"] = None
+            source["url_status"] = "legacy reference withheld; review required"
+        result.append(source)
+    return result
 
 
 def _observation_points(connection: sqlite3.Connection, site_id: int) -> list[dict[str, object]]:
@@ -235,6 +252,25 @@ def _observation_points(connection: sqlite3.Connection, site_id: int) -> list[di
         (site_id,),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def _safe_observation(row: sqlite3.Row) -> dict[str, object]:
+    observation = observation_from_row(row)
+    safe_urls: list[str] = []
+    withheld = False
+    urls = observation.get("photo_urls", [])
+    if not isinstance(urls, list):
+        urls = []
+        withheld = True
+    for url in urls:
+        try:
+            safe_urls.append(validate_reference_url(url))
+        except ValueError:
+            withheld = True
+    observation["photo_urls"] = safe_urls
+    if withheld:
+        observation["photo_urls_status"] = "legacy reference withheld; review required"
+    return observation
 
 
 def _site_summary(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
@@ -256,7 +292,7 @@ def _site_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, 
         """,
         (int(row["id"]),),
     ).fetchall()
-    site["field_observations"] = [observation_from_row(item) for item in observations]
+    site["field_observations"] = [_safe_observation(item) for item in observations]
     site["observation_points"] = [
         {
             "id": observation["id"],
@@ -346,6 +382,7 @@ def _preview_package(
     return {
         "batch_id": package.batch_id,
         "schema_version": package.schema_version,
+        "payload_hash": _payload_hash(package),
         "records": preview_records,
         "summary": {"total": len(package.records), **counts},
     }
@@ -382,11 +419,11 @@ def _upsert_source(
             (url, title, source_type, excerpt, published_at, accessed_at, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(url) DO UPDATE SET
-            title = excluded.title,
-            source_type = excluded.source_type,
-            excerpt = excluded.excerpt,
-            published_at = excluded.published_at,
-            accessed_at = excluded.accessed_at,
+            title = COALESCE(sources.title, excluded.title),
+            source_type = COALESCE(sources.source_type, excluded.source_type),
+            excerpt = COALESCE(sources.excerpt, excluded.excerpt),
+            published_at = COALESCE(sources.published_at, excluded.published_at),
+            accessed_at = COALESCE(sources.accessed_at, excluded.accessed_at),
             updated_at = excluded.updated_at
         """,
         (
@@ -405,15 +442,26 @@ def _upsert_source(
     )
 
 
+def _payload_hash(package: ImportPackage) -> str:
+    payload = package.model_dump(mode="json")
+    payload["records"] = sorted(payload["records"], key=lambda record: record["external_key"])
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _commit_package(database: Database, package: ImportPackage) -> dict[str, object]:
     timestamp = now_iso()
+    payload_hash = _payload_hash(package)
     created = updated = preserved = evidence_attached = 0
     with database.connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         existing_batch = connection.execute(
-            "SELECT committed_at FROM import_batches WHERE batch_id = ?",
+            "SELECT committed_at, payload_hash FROM import_batches WHERE batch_id = ?",
             (package.batch_id,),
         ).fetchone()
         if existing_batch and existing_batch["committed_at"]:
+            if existing_batch["payload_hash"] != payload_hash:
+                raise HTTPException(409, "import batch payload differs")
             return {
                 "batch_id": package.batch_id,
                 "created": 0,
@@ -428,17 +476,19 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
         batch_insert = connection.execute(
             """
             INSERT OR IGNORE INTO import_batches
-                (batch_id, schema_version, generated_at, created_at)
-            VALUES (?, ?, ?, ?)
+                (batch_id, schema_version, generated_at, created_at, payload_hash)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (package.batch_id, package.schema_version, package.generated_at.isoformat(), timestamp),
+            (package.batch_id, package.schema_version, package.generated_at.isoformat(), timestamp, payload_hash),
         )
         if batch_insert.rowcount == 0:
             existing_batch = connection.execute(
-                "SELECT committed_at FROM import_batches WHERE batch_id = ?",
+                "SELECT committed_at, payload_hash FROM import_batches WHERE batch_id = ?",
                 (package.batch_id,),
             ).fetchone()
             if existing_batch and existing_batch["committed_at"]:
+                if existing_batch["payload_hash"] != payload_hash:
+                    raise HTTPException(409, "import batch payload differs")
                 return {
                     "batch_id": package.batch_id,
                     "created": 0,
@@ -517,6 +567,7 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                 action = "preserved_reviewed"
                 preserved += 1
 
+            source_links: list[tuple[int, object]] = []
             for source in record.sources:
                 source_id = _upsert_source(connection, source, timestamp)
                 cursor = connection.execute(
@@ -528,9 +579,10 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                     (site_id, source_id, timestamp),
                 )
                 evidence_attached += cursor.rowcount
+                source_links.append((source_id, source))
 
             payload_json = dump_json(record.model_dump(mode="json"))
-            connection.execute(
+            import_record = connection.execute(
                 """
                 INSERT INTO import_records
                     (batch_id, external_key, site_id, action, payload_json, created_at)
@@ -538,6 +590,26 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                 """,
                 (package.batch_id, record.external_key, site_id, action, payload_json, timestamp),
             )
+            import_record_id = int(import_record.lastrowid)
+            for source_index, (source_id, source) in enumerate(source_links):
+                connection.execute(
+                    """
+                    INSERT INTO evidence_items
+                        (site_id, source_id, import_record_id, source_index, excerpt,
+                         content_kind, role, published_at, accessed_at, provenance_status, created_at)
+                    VALUES (?, ?, ?, ?, ?, 'unknown', 'context', ?, ?, 'import_record', ?)
+                    """,
+                    (
+                        site_id,
+                        source_id,
+                        import_record_id,
+                        source_index,
+                        source.excerpt,
+                        source.publication_date.isoformat() if source.publication_date else None,
+                        source.access_date.isoformat() if source.access_date else None,
+                        timestamp,
+                    ),
+                )
             connection.execute(
                 """
                 INSERT INTO site_events (site_id, event_type, payload_json, created_at)
@@ -921,7 +993,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             return {
-                "observation": observation_from_row(observation_row),
+                "observation": _safe_observation(observation_row),
                 "site": _site_detail(connection, updated),
             }
 
@@ -1019,6 +1091,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     INSERT OR IGNORE INTO evidence (site_id, source_id, role, created_at)
                     SELECT ?, source_id, role, created_at FROM evidence WHERE site_id = ?
                     """,
+                    (request.target_site_id, site_id),
+                )
+                connection.execute(
+                    "UPDATE evidence_items SET site_id = ? WHERE site_id = ?",
                     (request.target_site_id, site_id),
                 )
                 connection.execute("DELETE FROM evidence WHERE site_id = ?", (site_id,))

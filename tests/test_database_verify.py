@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from app.db import Database
+from app.db import CURRENT_SCHEMA_VERSION, Database
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,7 +24,7 @@ def test_verify_database_reads_valid_database_without_mutating_file(tmp_path):
             "--database",
             str(path),
             "--expected-version",
-            "1",
+            str(CURRENT_SCHEMA_VERSION),
         ],
         cwd=ROOT,
         capture_output=True,

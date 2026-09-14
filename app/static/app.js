@@ -511,6 +511,7 @@ function renderObservations(site, root) {
       observation.photo_urls.forEach((url, index) => { const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noreferrer"; text(link, `Photo ${index + 1}`); photos.append(link); });
       item.append(photos);
     }
+    if (observation.photo_urls_status) { const withheld = document.createElement("div"); withheld.className = "site-meta"; text(withheld, observation.photo_urls_status); item.append(withheld); }
     observations.append(item);
   });
   if (!observations.children.length) { const empty = document.createElement("p"); empty.className = "empty-state"; text(empty, "No field observations recorded."); section.append(empty); }
@@ -587,7 +588,7 @@ async function loadDetail(id) {
     if (site.warnings?.length) { const warning = document.createElement("p"); warning.className = "warning"; text(warning, site.warnings.join(" | ")); copy.append(warning); }
     const sourcesTitle = document.createElement("dt"); text(sourcesTitle, "Sources"); copy.append(sourcesTitle);
     const sources = document.createElement("dd"); const sourceList = document.createElement("ul"); sourceList.className = "source-list";
-    (site.sources || []).forEach((source) => { const li = document.createElement("li"); const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "source", source.published_at && `published ${source.published_at}`, source.accessed_at && `accessed ${source.accessed_at}`].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
+    (site.sources || []).forEach((source) => { const li = document.createElement("li"); if (source.url) { const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); } else { const withheld = document.createElement("span"); text(withheld, source.title || "Reference withheld"); li.append(withheld); } const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "source", source.published_at && `published ${source.published_at}`, source.accessed_at && `accessed ${source.accessed_at}`, source.url_status].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
     sources.append(sourceList); copy.append(sources); root.append(copy);
     if (site.latitude != null && site.longitude != null) {
       const copyCoordinates = document.createElement("button"); copyCoordinates.className = "small"; copyCoordinates.type = "button"; text(copyCoordinates, "Copy coordinates");
