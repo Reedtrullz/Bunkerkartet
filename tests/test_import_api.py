@@ -1,5 +1,7 @@
 import json
 import sqlite3
+from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
@@ -142,6 +144,31 @@ def test_related_site_key_cannot_point_to_itself(tmp_path):
     assert "itself" in response.text
 
 
+def test_import_cardinality_limits_are_enforced(tmp_path):
+    payload = package()
+    payload["records"] = [
+        {**deepcopy(payload["records"][0]), "external_key": f"forum:{index}"}
+        for index in range(501)
+    ]
+    with pytest.raises(ValueError):
+        validate_import_package(payload)
+
+    payload = package()
+    payload["records"][0]["sources"] *= 21
+    with pytest.raises(ValueError):
+        validate_import_package(payload)
+
+    payload = package()
+    payload["records"][0]["warnings"] = ["warning"] * 31
+    with pytest.raises(ValueError):
+        validate_import_package(payload)
+
+    payload = package()
+    payload["records"][0]["warnings"] = ["x" * 1001]
+    with pytest.raises(ValueError):
+        validate_import_package(payload)
+
+
 def test_duplicate_warning_normalizes_name_and_marks_overlap_as_possible_relation(tmp_path):
     api = client(tmp_path)
     first = package(name="Same  bunker")
@@ -210,6 +237,79 @@ def test_observation_request_id_makes_retry_idempotent_and_conflicting_payloads_
     assert changed.status_code == 409
 
 
+def test_parallel_observation_retries_are_serialized_and_revisioned(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    payload = {
+        "request_id": "parallel-observation-1",
+        "observed_at": "2026-09-14",
+        "outcome": "found",
+        "note": "Observed from the public path.",
+    }
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(
+            lambda _: api.post("/api/sites/1/observations", headers=auth(), json=payload), range(2)
+        ))
+
+    assert sorted(response.status_code for response in responses) == [200, 201]
+    assert responses[0].json()["observation"]["id"] == responses[1].json()["observation"]["id"]
+    assert api.get("/api/sites/1", headers=auth()).json()["revision"] == 2
+
+    different = {**payload, "note": "A different payload."}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        conflicts = list(pool.map(
+            lambda _: api.post("/api/sites/1/observations", headers=auth(), json=different), range(2)
+        ))
+    assert [response.status_code for response in conflicts] == [409, 409]
+
+
+def test_merge_rejects_duplicate_observation_request_ids_without_rewriting(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    second = package("batch-2", external_key="forum:2", name="Second bunker")
+    assert commit_previewed(api, second).status_code == 200
+    observation = {
+        "request_id": "same-request-id",
+        "observed_at": "2026-09-14",
+        "outcome": "found",
+        "note": "Observed from the public path.",
+    }
+    assert api.post("/api/sites/1/observations", headers=auth(), json=observation).status_code == 201
+    assert api.post("/api/sites/2/observations", headers=auth(), json=observation).status_code == 201
+
+    response = api.post(
+        "/api/sites/1/review",
+        headers=auth(),
+        json={"action": "merge", "target_site_id": 2},
+    )
+
+    assert response.status_code == 409
+    with api.app.state.database.connect() as connection:
+        rows = connection.execute(
+            "SELECT id, site_id, request_id FROM field_observations ORDER BY id"
+        ).fetchall()
+    assert [(row["id"], row["site_id"], row["request_id"]) for row in rows] == [
+        (1, 1, "same-request-id"),
+        (2, 2, "same-request-id"),
+    ]
+
+
+def test_parallel_reviews_have_one_commit_and_one_conflict(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(
+            lambda _: api.post("/api/sites/1/review", headers=auth(), json={"action": "accept"}), range(2)
+        ))
+
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    site = api.get("/api/sites/1", headers=auth()).json()
+    assert site["status"] == "likely"
+    assert site["revision"] == 2
+
+
 def test_site_events_are_auth_protected_bounded_and_readable(tmp_path):
     api = client(tmp_path)
     assert commit_previewed(api, package()).status_code == 200
@@ -226,6 +326,11 @@ def test_site_events_are_auth_protected_bounded_and_readable(tmp_path):
     assert events.status_code == 200
     assert {event["event_type"] for event in events.json()} >= {"import", "edit"}
     assert "https://example.com/forum/1" not in events.text
+    edit = next(event for event in events.json() if event["event_type"] == "edit")
+    assert edit["payload"] == {
+        "before": {"name": "Leira bunker"},
+        "after": {"name": "Evented edit"},
+    }
 
 
 def test_location_review_requires_reason_and_current_revision(tmp_path):
