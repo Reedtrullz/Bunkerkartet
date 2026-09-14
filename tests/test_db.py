@@ -347,3 +347,86 @@ def test_v4_repair_migrates_existing_v2_history_forward(tmp_path):
             "SELECT excerpt FROM evidence_items WHERE provenance_status = 'import_record' ORDER BY id"
         ).fetchall()
     assert [row[0] for row in rows] == ["first", "second"]
+
+
+def test_legacy_evidence_without_import_records_is_safe_across_retries(tmp_path):
+    path = tmp_path / "legacy-unresolved.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version = 1")
+        connection.execute(
+            "INSERT INTO sites (external_key, name, site_kind, precision, location_basis, created_at, updated_at) VALUES ('legacy:site', 'Legacy site', 'bunker', 'unknown', 'landmark_description', '2026-09-14', '2026-09-14')"
+        )
+        source_id = connection.execute(
+            "INSERT INTO sources (url, title, source_type, excerpt, created_at, updated_at) VALUES ('https://example.com/legacy', 'Legacy', 'test', 'unresolved excerpt', '2026-09-14', '2026-09-14')"
+        ).lastrowid
+        connection.execute(
+            "INSERT INTO evidence (site_id, source_id, role, created_at) VALUES (1, ?, 'source', '2026-09-14')",
+            (source_id,),
+        )
+
+    Database(path).initialize()
+    Database(path).initialize()
+
+    with Database(path).connect() as connection:
+        row = connection.execute(
+            "SELECT COUNT(*), MIN(provenance_status), MIN(legacy_evidence_id) FROM evidence_items"
+        ).fetchone()
+        foreign_key = next(
+            item for item in connection.execute("PRAGMA foreign_key_list(evidence_items)")
+            if item[3] == "legacy_evidence_id"
+        )
+    assert tuple(row) == (1, "legacy_unresolved", 1)
+    assert foreign_key[6] == "SET NULL"
+
+
+def test_v5_repairs_old_legacy_evidence_fk_without_losing_rows(tmp_path):
+    path = tmp_path / "old-fk.sqlite3"
+    database = Database(path)
+    database.initialize()
+    with database.connect() as connection:
+        connection.execute(
+            "INSERT INTO sites (external_key, name, site_kind, precision, location_basis, created_at, updated_at) VALUES ('legacy:site', 'Legacy site', 'bunker', 'unknown', 'landmark_description', '2026-09-14', '2026-09-14')"
+        )
+        source_id = connection.execute(
+            "INSERT INTO sources (url, title, source_type, excerpt, created_at, updated_at) VALUES ('https://example.com/legacy-fk', 'Legacy', 'test', 'kept', '2026-09-14', '2026-09-14')"
+        ).lastrowid
+        evidence_id = connection.execute(
+            "INSERT INTO evidence (site_id, source_id, role, created_at) VALUES (1, ?, 'source', '2026-09-14')",
+            (source_id,),
+        ).lastrowid
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute("ALTER TABLE evidence_items RENAME TO evidence_items_good")
+        connection.execute(
+            """
+            CREATE TABLE evidence_items (
+                id INTEGER PRIMARY KEY,
+                site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+                source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+                import_record_id INTEGER REFERENCES import_records(id),
+                source_index INTEGER,
+                legacy_evidence_id INTEGER UNIQUE REFERENCES evidence(id),
+                excerpt TEXT NOT NULL, content_kind TEXT NOT NULL DEFAULT 'unknown',
+                role TEXT NOT NULL DEFAULT 'context', published_at TEXT, accessed_at TEXT,
+                provenance_status TEXT NOT NULL, created_at TEXT NOT NULL,
+                UNIQUE(import_record_id, source_index)
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO evidence_items SELECT id, site_id, source_id, import_record_id, source_index, legacy_evidence_id, excerpt, content_kind, role, published_at, accessed_at, provenance_status, created_at FROM evidence_items_good WHERE 0"
+        )
+        connection.execute(
+            "INSERT INTO evidence_items (site_id, source_id, legacy_evidence_id, excerpt, provenance_status, created_at) VALUES (1, ?, ?, 'kept', 'legacy_unresolved', '2026-09-14')",
+            (source_id, evidence_id),
+        )
+        connection.execute("DROP TABLE evidence_items_good")
+        connection.execute("PRAGMA user_version = 4")
+
+    database.initialize()
+
+    with database.connect() as connection:
+        row = connection.execute("SELECT excerpt FROM evidence_items WHERE legacy_evidence_id = ?", (evidence_id,)).fetchone()
+        foreign_key = next(item for item in connection.execute("PRAGMA foreign_key_list(evidence_items)") if item[3] == "legacy_evidence_id")
+    assert row[0] == "kept"
+    assert foreign_key[6] == "SET NULL"

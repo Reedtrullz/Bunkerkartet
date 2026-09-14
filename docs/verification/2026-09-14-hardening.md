@@ -146,9 +146,21 @@ Status: implemented locally; no live route or production database was used.
 - Provider `way_points` indices are validated when present; missing indices produce an explicit uncontrolled-snapping warning. Named stop deviations over 50 m are retained in route warnings and GPX labels.
 - The UI exposes approach review controls and observation point-role/radius controls; adoption remains disabled unless the observation is a feature with an explicit radius.
 
-Verification: full suite `123 passed, 1 warning`; focused route/DB tests passed; Node 22 syntax and `git diff --check` passed. A pre-existing local v4 database was upgraded by the forward repair migration; no production database was opened.
+Verification: full suite `128 passed, 1 warning`; focused route/DB tests and 10 browser-smoke tests passed; Node 22 syntax and `git diff --check` passed. A pre-existing local v4 database was upgraded by the forward repair migration; no production database was opened.
 
 Non-claims: reviewed public approach is not structure access, ownership, safety, field verification, or proof that an ORS route is walkable. Actual catalogue approach decisions remain curator-owned.
+
+## L09 — Opt-in route-start location
+
+Status: implemented locally; no real user location was requested.
+
+- Geolocation remains one-shot and opt-in via `getCurrentPosition`; it uses a 10-second timeout and does not use `watchPosition` or background tracking.
+- The route UI reports the browser-provided accuracy as start-point information only. It never converts that accuracy into a site radius or changes a site record.
+- Permission failure leaves a manually chosen route start intact. The default is labelled `Standardstart i Trondheim`, and the route panel explains that route start/stops are sent to ORS and stored in private route history when a route is calculated.
+
+Verification: synthetic Chromium geolocation/browser smoke passed as part of the full suite (`128 passed, 1 warning`); Node 22 syntax and `git diff --check` passed.
+
+Non-claims: this does not establish a personal-data retention policy for shared use, prove a real GPS fix, or prove route walkability.
 
 ## Review follow-up — stale GeoJSON auth and observation input
 

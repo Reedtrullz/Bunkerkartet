@@ -92,6 +92,17 @@ def test_saved_route_download_survives_normal_user_delay(page: Page, base_url: s
     assert ET.parse(second_download.value.path()).getroot().tag == root.tag
 
 
+def test_location_is_opt_in_and_only_sets_route_start(page: Page, base_url: str):
+    page.context.grant_permissions(["geolocation"], origin=base_url)
+    page.context.set_geolocation({"latitude": 63.44, "longitude": 10.42, "accuracy": 12})
+    page.goto(base_url)
+    page.get_by_role("button", name="Use my location", exact=True).click()
+    page.wait_for_function("document.getElementById('location-status').textContent.includes('accuracy')")
+
+    assert "accuracy 12 m" in page.locator("#location-status").inner_text()
+    assert page.locator("#route-start").inner_text() == "Start: current location"
+
+
 def test_lock_clears_private_site_and_route_dom(page: Page, base_url: str):
     page.goto(base_url)
     page.get_by_label("Admin token", exact=True).fill("audit-only")

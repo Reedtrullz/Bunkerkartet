@@ -1003,12 +1003,12 @@ $("use-location").addEventListener("click", () => {
   navigator.geolocation.getCurrentPosition((position) => {
     const point = { lat: position.coords.latitude, lon: position.coords.longitude };
     updateRouteStart(point, "current location"); map.setView([point.lat, point.lon], 15);
-    text($("location-status"), "Current location set as route start.");
+    text($("location-status"), `Current location set as route start (accuracy ${Math.round(position.coords.accuracy)} m).`);
     setStatus("Current location set as route start.");
   }, () => {
     text($("location-status"), "Could not read current location.");
     setStatus("Could not read current location.");
-  });
+  }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
 });
 $("create-route").addEventListener("click", createRoute);
 map.on("click", (event) => {
@@ -1019,4 +1019,4 @@ map.on("click", (event) => {
   renderRouteStops();
 });
 
-updateRouteStart({ lat: 63.4305, lon: 10.3951 }, "map center");
+updateRouteStart({ lat: 63.4305, lon: 10.3951 }, "Standardstart i Trondheim");

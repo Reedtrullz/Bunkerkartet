@@ -31,7 +31,8 @@ LLM- eller researchoppsett og lastes inn som et strengt JSON-format.
   tilgjengelige for tilnærming.
 - Gå-rute via OpenRouteService, lagring av ruter, GPX-nedlasting og GeoJSON-
   eksport. Nettleserens posisjon kan brukes opt-in som startpunkt for en rute;
-  posisjonen lagres ikke av denne funksjonen.
+  posisjonen lagres ikke som en egen observasjon av denne funksjonen, og
+  nettleserens målenøyaktighet brukes ikke som stedets usikkerhetsradius.
 
 ## Kjør lokalt
 

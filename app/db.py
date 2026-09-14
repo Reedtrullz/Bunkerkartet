@@ -374,19 +374,23 @@ def _repair_v2_history(connection: sqlite3.Connection) -> None:
                     ),
                 )
         else:
-            connection.execute(
-                """
-                INSERT INTO evidence_items
-                    (site_id, source_id, legacy_evidence_id, excerpt, content_kind, role,
-                     published_at, accessed_at, provenance_status, created_at)
-                VALUES (?, ?, ?, ?, 'unknown', 'context', ?, ?, 'legacy_unresolved', ?)
-                """,
-                (
-                    evidence["site_id"], evidence["source_id"], evidence["id"],
-                    evidence["excerpt"] or "", evidence["published_at"], evidence["accessed_at"],
-                    evidence["created_at"],
-                ),
-            )
+            if connection.execute(
+                "SELECT 1 FROM evidence_items WHERE legacy_evidence_id = ?",
+                (evidence["id"],),
+            ).fetchone() is None:
+                connection.execute(
+                    """
+                    INSERT INTO evidence_items
+                        (site_id, source_id, legacy_evidence_id, excerpt, content_kind, role,
+                         published_at, accessed_at, provenance_status, created_at)
+                    VALUES (?, ?, ?, ?, 'unknown', 'context', ?, ?, 'legacy_unresolved', ?)
+                    """,
+                    (
+                        evidence["site_id"], evidence["source_id"], evidence["id"],
+                        evidence["excerpt"] or "", evidence["published_at"], evidence["accessed_at"],
+                        evidence["created_at"],
+                    ),
+                )
     for batch in connection.execute(
         "SELECT id, batch_id, schema_version, generated_at FROM import_batches WHERE payload_hash IS NULL"
     ).fetchall():
@@ -441,6 +445,7 @@ def _migrate_v4(connection: sqlite3.Connection) -> None:
 
 
 def _migrate_v5(connection: sqlite3.Connection) -> None:
+    _repair_evidence_item_fk(connection)
     _repair_v2_history(connection)
     site_columns = {row[1] for row in connection.execute("PRAGMA table_info(sites)")}
     if "location_review_required" not in site_columns:
@@ -449,6 +454,50 @@ def _migrate_v5(connection: sqlite3.Connection) -> None:
     if "route_warnings_json" not in route_columns:
         connection.execute("ALTER TABLE route_plans ADD COLUMN route_warnings_json TEXT")
     connection.execute("PRAGMA user_version = 5")
+
+
+def _repair_evidence_item_fk(connection: sqlite3.Connection) -> None:
+    foreign_keys = connection.execute("PRAGMA foreign_key_list(evidence_items)").fetchall()
+    if any(
+        row["from"] == "legacy_evidence_id" and row["on_delete"].upper() == "SET NULL"
+        for row in foreign_keys
+    ):
+        return
+    connection.execute(
+        """
+        CREATE TABLE evidence_items_repaired (
+            id INTEGER PRIMARY KEY,
+            site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+            source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+            import_record_id INTEGER REFERENCES import_records(id),
+            source_index INTEGER,
+            legacy_evidence_id INTEGER UNIQUE REFERENCES evidence(id) ON DELETE SET NULL,
+            excerpt TEXT NOT NULL,
+            content_kind TEXT NOT NULL DEFAULT 'unknown'
+                CHECK(content_kind IN ('quote', 'summary', 'unknown')),
+            role TEXT NOT NULL DEFAULT 'context'
+                CHECK(role IN ('identity', 'location', 'access', 'context')),
+            published_at TEXT,
+            accessed_at TEXT,
+            provenance_status TEXT NOT NULL
+                CHECK(provenance_status IN ('import_record', 'legacy_unresolved')),
+            created_at TEXT NOT NULL,
+            UNIQUE(import_record_id, source_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO evidence_items_repaired
+            (id, site_id, source_id, import_record_id, source_index, legacy_evidence_id,
+             excerpt, content_kind, role, published_at, accessed_at, provenance_status, created_at)
+        SELECT id, site_id, source_id, import_record_id, source_index, legacy_evidence_id,
+               excerpt, content_kind, role, published_at, accessed_at, provenance_status, created_at
+        FROM evidence_items
+        """
+    )
+    connection.execute("DROP TABLE evidence_items")
+    connection.execute("ALTER TABLE evidence_items_repaired RENAME TO evidence_items")
 
 
 def _run_migration(connection: sqlite3.Connection, migration: Callable[[sqlite3.Connection], None]) -> None:

@@ -244,6 +244,23 @@ def _route_warnings(
     return warnings
 
 
+def _route_site_error(row: sqlite3.Row, site_id: int) -> str | None:
+    if row["merged_into_id"] is not None:
+        return f"site {site_id} is merged"
+    if row["status"] == "rejected":
+        return f"site {site_id} is rejected"
+    if row["location_review_required"]:
+        return f"site {site_id} requires a location review before routing"
+    if (
+        row["approach_latitude"] is None
+        or row["approach_longitude"] is None
+        or row["approach_access"] != "public"
+        or row["approach_reviewed_at"] is None
+    ):
+        return f"site {site_id} has no reviewed public approach"
+    return None
+
+
 def _source_rows(connection: sqlite3.Connection, site_id: int) -> list[dict[str, object]]:
     rows = connection.execute(
         """
@@ -1256,6 +1273,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "was used to update the map coordinate."
             )
             rationale = f"{rationale} {update_note}".strip()[:2000]
+            location_review_required = int(
+                bool(row["location_review_required"])
+                or row["status"] in {"trusted", "field-verified"}
+                and (
+                    observation["latitude"] != row["latitude"]
+                    or observation["longitude"] != row["longitude"]
+                )
+            )
             connection.execute(
                 """
                 UPDATE sites
@@ -1268,13 +1293,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     observation["longitude"],
                     observation["uncertainty_m"],
                     "explicit_coordinate",
-                    int(
-                        row["status"] in {"trusted", "field-verified"}
-                        and (
-                            observation["latitude"] != row["latitude"]
-                            or observation["longitude"] != row["longitude"]
-                        )
-                    ),
+                    location_review_required,
                     rationale,
                     timestamp,
                     site_id,
@@ -1405,17 +1424,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             approach_rows = []
             for site_id in request.site_ids:
                 row = sites[site_id]
-                if row["merged_into_id"] is not None:
-                    raise HTTPException(409, f"site {site_id} is merged")
-                if (
-                    row["approach_latitude"] is None
-                    or row["approach_longitude"] is None
-                    or row["approach_access"] != "public"
-                    or row["approach_reviewed_at"] is None
-                ):
-                    raise HTTPException(409, f"site {site_id} has no reviewed public approach")
-                if row["location_review_required"]:
-                    raise HTTPException(409, f"site {site_id} requires a location review before routing")
+                if error := _route_site_error(row, site_id):
+                    raise HTTPException(409, error)
                 approach_rows.append(row)
         coordinates = [(request.start.lon, request.start.lat)] + [
             (row["approach_longitude"], row["approach_latitude"]) for row in approach_rows
@@ -1457,15 +1467,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         gpx = build_gpx(request.name, route.coordinates, named_waypoints)
         timestamp = now_iso()
         with database.connect() as connection:
-            for row in approach_rows:
-                current = connection.execute(
-                    "SELECT approach_latitude, approach_longitude, approach_access, approach_note, approach_reviewed_at FROM sites WHERE id = ?",
-                    (row["id"],),
-                ).fetchone()
-                if current is None or any(current[key] != row[key] for key in (
-                    "approach_latitude", "approach_longitude", "approach_access", "approach_note", "approach_reviewed_at"
-                )):
-                    raise HTTPException(409, "a route approach changed; calculate the route again")
+            connection.execute("BEGIN IMMEDIATE")
+            placeholders = ",".join("?" for _ in request.site_ids)
+            current_rows = connection.execute(
+                f"SELECT * FROM sites WHERE id IN ({placeholders})", request.site_ids
+            ).fetchall()
+            current_by_id = {int(row["id"]): row for row in current_rows}
+            snapshot_fields = (
+                "merged_into_id", "status", "approach_latitude", "approach_longitude",
+                "approach_access", "approach_note", "approach_reviewed_at", "location_review_required",
+            )
+            for snapshot in approach_rows:
+                current = current_by_id.get(int(snapshot["id"]))
+                if current is None or _route_site_error(current, int(snapshot["id"])) or any(
+                    current[field] != snapshot[field] for field in snapshot_fields
+                ):
+                    raise HTTPException(409, "a route site changed; calculate the route again")
             cursor = connection.execute(
                 """
                 INSERT INTO route_plans
@@ -1540,14 +1557,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ]))
                 placeholders = ",".join("?" for _ in route["stops"])
                 current = connection.execute(
-                    f"SELECT id, approach_latitude, approach_longitude, approach_access, approach_note, approach_reviewed_at FROM sites WHERE id IN ({placeholders})",
+                    f"SELECT id, merged_into_id, status, approach_latitude, approach_longitude, approach_access, approach_note, approach_reviewed_at, location_review_required FROM sites WHERE id IN ({placeholders})",
                     [stop["site_id"] for stop in route["stops"]],
                 ).fetchall() if route["stops"] else []
                 current_by_id = {int(item["id"]): item for item in current}
                 route["current_site_changed"] = False
                 for stop in route["stops"]:
                     current = current_by_id.get(int(stop["site_id"]))
-                    if current is None or any(
+                    if current is None or current["merged_into_id"] is not None or current["status"] == "rejected" or current["location_review_required"] or any(
                         current[current_key] != stop[stop_key]
                         for current_key, stop_key in (
                             ("approach_latitude", "lat"), ("approach_longitude", "lon"),

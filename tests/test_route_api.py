@@ -198,3 +198,44 @@ def test_route_rejects_location_review_required(tmp_path, monkeypatch):
 
     assert response.status_code == 409
     assert "location review" in response.json()["detail"]
+
+
+def test_route_rejects_rejected_site_before_provider_call(tmp_path, monkeypatch):
+    api = TestClient(
+        create_app(Settings(data_dir=tmp_path, admin_token="secret", ors_api_key="ors-key"))
+    )
+    site_id = seed_site(api)
+    with api.app.state.database.connect() as connection:
+        connection.execute("UPDATE sites SET status = 'rejected' WHERE id = ?", (site_id,))
+    monkeypatch.setattr("app.main.fetch_openrouteservice", lambda *_: pytest.fail("provider called"))
+
+    response = api.post(
+        "/api/routes",
+        headers={"Authorization": "Bearer secret"},
+        json={"start": {"lat": 63.4, "lon": 10.4}, "site_ids": [site_id]},
+    )
+
+    assert response.status_code == 409
+    assert "rejected" in response.json()["detail"]
+
+
+def test_route_revalidates_site_after_provider_returns(tmp_path, monkeypatch):
+    api = TestClient(
+        create_app(Settings(data_dir=tmp_path, admin_token="secret", ors_api_key="ors-key"))
+    )
+    site_id = seed_site(api)
+
+    def route(api_key, coordinates):
+        with api.app.state.database.connect() as connection:
+            connection.execute("UPDATE sites SET status = 'rejected' WHERE id = ?", (site_id,))
+        return RouteResult(1200, 900, [coordinates[0], coordinates[-1]], [0, 1])
+
+    monkeypatch.setattr("app.main.fetch_openrouteservice", route)
+    response = api.post(
+        "/api/routes",
+        headers={"Authorization": "Bearer secret"},
+        json={"start": {"lat": 63.4, "lon": 10.4}, "site_ids": [site_id]},
+    )
+
+    assert response.status_code == 409
+    assert api.get("/api/routes", headers={"Authorization": "Bearer secret"}).json() == []
