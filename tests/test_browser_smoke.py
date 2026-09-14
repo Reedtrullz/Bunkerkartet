@@ -408,6 +408,9 @@ def test_list_detail_back_returns_focus_to_visible_site_control(page: Page, base
     assert page.evaluate("document.activeElement === document.querySelector('details.site-editor > summary')")
     close = page.get_by_role("button", name="Tilbake til kart", exact=True)
     close.focus()
+    # A queued disclosure event must not steal focus after the user moves on.
+    page.locator("details.site-editor").dispatch_event("toggle")
+    assert close.evaluate("element => element === document.activeElement")
     page.keyboard.press("Enter")
 
     assert page.get_by_role("button", name="Kart", exact=True).get_attribute("aria-pressed") == "true"

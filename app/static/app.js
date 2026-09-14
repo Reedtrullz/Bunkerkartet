@@ -627,7 +627,7 @@ function compactSection(title, className = "") {
   text(summary, title);
   section.append(summary);
   section.addEventListener("toggle", () => {
-    if (!section.open) summary.focus({ preventScroll: true });
+    if (!section.open && section.contains(document.activeElement)) summary.focus({ preventScroll: true });
   });
   return section;
 }
@@ -827,18 +827,25 @@ async function loadDetail(id) {
     const coordinates = site.latitude == null ? "Ukjent" : `${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}`;
     const copy = document.createElement("dl"); copy.className = "detail-copy";
     [["Navn", site.name], ["Ekstern nøkkel", site.external_key], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
-      ["Sikkerhet", site.confidence || "Ukjent"],
+      ["Sikkerhet", VALUE_LABELS[site.confidence] || site.confidence || "Ukjent"],
       ["Koordinater", coordinates],
-      ["Presisjon", `${site.precision}${site.uncertainty_m == null ? "" : ` (${site.uncertainty_m} m)`}`],
+      ["Presisjon", `${VALUE_LABELS[site.precision] || site.precision}${site.uncertainty_m == null ? "" : ` (${site.uncertainty_m} m)`}`],
       ["Tilgang", accessLabel(site.access)], ["Grunnlag", VALUE_LABELS[site.location_basis] || site.location_basis], ["Tilstand", site.condition || "Ukjent"],
       ["Observert sted", site.observed_location_text || "Ukjent"]]
-      .forEach(([label, value]) => { const dt = document.createElement("dt"); text(dt, label); const dd = document.createElement("dd"); text(dd, value); copy.append(dt, dd); });
-    if (site.short_rationale) { const rationale = document.createElement("p"); text(rationale, site.short_rationale); copy.append(rationale); }
-    if (site.warnings?.length) { const warning = document.createElement("p"); warning.className = "warning"; text(warning, site.warnings.join(" | ")); copy.append(warning); }
-    const sourcesTitle = document.createElement("dt"); text(sourcesTitle, "Kilder"); copy.append(sourcesTitle);
-    const sources = document.createElement("dd"); const sourceList = document.createElement("ul"); sourceList.className = "source-list";
+      .forEach(([label, value]) => {
+        const field = document.createElement("div"); field.className = "detail-fact";
+        if (["Navn", "Observert sted"].includes(label)) field.classList.add("detail-fact-wide");
+        const dt = document.createElement("dt"); text(dt, label);
+        const dd = document.createElement("dd"); text(dd, value);
+        field.append(dt, dd); copy.append(field);
+      });
+    root.append(copy);
+    if (site.short_rationale) { const rationale = document.createElement("p"); text(rationale, site.short_rationale); root.append(rationale); }
+    if (site.warnings?.length) { const warning = document.createElement("p"); warning.className = "warning"; text(warning, site.warnings.join(" | ")); root.append(warning); }
+    const sourcesTitle = document.createElement("h3"); text(sourcesTitle, "Kilder");
+    const sources = document.createElement("section"); sources.className = "detail-section"; sources.append(sourcesTitle); const sourceList = document.createElement("ul"); sourceList.className = "source-list";
     (site.sources || []).forEach((source) => { const li = document.createElement("li"); if (source.url) { const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); } else { const withheld = document.createElement("span"); text(withheld, source.title || "Referanse holdt tilbake"); li.append(withheld); } const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "kilde", source.published_at && `publisert ${source.published_at}`, source.accessed_at && `lest ${source.accessed_at}`, source.url_status].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
-    sources.append(sourceList); copy.append(sources); root.append(copy);
+    sources.append(sourceList); root.append(sources);
     if (site.relations?.length) {
       const relationsTitle = document.createElement("h3"); text(relationsTitle, "Relaterte steder"); root.append(relationsTitle);
       const relationList = document.createElement("ul"); relationList.className = "source-list";
