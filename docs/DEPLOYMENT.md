@@ -7,7 +7,7 @@ TLS and proxying to the app on `127.0.0.1:8000`.
 ## Build and publish
 
 GitHub Actions runs tests and builds the image for pull requests and pushes to
-`main`. Only a push to the protected `main` branch publishes to GHCR. The
+`main`. Only a push to `main` publishes to GHCR. The
 published image receives the full commit SHA tag and the workflow summary
 records its digest. Deploy both values; the Compose service runs by digest.
 
