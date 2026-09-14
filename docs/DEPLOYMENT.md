@@ -44,7 +44,8 @@ configuration and reload Caddy using the host's normal service manager. It is
 prepared for `bunker.reidar.tech`. Caddy is the only public entry point; Compose
 binds port 8000 to loopback. The named data volume is explicitly
 `bunkerkartet-data`, so backup commands do not depend on the Compose project
-directory.
+directory. The example also enables one-year HSTS; only use it once the
+hostname is permanently HTTPS-only.
 
 ## SQLite backup
 

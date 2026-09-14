@@ -46,6 +46,12 @@
           <label>Type
             <input id="kind-filter" type="search" placeholder="bunker, cave...">
           </label>
+          <label>Search
+            <input id="site-search" type="search" placeholder="Name or location clue">
+          </label>
+        </div>
+        <div class="button-row">
+          <button id="download-geojson" type="button" disabled>Download GeoJSON</button>
         </div>
         <div id="site-list" class="site-list" aria-live="polite"></div>
       </section>
@@ -120,6 +126,9 @@
 
       <section class="panel route-panel">
         <div class="panel-heading"><h2>Walking route</h2></div>
+        <label>Route name
+          <input id="route-name" type="text" value="Trondheim field route" maxlength="200">
+        </label>
         <div class="button-row">
           <button id="pick-start">Set start on map</button>
           <button id="use-location">Use location</button>
@@ -128,6 +137,15 @@
         <ol id="route-stops" class="route-stops"></ol>
         <button id="create-route" class="primary" disabled>Create route</button>
         <div id="route-result" class="route-result" aria-live="polite"></div>
+      </section>
+
+      <section class="panel saved-routes-panel">
+        <div class="panel-heading">
+          <h2>Saved routes</h2>
+          <button id="refresh-routes" type="button">Refresh</button>
+        </div>
+        <div id="route-history-summary" class="site-meta"></div>
+        <div id="route-history-list" class="route-history-list"></div>
       </section>
     </aside>
     <section class="map-shell">

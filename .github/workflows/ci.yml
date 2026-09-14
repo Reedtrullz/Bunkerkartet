@@ -13,16 +13,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
       - name: Create virtualenv
         run: python -m venv .venv
       - name: Install dependencies
         run: .venv/bin/python -m pip install -r requirements-dev.txt
       - name: Test
         run: .venv/bin/python -m pytest -q
+      - name: Validate frontend syntax
+        run: node --check app/static/app.js
       - name: Build image
         run: docker build --tag bunkerkartet:ci .
 
@@ -34,8 +39,8 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -45,7 +50,7 @@ jobs:
         env:
           REPOSITORY: ${{ github.repository }}
         run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         id: publish
         with:
           context: .

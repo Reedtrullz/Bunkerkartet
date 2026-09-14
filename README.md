@@ -26,7 +26,8 @@ versioned contract is in [`app/imports.py`](app/imports.py).
 The candidate queue can be narrowed by confidence, access, uncertainty radius,
 and source type; each row also exposes its evidence count and detail view.
 The review lifecycle is `candidate` -> `researched` -> `field verified` ->
-`confirmed` (or `rejected`). Status changes go through the lifecycle controls;
+`confirmed` (or `rejected`); explicit controls also cover approximate and
+destroyed-or-filled records. Status changes go through the lifecycle controls;
 site details can edit coordinates, uncertainty, rationale, access, and warnings.
 Field observations are dated notes with an
 outcome, observed coordinates, access notes, and external photo URLs; saving an
@@ -39,6 +40,10 @@ coordinate; the existing uncertainty is preserved and the change is audited.
 The field shortlist contains only sites explicitly marked `public`, with
 candidate or researched status and coordinates, ordered by confidence and
 uncertainty. Unknown access is intentionally excluded.
+
+The site search covers names, location clues, and source excerpts. Saved routes
+can be reloaded after refreshing the page, and the authenticated map can export
+the visible catalogue plus coordinate-bearing observations as GeoJSON.
 
 For external forum/newspaper research, use the small [research import
 kit](research/README.md): give an LLM the extraction prompt, save its JSON

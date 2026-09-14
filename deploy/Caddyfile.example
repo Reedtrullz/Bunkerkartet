@@ -1,4 +1,7 @@
 # Public TLS proxy. Keep the app bound to loopback in Compose.
 bunker.reidar.tech {
+    header {
+        Strict-Transport-Security "max-age=31536000"
+    }
     reverse_proxy 127.0.0.1:8000
 }

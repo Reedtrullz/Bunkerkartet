@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, model_validator
 from urllib.error import HTTPError, URLError
@@ -46,6 +46,13 @@ LOCATION_BASES = (
     "landmark_description",
     "llm_inference",
 )
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: blob: https://cache.kartverket.no; font-src 'self' data:; connect-src 'self'",
+    "Permissions-Policy": "geolocation=(self)",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+}
 
 
 class SitePatch(BaseModel):
@@ -127,6 +134,8 @@ class ReviewRequest(BaseModel):
         "confirm",
         "reject",
         "restore",
+        "mark_approximate",
+        "mark_destroyed",
         "merge",
     ]
     target_site_id: int | None = Field(default=None, gt=0)
@@ -483,6 +492,18 @@ def _require_admin(settings: Settings, authorization: str | None) -> None:
         raise HTTPException(401, "invalid bearer token")
 
 
+def _route_summary(row: sqlite3.Row) -> dict[str, object]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "start": json.loads(row["start_json"]),
+        "waypoints": json.loads(row["waypoints_json"]),
+        "distance_m": row["distance_m"],
+        "duration_s": row["duration_s"],
+        "created_at": row["created_at"],
+    }
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     database = Database(settings.db_path)
@@ -493,10 +514,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.database = database
 
     @app.middleware("http")
-    async def disable_frontend_caching(request, call_next):
+    async def set_response_headers(request, call_next):
         response = await call_next(request)
-        if request.url.path in {"/", "/static/app.js", "/static/styles.css"}:
+        if request.url.path in {"/", "/static/app.js", "/static/styles.css"} or request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
         return response
 
     def admin_guard(authorization: str | None = Header(default=None)) -> None:
@@ -548,6 +571,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def list_sites(
         status: str | None = Query(default=None),
         site_kind: str | None = Query(default=None, max_length=100),
+        q: str | None = Query(default=None, max_length=200),
         include_rejected: bool = Query(default=False),
     ) -> list[dict[str, object]]:
         conditions = ["merged_into_id IS NULL"]
@@ -562,9 +586,68 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if site_kind and site_kind.strip():
             conditions.append("lower(site_kind) LIKE lower(?)")
             values.append(f"%{site_kind.strip()}%")
+        if q and q.strip():
+            term = f"%{q.strip()}%"
+            searchable_fields = ("name", "site_kind", "short_rationale", "observed_location_text", "condition")
+            conditions.append(
+                "(" + " OR ".join(
+                    f"lower(COALESCE({field}, '')) LIKE lower(?)" for field in searchable_fields
+                ) + " OR EXISTS ("
+                "SELECT 1 FROM evidence JOIN sources ON sources.id = evidence.source_id "
+                "WHERE evidence.site_id = sites.id AND ("
+                "lower(COALESCE(sources.title, '')) LIKE lower(?) OR "
+                "lower(COALESCE(sources.excerpt, '')) LIKE lower(?)"
+                ")))"
+            )
+            values.extend([term] * (len(searchable_fields) + 2))
         query = f"SELECT * FROM sites WHERE {' AND '.join(conditions)} ORDER BY name, id"
         with database.connect() as connection:
             return [_site_summary(connection, row) for row in connection.execute(query, values).fetchall()]
+
+    @app.get("/api/sites.geojson", dependencies=[Depends(admin_guard)])
+    def export_sites_geojson() -> JSONResponse:
+        with database.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM sites WHERE merged_into_id IS NULL AND status <> 'rejected' ORDER BY name, id"
+            ).fetchall()
+            features: list[dict[str, object]] = []
+            for row in rows:
+                site = _site_summary(connection, row)
+                site_id = int(site["id"])
+                geometry = None
+                if site["latitude"] is not None and site["longitude"] is not None:
+                    geometry = {
+                        "type": "Point",
+                        "coordinates": [site["longitude"], site["latitude"]],
+                    }
+                properties = {
+                    key: value for key, value in site.items() if key != "observation_points"
+                }
+                properties["feature_type"] = "site"
+                features.append(
+                    {"type": "Feature", "id": site_id, "geometry": geometry, "properties": properties}
+                )
+                for observation in site["observation_points"]:
+                    features.append(
+                        {
+                            "type": "Feature",
+                            "id": f"observation-{observation['id']}",
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [observation["longitude"], observation["latitude"]],
+                            },
+                            "properties": {
+                                "feature_type": "field_observation",
+                                "site_id": site_id,
+                                "observed_at": observation["observed_at"],
+                                "outcome": observation["outcome"],
+                            },
+                        }
+                    )
+        return JSONResponse(
+            {"type": "FeatureCollection", "features": features},
+            media_type="application/geo+json",
+        )
 
     @app.get("/api/field-priority", dependencies=[Depends(admin_guard)])
     def field_priority(limit: int = Query(default=12, ge=1, le=50)) -> list[dict[str, object]]:
@@ -822,7 +905,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "confirm": "trusted",
                     "reject": "rejected",
                     "restore": "candidate",
+                    "mark_approximate": "approximate",
+                    "mark_destroyed": "destroyed-or-filled",
                 }[request.action]
+                allowed_statuses = {
+                    "accept": {"candidate", "approximate"},
+                    "research": {"candidate", "approximate"},
+                    "field_verify": {"likely"},
+                    "confirm": {"field-verified", "trusted"},
+                    "restore": {"rejected"},
+                    "mark_approximate": {"candidate"},
+                    "mark_destroyed": {"candidate", "approximate", "likely", "field-verified", "trusted"},
+                }
+                if request.action in allowed_statuses and row["status"] not in allowed_statuses[request.action]:
+                    raise HTTPException(409, "invalid lifecycle transition")
                 if request.action == "field_verify":
                     if row["status"] != "likely":
                         raise HTTPException(409, "field verification requires a researched site")
@@ -894,7 +990,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "geometry": {"type": "LineString", "coordinates": route.coordinates},
             "gpx": gpx,
             "warnings": warnings,
+            "created_at": timestamp,
         }
+
+    @app.get("/api/routes", dependencies=[Depends(admin_guard)])
+    def list_routes(limit: int = Query(default=20, ge=1, le=100)) -> list[dict[str, object]]:
+        with database.connect() as connection:
+            rows = connection.execute(
+                "SELECT id, name, start_json, waypoints_json, distance_m, duration_s, created_at "
+                "FROM route_plans ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [_route_summary(row) for row in rows]
 
     @app.get("/api/routes/{route_id}", dependencies=[Depends(admin_guard)])
     def get_route(route_id: int) -> dict[str, object]:
@@ -902,16 +1009,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM route_plans WHERE id = ?", (route_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "route not found")
-            return {
-                "id": row["id"],
-                "name": row["name"],
-                "start": json.loads(row["start_json"]),
-                "waypoints": json.loads(row["waypoints_json"]),
-                "distance_m": row["distance_m"],
-                "duration_s": row["duration_s"],
-                "geometry": {"type": "LineString", "coordinates": json.loads(row["geometry_json"])},
-                "gpx": row["gpx_text"],
-            }
+            route = _route_summary(row)
+            route["geometry"] = {"type": "LineString", "coordinates": json.loads(row["geometry_json"])}
+            route["gpx"] = row["gpx_text"]
+            route["warnings"] = ["A route does not grant permission to enter land or structures."]
+            return route
 
     return app
 

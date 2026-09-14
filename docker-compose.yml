@@ -11,6 +11,13 @@ services:
       - "127.0.0.1:${APP_PORT:-8000}:8000"
     volumes:
       - bunkerkartet-data:/app/data
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
 
 volumes:
   bunkerkartet-data:

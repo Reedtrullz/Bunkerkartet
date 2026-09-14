@@ -107,6 +107,9 @@ textarea { min-height: 58px; resize: vertical; }
 .route-stops { display: grid; gap: 5px; margin: 0 0 9px; padding-left: 22px; }
 .route-stop { align-items: center; display: flex; gap: 5px; justify-content: space-between; }
 .route-stop-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-stop-meta { color: var(--muted); font-size: 11px; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-history-list { display: grid; gap: 7px; }
+.route-item { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 4px; display: grid; gap: 5px; padding: 8px; }
 .route-result { display: grid; gap: 5px; margin-top: 9px; }
 .route-result a { color: #235d85; }
 .map-status { background: rgba(255,255,255,.95); border: 1px solid var(--line); border-radius: 4px; bottom: 12px; left: 12px; padding: 7px 9px; position: absolute; z-index: 500; }

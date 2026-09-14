@@ -1,7 +1,9 @@
 const state = {
   token: "",
   sites: [],
+  routes: [],
   pendingImport: null,
+  importRequestInFlight: false,
   routeSiteIds: [],
   prioritySites: [],
   start: null,
@@ -32,8 +34,18 @@ const STATUS_LABELS = {
   "destroyed-or-filled": "Destroyed or filled",
   rejected: "Rejected",
 };
+const ACCESS_LABELS = {
+  public: "Public approach",
+  private: "Private",
+  restricted: "Restricted",
+  unknown: "Access unknown",
+  permission_required: "Permission required",
+  dangerous: "Dangerous",
+  unsafe: "Unsafe",
+};
 
 const statusLabel = (status) => STATUS_LABELS[status] || status;
+const accessLabel = (access) => ACCESS_LABELS[access] || access;
 const outcomeLabel = (outcome) => outcome.replaceAll("_", " ");
 
 function labeledControl(label, control, className = "") {
@@ -192,7 +204,7 @@ function renderSiteList() {
     item.append(head);
     const meta = document.createElement("div");
     meta.className = "site-meta";
-    text(meta, `${site.site_kind} | ${site.precision} | ${site.access}`);
+    text(meta, `${site.site_kind} | ${site.precision} | ${accessLabel(site.access)}`);
     item.append(meta);
     const actions = document.createElement("div");
     actions.className = "site-actions";
@@ -218,10 +230,13 @@ async function loadSites() {
   const params = new URLSearchParams();
   const status = $("status-filter").value;
   const kind = $("kind-filter").value.trim();
+  const query = $("site-search").value.trim();
   if (status) params.set("status", status);
   if (kind) params.set("site_kind", kind);
+  if (query) params.set("q", query);
   try {
     state.sites = await api(`/api/sites?${params}`);
+    $("download-geojson").disabled = false;
     renderSiteList();
     renderMap();
     setStatus(state.sites.length
@@ -231,10 +246,13 @@ async function loadSites() {
         : "Authenticated. No site records imported yet.");
     await loadCandidates();
     await loadFieldPriority();
+    await loadRoutes();
   } catch (error) { setStatus(error.message); }
 }
 
 async function runReviewAction(id, action) {
+  if (action === "reject" && !window.confirm("Reject this candidate?")) return;
+  if (action === "mark_destroyed" && !window.confirm("Mark this site as destroyed or filled?")) return;
   try {
     await api(`/api/sites/${id}/review`, { method: "POST", body: JSON.stringify({ action }) });
     await loadSites();
@@ -248,9 +266,11 @@ function renderLifecycleActions(site, root) {
   const heading = document.createElement("h3"); text(heading, "Lifecycle"); section.append(heading);
   const actions = document.createElement("div"); actions.className = "candidate-actions";
   const transitions = {
-    candidate: [["Mark researched", "research", ""]],
-    likely: [["Mark field verified", "field_verify", ""]],
-    "field-verified": [["Confirm", "confirm", ""]],
+    candidate: [["Mark researched", "research", ""], ["Mark approximate", "mark_approximate", ""], ["Mark destroyed or filled", "mark_destroyed", "danger"]],
+    approximate: [["Mark researched", "research", ""], ["Mark destroyed or filled", "mark_destroyed", "danger"]],
+    likely: [["Mark field verified", "field_verify", ""], ["Mark destroyed or filled", "mark_destroyed", "danger"]],
+    "field-verified": [["Confirm", "confirm", ""], ["Mark destroyed or filled", "mark_destroyed", "danger"]],
+    trusted: [["Mark destroyed or filled", "mark_destroyed", "danger"]],
   };
   (transitions[site.status] || []).forEach(([label, action, style]) => {
     const button = document.createElement("button"); button.className = `small ${style}`; button.type = "button"; text(button, label);
@@ -400,7 +420,7 @@ async function loadDetail(id) {
     [["Name", site.name], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
       ["Confidence", site.confidence || "Unknown"],
       ["Precision", `${site.precision}${site.uncertainty_m == null ? "" : ` (${site.uncertainty_m} m)`}`],
-      ["Access", site.access], ["Basis", site.location_basis], ["Condition", site.condition || "Unknown"]]
+      ["Access", accessLabel(site.access)], ["Basis", site.location_basis], ["Condition", site.condition || "Unknown"]]
       .forEach(([label, value]) => { const dt = document.createElement("dt"); text(dt, label); const dd = document.createElement("dd"); text(dd, value); copy.append(dt, dd); });
     if (site.short_rationale) { const rationale = document.createElement("p"); text(rationale, site.short_rationale); copy.append(rationale); }
     if (site.warnings?.length) { const warning = document.createElement("p"); warning.className = "warning"; text(warning, site.warnings.join(" | ")); copy.append(warning); }
@@ -427,23 +447,29 @@ async function readImport(file) {
 }
 
 async function previewImport() {
-  if (!state.pendingImport) return;
+  if (!state.pendingImport || state.importRequestInFlight) return;
+  state.importRequestInFlight = true;
+  const button = $("preview-import"); button.disabled = true; text(button, "Previewing...");
   try {
     const result = await api("/api/admin/imports/preview", { method: "POST", body: JSON.stringify(state.pendingImport) });
     text($("import-result"), JSON.stringify(result, null, 2));
     $("commit-import").disabled = false;
-  } catch (error) { text($("import-result"), error.message); }
+  } catch (error) { text($("import-result"), error.message); $("commit-import").disabled = true; }
+  finally { state.importRequestInFlight = false; text(button, "Preview"); button.disabled = !state.pendingImport; }
 }
 
 async function commitImport() {
-  if (!state.pendingImport) return;
+  if (!state.pendingImport || state.importRequestInFlight) return;
+  state.importRequestInFlight = true;
+  const button = $("commit-import"); button.disabled = true; text(button, "Committing...");
   try {
     const result = await api("/api/admin/imports/commit", { method: "POST", body: JSON.stringify(state.pendingImport) });
     text($("import-result"), JSON.stringify(result, null, 2));
-    $("commit-import").disabled = true;
+    state.pendingImport = null;
     await loadSites();
     await loadCandidates();
   } catch (error) { text($("import-result"), error.message); }
+  finally { state.importRequestInFlight = false; text(button, "Commit"); button.disabled = !state.pendingImport; }
 }
 
 async function loadCandidates() {
@@ -470,7 +496,7 @@ async function loadCandidates() {
       const uncertainty = site.uncertainty_m == null ? "uncertainty unknown" : `${Math.round(site.uncertainty_m)} m`;
       const sourceCount = (site.sources || []).length;
       const meta = document.createElement("div"); meta.className = "site-meta";
-      text(meta, `${site.site_kind} | ${site.confidence || "unknown"} | ${uncertainty} | ${site.access} | ${sourceCount} source${sourceCount === 1 ? "" : "s"}`); item.append(meta);
+      text(meta, `${site.site_kind} | ${site.confidence || "unknown"} | ${uncertainty} | ${accessLabel(site.access)} | ${sourceCount} source${sourceCount === 1 ? "" : "s"}`); item.append(meta);
       if (site.warnings?.length) {
         const warnings = document.createElement("div"); warnings.className = "warning";
         text(warnings, `${site.warnings.length} warning${site.warnings.length === 1 ? "" : "s"}`); item.append(warnings);
@@ -480,10 +506,7 @@ async function loadCandidates() {
       details.addEventListener("click", () => loadDetail(site.id)); actions.append(details);
       [["Mark researched", "research", ""], ["Reject", "reject", "danger"]].forEach(([label, action, style]) => {
         const button = document.createElement("button"); button.className = `small ${style}`; text(button, label);
-        button.addEventListener("click", async () => {
-          try { await api(`/api/sites/${site.id}/review`, { method: "POST", body: JSON.stringify({ action }) }); await loadSites(); await loadCandidates(); }
-          catch (error) { setStatus(error.message); }
-        }); actions.append(button);
+        button.addEventListener("click", () => runReviewAction(site.id, action)); actions.append(button);
       });
       item.append(actions); list.append(item);
     });
@@ -503,7 +526,7 @@ function renderFieldPriority() {
     const name = document.createElement("h3"); text(name, site.name);
     const badge = document.createElement("span"); badge.className = "badge"; text(badge, statusLabel(site.status)); head.append(name, badge); item.append(head);
     const uncertainty = site.uncertainty_m == null ? "uncertainty unknown" : `${Math.round(site.uncertainty_m)} m`;
-    const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${site.confidence || "unknown"} | ${uncertainty} | ${site.access}`); item.append(meta);
+    const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${site.confidence || "unknown"} | ${uncertainty} | ${accessLabel(site.access)}`); item.append(meta);
     const actions = document.createElement("div"); actions.className = "site-actions";
     const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Details"); details.addEventListener("click", () => loadDetail(site.id));
     const add = document.createElement("button"); add.className = "small"; add.type = "button"; text(add, state.routeSiteIds.includes(site.id) ? "Added" : "Add route"); add.disabled = state.routeSiteIds.includes(site.id); add.addEventListener("click", () => addRouteSite(site.id));
@@ -517,6 +540,80 @@ async function loadFieldPriority() {
     state.prioritySites = await api("/api/field-priority?limit=12");
     renderFieldPriority();
   } catch (error) { text($("field-priority-list"), error.message); }
+}
+
+function formatRouteDistance(distance) {
+  return distance >= 1000 ? `${(distance / 1000).toFixed(1)} km` : `${Math.round(distance)} m`;
+}
+
+function formatRouteDuration(duration) {
+  return `${Math.round(duration / 60)} min`;
+}
+
+function renderRouteHistory() {
+  const list = $("route-history-list"); list.replaceChildren();
+  text($("route-history-summary"), `${state.routes.length} saved route${state.routes.length === 1 ? "" : "s"}.`);
+  if (!state.routes.length) {
+    const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "No saved routes."); list.append(empty); return;
+  }
+  state.routes.forEach((route) => {
+    const item = document.createElement("article"); item.className = "route-item";
+    const name = document.createElement("h3"); text(name, route.name); item.append(name);
+    const meta = document.createElement("div"); meta.className = "site-meta";
+    text(meta, `${new Date(route.created_at).toLocaleString()} | ${formatRouteDistance(route.distance_m)} | ${formatRouteDuration(route.duration_s)}`); item.append(meta);
+    const load = document.createElement("button"); load.className = "small"; load.type = "button"; text(load, "Load route"); load.addEventListener("click", () => loadRoute(route.id)); item.append(load);
+    list.append(item);
+  });
+}
+
+async function loadRoutes() {
+  if (!state.token) return;
+  try {
+    state.routes = await api("/api/routes?limit=20");
+    renderRouteHistory();
+  } catch (error) { text($("route-history-list"), error.message); }
+}
+
+function renderRouteResult(result) {
+  const root = $("route-result"); root.replaceChildren();
+  const summary = document.createElement("div"); text(summary, `${formatRouteDistance(result.distance_m)} | ${formatRouteDuration(result.duration_s)}`); root.append(summary);
+  (result.warnings || []).forEach((warning) => { const p = document.createElement("p"); p.className = "warning"; text(p, warning); root.append(p); });
+  const cautionSites = state.routeSiteIds.map(siteById).filter((site) => site && site.access !== "public");
+  if (cautionSites.length) {
+    const warning = document.createElement("p"); warning.className = "warning";
+    text(warning, `Access is not established for: ${cautionSites.map((site) => site.name).join(", ")}. Use public approaches only.`); root.append(warning);
+  }
+  const download = document.createElement("a"); download.href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" })); download.download = "bunkerkartet-route.gpx"; text(download, "Download GPX"); root.append(download);
+}
+
+async function loadRoute(id) {
+  try {
+    const result = await api(`/api/routes/${id}`);
+    if (routeLayer) routeLayer.remove();
+    routeLayer = L.geoJSON(result.geometry, { style: { color: "#c65d2e", weight: 4 } }).addTo(map);
+    map.fitBounds(routeLayer.getBounds(), { padding: [24, 24] });
+    updateRouteStart(result.start, "saved route start");
+    state.routeSiteIds = result.waypoints.map((point) => state.sites.find((site) =>
+      site.latitude != null && Math.abs(site.latitude - point.lat) < 0.000001 &&
+      site.longitude != null && Math.abs(site.longitude - point.lon) < 0.000001
+    )?.id).filter((siteId) => siteId != null);
+    renderRouteStops();
+    renderRouteResult(result);
+    setStatus(`Loaded ${result.name}.`);
+  } catch (error) { text($("route-result"), error.message); }
+}
+
+async function downloadGeoJSON() {
+  try {
+    const response = await fetch("/api/sites.geojson", { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.detail || `Request failed (${response.status})`);
+    }
+    const link = document.createElement("a"); link.href = URL.createObjectURL(await response.blob()); link.download = "bunkerkartet-sites.geojson"; link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 0);
+    setStatus("GeoJSON downloaded.");
+  } catch (error) { setStatus(error.message); }
 }
 
 function updateRouteStart(point, label) {
@@ -537,13 +634,14 @@ function renderRouteStops() {
     const site = siteById(id); if (!site) return;
     const item = document.createElement("li"); item.className = "route-stop";
     const name = document.createElement("span"); name.className = "route-stop-name"; text(name, site.name);
+    const access = document.createElement("span"); access.className = "route-stop-meta"; text(access, accessLabel(site.access));
     const up = document.createElement("button"); up.className = "small"; up.title = "Move earlier"; text(up, "Up"); up.disabled = index === 0;
     up.addEventListener("click", () => { [state.routeSiteIds[index - 1], state.routeSiteIds[index]] = [state.routeSiteIds[index], state.routeSiteIds[index - 1]]; renderRouteStops(); });
     const down = document.createElement("button"); down.className = "small"; down.title = "Move later"; text(down, "Down"); down.disabled = index === state.routeSiteIds.length - 1;
     down.addEventListener("click", () => { [state.routeSiteIds[index + 1], state.routeSiteIds[index]] = [state.routeSiteIds[index], state.routeSiteIds[index + 1]]; renderRouteStops(); });
     const remove = document.createElement("button"); remove.className = "small"; remove.title = "Remove stop"; text(remove, "Remove");
     remove.addEventListener("click", () => { state.routeSiteIds.splice(index, 1); renderRouteStops(); renderSiteList(); renderMap(); });
-    item.append(name, up, down, remove); list.append(item);
+    item.append(name, access, up, down, remove); list.append(item);
   });
   $("create-route").disabled = !state.start || state.routeSiteIds.length === 0;
 }
@@ -554,14 +652,14 @@ async function createRoute() {
   state.routeRequestInFlight = true;
   const button = $("create-route"); button.disabled = true; text(button, "Creating route...");
   try {
-    const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name: "Trondheim field route", start: state.start, waypoints }) });
+    const name = $("route-name").value.trim() || "Trondheim field route";
+    const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name, start: state.start, waypoints }) });
     if (routeLayer) routeLayer.remove();
     routeLayer = L.geoJSON(result.geometry, { style: { color: "#c65d2e", weight: 4 } }).addTo(map);
     map.fitBounds(routeLayer.getBounds(), { padding: [24, 24] });
-    const root = $("route-result"); root.replaceChildren();
-    const summary = document.createElement("div"); text(summary, `${Math.round(result.distance_m)} m | ${Math.round(result.duration_s / 60)} min`); root.append(summary);
-    result.warnings.forEach((warning) => { const p = document.createElement("p"); p.className = "warning"; text(p, warning); root.append(p); });
-    const download = document.createElement("a"); download.href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" })); download.download = "bunkerkartet-route.gpx"; text(download, "Download GPX"); root.append(download);
+    renderRouteResult(result);
+    await loadRoutes();
+    setStatus(`Created ${result.name}.`);
   } catch (error) { text($("route-result"), error.message); }
   finally { state.routeRequestInFlight = false; text(button, "Create route"); renderRouteStops(); }
 }
@@ -570,11 +668,14 @@ $("auth-form").addEventListener("submit", (event) => { event.preventDefault(); l
 $("refresh-sites").addEventListener("click", loadSites);
 $("status-filter").addEventListener("change", loadSites);
 $("kind-filter").addEventListener("change", loadSites);
+$("site-search").addEventListener("change", loadSites);
+$("download-geojson").addEventListener("click", downloadGeoJSON);
 $("import-file").addEventListener("change", (event) => { if (event.target.files[0]) readImport(event.target.files[0]); });
 $("preview-import").addEventListener("click", previewImport);
 $("commit-import").addEventListener("click", commitImport);
 $("refresh-candidates").addEventListener("click", loadCandidates);
 $("refresh-field-priority").addEventListener("click", loadFieldPriority);
+$("refresh-routes").addEventListener("click", loadRoutes);
 $("review-confidence-filter").addEventListener("change", loadCandidates);
 $("review-access-filter").addEventListener("change", loadCandidates);
 $("review-uncertainty-filter").addEventListener("change", loadCandidates);

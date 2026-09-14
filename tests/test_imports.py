@@ -50,6 +50,12 @@ def test_valid_package_is_parsed_with_candidate_status_and_unknown_access():
     assert parsed.generated_at == datetime(2026, 9, 13, 12, tzinfo=timezone.utc)
 
 
+def test_unsafe_access_is_a_valid_import_value():
+    parsed = validate_import_package(package(record(access="unsafe")))
+
+    assert parsed.records[0].access == "unsafe"
+
+
 def test_json_source_dates_are_parsed_and_preserved():
     parsed = validate_import_package(
         package(

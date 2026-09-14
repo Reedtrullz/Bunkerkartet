@@ -57,3 +57,16 @@ def test_route_returns_gpx_and_persists_plan(tmp_path, monkeypatch):
     assert body["duration_s"] == 900
     assert body["gpx"].count("<trkpt") == 2
 
+    listed = api.get("/api/routes", headers={"Authorization": "Bearer secret"})
+    assert listed.status_code == 200
+    assert listed.json()[0]["name"] == "Trondheim walk"
+    assert listed.json()[0]["created_at"]
+
+    loaded = api.get(
+        f"/api/routes/{body['id']}", headers={"Authorization": "Bearer secret"}
+    )
+    assert loaded.status_code == 200
+    assert loaded.json()["created_at"] == listed.json()[0]["created_at"]
+    assert loaded.json()["warnings"] == [
+        "A route does not grant permission to enter land or structures."
+    ]

@@ -264,6 +264,42 @@ def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
     assert confirmed.status_code == 200
     assert confirmed.json()["site"]["status"] == "trusted"
 
+    downgrade = api.post(
+        f"/api/sites/{site_id}/review",
+        headers=auth(),
+        json={"action": "research"},
+    )
+    assert downgrade.status_code == 409
+
+
+def test_review_exposes_explicit_approximate_and_destroyed_transitions(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+
+    approximate = api.post(
+        f"/api/sites/{site_id}/review",
+        headers=auth(),
+        json={"action": "mark_approximate"},
+    )
+    assert approximate.status_code == 200
+    assert approximate.json()["site"]["status"] == "approximate"
+
+    researched = api.post(
+        f"/api/sites/{site_id}/review",
+        headers=auth(),
+        json={"action": "research"},
+    )
+    assert researched.status_code == 200
+
+    destroyed = api.post(
+        f"/api/sites/{site_id}/review",
+        headers=auth(),
+        json={"action": "mark_destroyed"},
+    )
+    assert destroyed.status_code == 200
+    assert destroyed.json()["site"]["status"] == "destroyed-or-filled"
+
 
 def test_field_verification_requires_an_observation(tmp_path):
     api = client(tmp_path)
@@ -459,6 +495,53 @@ def test_site_kind_filter_matches_case_insensitive_substrings(tmp_path):
 
     assert response.status_code == 200
     assert [site["site_kind"] for site in response.json()] == ["bunker"]
+
+
+def test_site_search_matches_name_and_rationale(tmp_path):
+    api = client(tmp_path)
+    first = package(name="Kuhaugen command bunker")
+    second = package(
+        "batch-second", name="Harbour feature", external_key="forum:second"
+    )
+    second["records"][0]["short_rationale"] = "Near the Kuhaugen ridge."
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+
+    response = api.get("/api/sites?q=KUHAUGEN", headers=auth())
+
+    assert response.status_code == 200
+    assert {site["name"] for site in response.json()} == {
+        "Kuhaugen command bunker",
+        "Harbour feature",
+    }
+
+
+def test_geojson_export_contains_sites_and_observations(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    assert api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Observed from the path.",
+            "latitude": 63.401,
+            "longitude": 10.401,
+        },
+    ).status_code == 201
+
+    response = api.get("/api/sites.geojson", headers=auth())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/geo+json")
+    features = response.json()["features"]
+    assert len(features) == 2
+    assert {feature["properties"]["feature_type"] for feature in features} == {
+        "site",
+        "field_observation",
+    }
 
 
 def test_editing_warnings_updates_the_json_column(tmp_path):
