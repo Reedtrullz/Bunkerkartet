@@ -173,6 +173,9 @@ def test_v2_migration_rolls_back_ddl_and_retries_cleanly(tmp_path, monkeypatch):
     Database(path).initialize()
     with sqlite3.connect(path) as connection:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == CURRENT_SCHEMA_VERSION
+        assert {row[1] for row in connection.execute("PRAGMA table_info(field_observations)")} >= {
+            "point_role", "uncertainty_m"
+        }
 
 
 def test_v2_migration_reconstructs_site_specific_legacy_evidence(tmp_path):

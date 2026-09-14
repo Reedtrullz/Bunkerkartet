@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import math
 from typing import Literal
 from urllib.parse import parse_qsl, unquote, urlsplit
 
@@ -18,6 +19,29 @@ _SECRET_PARAMETER_NAMES = {
     "x-amz-signature",
     "x-goog-signature",
 }
+
+
+def validate_location(
+    latitude: float | None,
+    longitude: float | None,
+    precision: str,
+    uncertainty_m: float | None,
+    location_basis: str,
+) -> None:
+    if (latitude is None) != (longitude is None):
+        raise ValueError("latitude and longitude must be recorded together")
+    if latitude is None:
+        if precision != "unknown" or uncertainty_m is not None:
+            raise ValueError("a location without coordinates requires unknown precision and no radius")
+        return
+    if not math.isfinite(latitude) or not math.isfinite(longitude):
+        raise ValueError("coordinates must be finite")
+    if uncertainty_m is None or not math.isfinite(uncertainty_m) or uncertainty_m < 0:
+        raise ValueError("a location with coordinates requires a finite radius")
+    if precision == "approximate" and uncertainty_m <= 0:
+        raise ValueError("an approximate location requires a positive radius")
+    if precision == "exact" and location_basis == "llm_inference":
+        raise ValueError("exact precision cannot use llm_inference")
 
 
 def validate_reference_url(value: str) -> str:
@@ -138,10 +162,13 @@ class ImportRecord(StrictModel):
 
     @model_validator(mode="after")
     def validate_geometry(self) -> "ImportRecord":
-        if self.geometry is None and self.precision != "unknown":
-            raise ValueError("geometry may be null only when precision is unknown")
-        if self.geometry is not None and self.uncertainty_m is None:
-            raise ValueError("uncertainty_m is required when geometry is present")
+        validate_location(
+            self.geometry.latitude if self.geometry else None,
+            self.geometry.longitude if self.geometry else None,
+            self.precision,
+            self.uncertainty_m,
+            self.location_basis,
+        )
         return self
 
 

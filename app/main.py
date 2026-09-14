@@ -23,6 +23,7 @@ from app.imports import (
     ImportRecord,
     safe_validation_errors,
     validate_import_package,
+    validate_location,
     validate_reference_url,
 )
 from app.routes import RouteResult, build_gpx, fetch_openrouteservice
@@ -106,11 +107,15 @@ class SitePatch(BaseModel):
 
     @model_validator(mode="after")
     def require_complete_coordinate_pair(self) -> "SitePatch":
-        if (self.latitude is None) != (self.longitude is None):
-            raise ValueError("latitude and longitude must be edited together")
         for field in ("name", "site_kind", "precision", "location_basis", "status", "access", "confidence", "warnings"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
+        if ("latitude" in self.model_fields_set) != ("longitude" in self.model_fields_set):
+            raise ValueError("latitude and longitude must be edited together")
+        if {"latitude", "longitude", "precision", "uncertainty_m", "location_basis"} <= self.model_fields_set:
+            validate_location(
+                self.latitude, self.longitude, self.precision, self.uncertainty_m, self.location_basis
+            )
         return self
 
 
@@ -122,6 +127,8 @@ class FieldObservation(BaseModel):
     note: str = Field(min_length=1, max_length=4000)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
+    point_role: Literal["feature", "entrance", "viewpoint", "unknown"] = "unknown"
+    uncertainty_m: float | None = Field(default=None, ge=0)
     observed_location_text: str | None = Field(default=None, max_length=2000)
     access_notes: str | None = Field(default=None, max_length=2000)
     photo_urls: list[HttpUrl] = Field(default_factory=list, max_length=12)
@@ -139,6 +146,10 @@ class FieldObservation(BaseModel):
     def require_complete_coordinate_pair(self) -> "FieldObservation":
         if (self.latitude is None) != (self.longitude is None):
             raise ValueError("latitude and longitude must be recorded together")
+        if self.latitude is not None and (
+            not math.isfinite(self.latitude) or not math.isfinite(self.longitude or 0)
+        ):
+            raise ValueError("coordinates must be finite")
         return self
 
 
@@ -284,7 +295,8 @@ def _site_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, 
     observations = connection.execute(
         """
         SELECT id, site_id, observed_at, outcome, note, latitude, longitude,
-               observed_location_text, access_notes, photo_urls_json, created_at
+               point_role, uncertainty_m, observed_location_text, access_notes,
+               photo_urls_json, created_at
         FROM field_observations
         WHERE site_id = ?
         ORDER BY observed_at DESC, id DESC
@@ -1043,6 +1055,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(422, "latitude and longitude must be edited together")
             new_precision = values.get("precision", row["precision"])
             new_uncertainty = values.get("uncertainty_m", row["uncertainty_m"])
+            new_location_basis = values.get("location_basis", row["location_basis"])
             if new_latitude is None:
                 if new_precision != "unknown":
                     raise HTTPException(422, "a site without coordinates must use unknown precision")
@@ -1050,8 +1063,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if values.get("uncertainty_m") is not None:
                         raise HTTPException(422, "a site without coordinates cannot have uncertainty")
                     values["uncertainty_m"] = None
+                    new_uncertainty = None
             elif new_uncertainty is None:
                 raise HTTPException(422, "a site with coordinates requires uncertainty")
+            try:
+                validate_location(
+                    new_latitude, new_longitude, new_precision, new_uncertainty, new_location_basis
+                )
+            except ValueError as error:
+                raise HTTPException(422, str(error)) from error
             if "status" in values and values["status"] != row["status"]:
                 raise HTTPException(409, "status changes must use the review workflow")
             values.pop("status", None)
@@ -1091,8 +1111,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 """
                 INSERT INTO field_observations
                     (site_id, observed_at, outcome, note, latitude, longitude,
-                     observed_location_text, access_notes, photo_urls_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     point_role, uncertainty_m, observed_location_text, access_notes,
+                     photo_urls_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     site_id,
@@ -1101,6 +1122,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     observation.note,
                     observation.latitude,
                     observation.longitude,
+                    observation.point_role,
+                    observation.uncertainty_m,
                     observation.observed_location_text,
                     observation.access_notes,
                     dump_json(payload["photo_urls"]),
@@ -1143,6 +1166,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(409, "only a found observation can update the site coordinate")
             if observation["latitude"] is None or observation["longitude"] is None:
                 raise HTTPException(409, "observation has no coordinate")
+            if observation["point_role"] != "feature":
+                raise HTTPException(409, "only a feature observation can replace the site coordinate")
+            if observation["uncertainty_m"] is None:
+                raise HTTPException(409, "observation requires an explicit radius")
+            try:
+                validate_location(
+                    observation["latitude"], observation["longitude"],
+                    "approximate", observation["uncertainty_m"], "explicit_coordinate",
+                )
+            except ValueError as error:
+                raise HTTPException(409, str(error)) from error
             timestamp = now_iso()
             rationale = (row["short_rationale"] or "").strip()
             update_note = (
@@ -1153,12 +1187,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             connection.execute(
                 """
                 UPDATE sites
-                SET latitude = ?, longitude = ?, location_basis = ?, short_rationale = ?, updated_at = ?
+                SET latitude = ?, longitude = ?, precision = 'approximate', uncertainty_m = ?,
+                    location_basis = ?, short_rationale = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     observation["latitude"],
                     observation["longitude"],
+                    observation["uncertainty_m"],
                     "explicit_coordinate",
                     rationale,
                     timestamp,

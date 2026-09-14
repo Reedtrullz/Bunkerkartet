@@ -119,7 +119,6 @@ CREATE TABLE IF NOT EXISTS route_plans (
 );
 """
 
-CURRENT_SCHEMA_VERSION = 2
 BASE_REQUIRED_SCHEMA = {
     "sites": {
         "id", "external_key", "name", "site_kind", "latitude", "longitude",
@@ -148,13 +147,16 @@ BASE_REQUIRED_SCHEMA = {
         "geometry_json", "gpx_text", "created_at",
     },
 }
-REQUIRED_SCHEMA = {table: set(columns) for table, columns in BASE_REQUIRED_SCHEMA.items()}
-REQUIRED_SCHEMA["import_batches"].add("payload_hash")
-REQUIRED_SCHEMA["evidence_items"] = {
+V2_REQUIRED_SCHEMA = {table: set(columns) for table, columns in BASE_REQUIRED_SCHEMA.items()}
+V2_REQUIRED_SCHEMA["import_batches"].add("payload_hash")
+V2_REQUIRED_SCHEMA["evidence_items"] = {
     "id", "site_id", "source_id", "import_record_id", "source_index", "legacy_evidence_id",
     "excerpt", "content_kind", "role", "published_at", "accessed_at", "provenance_status",
     "created_at",
 }
+CURRENT_SCHEMA_VERSION = 3
+REQUIRED_SCHEMA = {table: set(columns) for table, columns in V2_REQUIRED_SCHEMA.items()}
+REQUIRED_SCHEMA["field_observations"].update({"point_role", "uncertainty_m"})
 
 
 def now_iso() -> str:
@@ -189,6 +191,7 @@ class Database:
                     connection.executescript(SCHEMA)
                     connection.execute("PRAGMA user_version = 1")
                     _run_migration(connection, _migrate_v2)
+                    _run_migration(connection, _migrate_v3)
             except sqlite3.DatabaseError as exc:
                 raise RuntimeError("database initialization failed") from exc
             return
@@ -199,7 +202,11 @@ class Database:
                 version = connection.execute("PRAGMA user_version").fetchone()[0]
                 if version > CURRENT_SCHEMA_VERSION:
                     raise RuntimeError("future schema version is not supported")
-                required = BASE_REQUIRED_SCHEMA if version < 2 else REQUIRED_SCHEMA
+                required = (
+                    BASE_REQUIRED_SCHEMA if version < 2
+                    else V2_REQUIRED_SCHEMA if version == 2
+                    else REQUIRED_SCHEMA
+                )
                 errors = required_schema_errors(
                     connection,
                     required_schema=required,
@@ -208,7 +215,7 @@ class Database:
                 if errors:
                     raise RuntimeError("database is missing required schema")
                 while version < CURRENT_SCHEMA_VERSION:
-                    migration = {1: _migrate_v1, 2: _migrate_v2}.get(version + 1)
+                    migration = {1: _migrate_v1, 2: _migrate_v2, 3: _migrate_v3}.get(version + 1)
                     if migration is None:
                         raise RuntimeError("database migration is not available")
                     _run_migration(connection, migration)
@@ -399,6 +406,12 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
                 (canonical_payload_hash(payload), batch["id"]),
             )
     connection.execute("PRAGMA user_version = 2")
+
+
+def _migrate_v3(connection: sqlite3.Connection) -> None:
+    connection.execute("ALTER TABLE field_observations ADD COLUMN point_role TEXT NOT NULL DEFAULT 'unknown'")
+    connection.execute("ALTER TABLE field_observations ADD COLUMN uncertainty_m REAL")
+    connection.execute("PRAGMA user_version = 3")
 
 
 def _run_migration(connection: sqlite3.Connection, migration: Callable[[sqlite3.Connection], None]) -> None:

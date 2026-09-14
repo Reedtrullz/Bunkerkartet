@@ -402,6 +402,7 @@ def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
             "longitude": 10.401,
             "precision": "exact",
             "uncertainty_m": 5,
+            "location_basis": "explicit_coordinate",
         },
     )
     assert edited.status_code == 200
@@ -760,6 +761,19 @@ def test_site_edit_requires_consistent_coordinates_and_precision(tmp_path):
     )
     assert missing_uncertainty.status_code == 422
 
+    exact_inferred = api.patch(
+        "/api/sites/1",
+        headers=auth(),
+        json={
+            "latitude": 63.4,
+            "longitude": 10.4,
+            "precision": "exact",
+            "uncertainty_m": 1,
+            "location_basis": "llm_inference",
+        },
+    )
+    assert exact_inferred.status_code == 422
+
     cleared = api.patch(
         "/api/sites/1",
         headers=auth(),
@@ -816,6 +830,8 @@ def test_found_observation_coordinate_can_be_adopted_with_audit_event(tmp_path):
             "note": "Entrance found beside the marked path.",
             "latitude": 63.401,
             "longitude": 10.401,
+            "point_role": "feature",
+            "uncertainty_m": 8,
         },
     )
     observation_id = observed.json()["observation"]["id"]
@@ -876,6 +892,35 @@ def test_only_found_observation_with_coordinates_can_be_adopted(tmp_path):
     ).status_code == 409
     assert api.post(
         f"/api/sites/{site_id}/observations/{no_coordinate}/adopt-location", headers=auth()
+    ).status_code == 409
+
+
+def test_adoption_requires_feature_role_and_explicit_radius(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    missing_radius = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14", "outcome": "found", "note": "Feature.",
+            "latitude": 63.401, "longitude": 10.401, "point_role": "feature",
+        },
+    ).json()["observation"]["id"]
+    entrance = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14", "outcome": "found", "note": "Entrance.",
+            "latitude": 63.401, "longitude": 10.401, "point_role": "entrance", "uncertainty_m": 8,
+        },
+    ).json()["observation"]["id"]
+
+    assert api.post(
+        f"/api/sites/{site_id}/observations/{missing_radius}/adopt-location", headers=auth()
+    ).status_code == 409
+    assert api.post(
+        f"/api/sites/{site_id}/observations/{entrance}/adopt-location", headers=auth()
     ).status_code == 409
 
 

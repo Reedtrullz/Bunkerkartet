@@ -108,10 +108,12 @@ def test_geometry_is_required_unless_precision_is_unknown():
     with pytest.raises(ValidationError):
         validate_import_package(package(record(geometry=None, precision="approximate")))
 
-    parsed = validate_import_package(package(record(geometry=None, precision="unknown")))
+    parsed = validate_import_package(
+        package(record(geometry=None, precision="unknown", uncertainty_m=None))
+    )
     assert parsed.records[0].geometry is None
 
-    missing_geometry = record(precision="unknown")
+    missing_geometry = record(precision="unknown", uncertainty_m=None)
     missing_geometry.pop("geometry")
     parsed = validate_import_package(package(missing_geometry))
     assert parsed.records[0].geometry is None
@@ -127,6 +129,19 @@ def test_approximate_uncertainty_is_preserved():
     parsed = validate_import_package(package(record(uncertainty_m=875.5)))
 
     assert parsed.records[0].uncertainty_m == 875.5
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"precision": "exact", "location_basis": "llm_inference"},
+        {"precision": "approximate", "uncertainty_m": 0},
+        {"geometry": None, "precision": "unknown", "uncertainty_m": 1},
+    ],
+)
+def test_location_invariants_are_shared_by_import_validation(overrides):
+    with pytest.raises(ValidationError):
+        validate_import_package(package(record(**overrides)))
 
 
 def test_unknown_fields_are_rejected():

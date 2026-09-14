@@ -115,6 +115,19 @@ Verification: full suite `111 passed, 1 warning`; Node 22 syntax and `git diff -
 
 Non-claims: preview hash is a consistency check, not proof of human review, approval, source permission, field validation, or production import.
 
+## L07 — Location invariants and observation roles
+
+Status: implemented locally; no production database or catalogue values were changed.
+
+- Import records and effective site edits share one location validator: coordinate pairs must be complete and finite, coordinate-bearing locations require a finite radius, approximate locations require a positive radius, and exact locations cannot use `llm_inference`.
+- Field observations now record `point_role` (`feature`, `entrance`, `viewpoint`, or `unknown`) and nullable `uncertainty_m`; only a found `feature` observation with an explicit radius can replace a site coordinate.
+- Adoption records an approximate, explicit-coordinate site with the observation radius and keeps the existing audit event.
+- Schema v3 adds the observation fields with a default `unknown` role and nullable radius; migration remains transactional and retryable.
+
+Verification: full suite `115 passed, 1 warning`; Node 22 syntax and `git diff --check` passed. Disk guard showed 63 GiB available before the final test run.
+
+Non-claims: this validates application and migration behavior only; it does not establish coordinate truth, field verification, legal access, or production deployment.
+
 ## Review follow-up — stale GeoJSON auth and observation input
 
 - Direct GeoJSON fetches now check the captured auth epoch immediately after `fetch`, before a delayed old 401 can clear a newer session.
