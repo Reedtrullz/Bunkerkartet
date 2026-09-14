@@ -20,6 +20,30 @@ ghcr.io/reedtrullz/bunkerkartet@sha256:0123456789abcdef...
 Do not use `latest` or a mutable branch tag. A commit SHA tag is used to find
 the published artifact; the digest is the enforced runtime identity.
 
+## Runtime readiness and limits
+
+`/api/health` remains the liveness and backwards-compatible deployment check.
+`/api/ready` is the readiness check: it reports database integrity/schema,
+admin authentication configuration, and whether optional routing is configured;
+it returns `503` until the database and private API authentication are ready.
+
+Import preview and commit reject request bodies over 2 MiB before JSON parsing,
+packages over 500 records, records with more than 20 sources, or more than 30
+warnings of 1,000 characters each. Routing permits two concurrent
+OpenRouteService calls and returns `429` with `Retry-After` when both slots are
+occupied; callers must retry rather than queue unbounded work.
+
+CI runs the full Python suite, the Playwright browser smoke suite with a pinned
+Python 3.12 environment, frontend syntax validation, and the digest-pinned
+container build. GitHub Actions references remain full commit SHA pinned.
+
+## Recommended GitHub policy
+
+For an authorized repository owner, require the CI workflow before merging to
+`main`, block force-pushes and branch deletion on protected branches, and keep
+the bypass path limited to named owners with an auditable reason. This is
+release guidance only; this repository change does not modify GitHub settings.
+
 ## Ansible preparation
 
 Copy `deploy/inventory.example.yml` to an ignored `deploy/inventory.yml`, then

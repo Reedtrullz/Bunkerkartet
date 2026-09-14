@@ -37,11 +37,18 @@ Rules:
 - Keep source excerpts under 2,000 characters and summarize rather than copy
   long passages. Do not include images, credentials, personal contact details,
   or hidden chain-of-thought.
+- Treat `excerpt` as a short faithful source excerpt and `short_rationale` as
+  a separate summary of the evidence and uncertainty. Do not present a model
+  inference as a quotation or a quotation as field verification.
 - Use a stable external_key such as "kystfort:topic:123". Make separate child
   records when a source describes distinct structures, and use
   related_site_keys to connect them to known records without silently merging
   them.
 - If evidence is too weak for even an honest area lead, omit the record.
+
+The repository currently accepts the original schema 1.0 contract. Do not add
+new fields or silently change the 1.0 hash projection; any future evidence
+metadata contract must be explicitly versioned and remain backward-readable.
 ```
 
 Before import, run the local validator and inspect every coordinate, uncertainty

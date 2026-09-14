@@ -54,6 +54,17 @@ const ACCESS_LABELS = {
   dangerous: "Farlig",
   unsafe: "Utrygt",
 };
+const VALUE_LABELS = {
+  unknown: "Ukjent", low: "Lav", medium: "Middels", high: "Høy",
+  exact: "Nøyaktig", approximate: "Omtrentlig",
+  explicit_coordinate: "Eksplisitt koordinat", address: "Adresse", map_reference: "Kartreferanse",
+  landmark_description: "Landemerke", llm_inference: "Modellbasert slutning",
+  feature: "Objekt", entrance: "Inngang", viewpoint: "Utsiktspunkt", public: "Offentlig",
+};
+const ACTION_LABELS = {
+  new: "Ny", update_candidate: "Oppdater kandidat", preserve_trusted: "Bevar vurdert",
+  created: "Opprettet", updated_candidate: "Kandidat oppdatert", preserved_reviewed: "Vurdert bevart",
+};
 
 const statusLabel = (status) => STATUS_LABELS[status] || status;
 const accessLabel = (access) => ACCESS_LABELS[access] || access;
@@ -106,7 +117,7 @@ function selectControl(values, selected, labels = {}) {
   values.forEach((value) => {
     const option = document.createElement("option");
     option.value = value;
-    text(option, labels[value] || statusLabel(value));
+    text(option, labels[value] || VALUE_LABELS[value] || statusLabel(value));
     option.selected = value === selected;
     select.append(option);
   });
@@ -198,14 +209,14 @@ function renderImportPreview(result) {
   const root = $("import-result");
   root.replaceChildren();
   const summary = document.createElement("p");
-  text(summary, `${result.summary.total} record${result.summary.total === 1 ? "" : "s"}; ${result.summary.warnings} warning${result.summary.warnings === 1 ? "" : "s"}. Review preview; it is not human approval.`);
+  text(summary, `${result.summary.total} ${result.summary.total === 1 ? "post" : "poster"}; ${result.summary.warnings} ${result.summary.warnings === 1 ? "varsel" : "varsler"}. Forhåndsvisningen er ikke en godkjenning.`);
   root.append(summary);
   result.records.forEach((record) => {
     const item = document.createElement("article");
-    const heading = document.createElement("strong"); text(heading, `${record.name} — ${record.action}`); item.append(heading);
+    const heading = document.createElement("strong"); text(heading, `${record.name} — ${ACTION_LABELS[record.action] || record.action}`); item.append(heading);
     record.changes.forEach((change) => { const line = document.createElement("div"); line.className = "site-meta"; text(line, `${change.field}: ${JSON.stringify(change.before)} → ${JSON.stringify(change.after)}`); item.append(line); });
-    record.preserved_fields.forEach((field) => { const line = document.createElement("div"); line.className = "site-meta"; text(line, `Preserved: ${field}`); item.append(line); });
-    record.evidence.forEach((evidence) => { const line = document.createElement("div"); line.className = "site-meta"; text(line, `Evidence: ${evidence.title} — ${evidence.excerpt}`); item.append(line); });
+    record.preserved_fields.forEach((field) => { const line = document.createElement("div"); line.className = "site-meta"; text(line, `Bevart: ${field}`); item.append(line); });
+    record.evidence.forEach((evidence) => { const line = document.createElement("div"); line.className = "site-meta"; text(line, `Kilde: ${evidence.title} — ${evidence.excerpt}`); item.append(line); });
     record.warnings.forEach((warning) => { const line = document.createElement("div"); line.className = "warning"; text(line, warning); item.append(line); });
     root.append(item);
   });
@@ -225,7 +236,7 @@ async function api(path, options = {}) {
   if (!response.ok) {
     if (response.status === 401) {
       clearAuthenticatedData();
-      setStatus("Authentication failed; private workspace cleared.");
+      setStatus("Autentisering mislyktes; privat arbeidsområde er tømt.");
       throw new DOMException("Utdatert forespørsel", "AbortError");
     }
     const error = new Error(body.detail || `Request failed (${response.status})`);
@@ -290,8 +301,8 @@ function renderMap(fit = false) {
     popup.append(heading);
     const meta = document.createElement("div");
     meta.className = "site-meta";
-    const uncertainty = site.uncertainty_m == null ? "uncertainty unknown" : `${Math.round(site.uncertainty_m)} m`;
-    text(meta, `${site.site_kind} | ${statusLabel(site.status)} | ${site.confidence || "unknown"} | ${uncertainty} | ${accessLabel(site.access)}`);
+    const uncertainty = site.uncertainty_m == null ? "usikkerhet ukjent" : `${Math.round(site.uncertainty_m)} m`;
+    text(meta, `${site.site_kind} | ${statusLabel(site.status)} | ${VALUE_LABELS[site.confidence] || "Ukjent"} | ${uncertainty} | ${accessLabel(site.access)}`);
     popup.append(meta);
     const actions = document.createElement("div");
     actions.className = "site-actions";
@@ -421,9 +432,9 @@ async function loadSites() {
 }
 
 async function runReviewAction(id, action, targetSiteId = null) {
-  if (action === "reject" && !window.confirm("Avvis this candidate?")) return;
-  if (action === "mark_destroyed" && !window.confirm("Mark this site as destroyed or filled?")) return;
-  if (action === "merge" && !window.confirm("Merge this record into the selected surviving site?")) return;
+  if (action === "reject" && !window.confirm("Avvise denne kandidaten?")) return;
+  if (action === "mark_destroyed" && !window.confirm("Markere stedet som ødelagt eller fylt igjen?")) return;
+  if (action === "merge" && !window.confirm("Slå sammen posten med det valgte stedet som skal bestå?")) return;
   try {
     const payload = { action };
     if (targetSiteId) payload.target_site_id = targetSiteId;
@@ -444,7 +455,7 @@ function renderLivssyklusActions(site, root) {
   const transitions = {
     candidate: [["Marker som kildegjennomgått", "research", ""], ["Marker som omtrentlig", "mark_approximate", ""], ["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
     approximate: [["Marker som kildegjennomgått", "research", ""], ["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
-    likely: [["Mark field verified", "field_verify", ""], ["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
+    likely: [["Marker som feltverifisert", "field_verify", ""], ["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
     "field-verified": [["Bekreft", "confirm", ""], ["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
     trusted: [["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
   };
@@ -490,7 +501,7 @@ function renderSiteEditor(site, root) {
   const basis = selectControl(["explicit_coordinate", "address", "map_reference", "landmark_description", "llm_inference"], site.location_basis); basis.name = "location_basis";
   const latitude = inputControl("number", site.latitude); latitude.name = "latitude"; latitude.step = "0.000001"; latitude.min = "-90"; latitude.max = "90";
   const longitude = inputControl("number", site.longitude); longitude.name = "longitude"; longitude.step = "0.000001"; longitude.min = "-180"; longitude.max = "180";
-  [["Name", name], ["Type", kind], ["Sikkerhet", confidence], ["Tilgang", access], ["Presisjon", precision], ["Usikkerhet (m)", uncertainty], ["Stedsgrunnlag", basis], ["Breddegrad", latitude], ["Lengdegrad", longitude]]
+  [["Navn", name], ["Type", kind], ["Sikkerhet", confidence], ["Tilgang", access], ["Presisjon", precision], ["Usikkerhet (m)", uncertainty], ["Stedsgrunnlag", basis], ["Breddegrad", latitude], ["Lengdegrad", longitude]]
     .forEach(([label, control]) => grid.append(labeledControl(label, control)));
   form.append(grid);
   const condition = inputControl("text", site.condition || ""); condition.name = "condition";
@@ -500,7 +511,7 @@ function renderSiteEditor(site, root) {
   form.append(labeledControl("Tilstand", condition));
   form.append(labeledControl("Begrunnelse for koordinat", rationale));
   form.append(labeledControl("Observert sted", observedText));
-  form.append(labeledControl("Warnings (one per line)", warnings));
+  form.append(labeledControl("Varsler (ett per linje)", warnings));
   const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Lagre stedsendringer"); form.append(save);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -575,13 +586,13 @@ function renderObservations(site, root) {
     if (observation.observed_location_text) { const location = document.createElement("div"); location.className = "site-meta"; text(location, observation.observed_location_text); item.append(location); }
     if (observation.access_notes) { const access = document.createElement("div"); access.className = "site-meta"; text(access, `Tilgang: ${observation.access_notes}`); item.append(access); }
     const observationMeta = document.createElement("div"); observationMeta.className = "site-meta";
-    text(observationMeta, `Punktrolle: ${observation.point_role || "unknown"}${observation.uncertainty_m == null ? " | radius unknown" : ` | ${observation.uncertainty_m} m radius`}`); item.append(observationMeta);
+    text(observationMeta, `Punktrolle: ${VALUE_LABELS[observation.point_role] || "Ukjent"}${observation.uncertainty_m == null ? " | radius ukjent" : ` | ${observation.uncertainty_m} m radius`}`); item.append(observationMeta);
     if (observation.latitude != null && observation.longitude != null) {
       const coordinates = document.createElement("div"); coordinates.className = "site-meta";
       text(coordinates, `Coordinate: ${observation.latitude.toFixed(5)}, ${observation.longitude.toFixed(5)}`); item.append(coordinates);
       if (observation.outcome === "found") {
         const actions = document.createElement("div"); actions.className = "candidate-actions";
-        const adopt = document.createElement("button"); adopt.className = "small"; adopt.type = "button"; adopt.disabled = observation.point_role !== "feature" || observation.uncertainty_m == null; adopt.title = "Only a feature point with an explicit radius can update the site marker";
+        const adopt = document.createElement("button"); adopt.className = "small"; adopt.type = "button"; adopt.disabled = observation.point_role !== "feature" || observation.uncertainty_m == null; adopt.title = "Bare et objektpunkt med eksplisitt radius kan oppdatere stedets markør";
         text(adopt, "Bruk koordinat"); adopt.addEventListener("click", () => adoptObservationLocation(site.id, observation.id));
         actions.append(adopt); item.append(actions);
       }
@@ -602,7 +613,7 @@ function renderObservations(site, root) {
   const localToday = new Date(); localToday.setMinutes(localToday.getMinutes() - localToday.getTimezoneOffset());
   const observedAt = inputControl("date", localToday.toISOString().slice(0, 10)); observedAt.name = "observed_at"; observedAt.required = true;
   const outcome = selectControl(["found", "not_found", "inaccessible", "needs_follow_up"], "found", { found: "Funnet", not_found: "Ikke funnet", inaccessible: "Utilgjengelig", needs_follow_up: "Må følges opp" }); outcome.name = "outcome";
-  const note = textareaControl(); note.name = "note"; note.required = true; note.placeholder = "What was observed?";
+  const note = textareaControl(); note.name = "note"; note.required = true; note.placeholder = "Hva ble observert?";
   const latitude = inputControl("number"); latitude.name = "latitude"; latitude.step = "0.000001"; latitude.min = "-90"; latitude.max = "90";
   const longitude = inputControl("number"); longitude.name = "longitude"; longitude.step = "0.000001"; longitude.min = "-180"; longitude.max = "180";
   const pointRole = selectControl(["feature", "entrance", "viewpoint", "unknown"], "unknown"); pointRole.name = "point_role";
@@ -611,7 +622,7 @@ function renderObservations(site, root) {
   const access = textareaControl(); access.name = "access_notes";
   const photos = textareaControl(); photos.name = "photo_urls"; photos.placeholder = "Én bilde-URL per linje";
   const grid = document.createElement("div"); grid.className = "detail-grid";
-  grid.append(labeledControl("Date", observedAt), labeledControl("Utfall", outcome), labeledControl("Punktrolle", pointRole), labeledControl("Radius (m)", uncertainty), labeledControl("Observert breddegrad", latitude), labeledControl("Observert lengdegrad", longitude));
+  grid.append(labeledControl("Dato", observedAt), labeledControl("Utfall", outcome), labeledControl("Punktrolle", pointRole), labeledControl("Radius (m)", uncertainty), labeledControl("Observert breddegrad", latitude), labeledControl("Observert lengdegrad", longitude));
   form.append(grid, labeledControl("Observasjonsnotat", note), labeledControl("Observert sted", location), labeledControl("Tilgang notes", access), labeledControl("Bilde-URL-er", photos));
   const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Lagre observasjon"); form.append(save);
   form.addEventListener("submit", async (event) => {
@@ -629,7 +640,7 @@ function renderObservations(site, root) {
           photo_urls: photos.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
         }),
       });
-      setStatus("Feltobservasjon saved.");
+      setStatus("Feltobservasjon lagret.");
       await loadSites();
       await loadDetail(site.id);
     } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
@@ -638,7 +649,7 @@ function renderObservations(site, root) {
 }
 
 async function adoptObservationLocation(siteId, observationId) {
-  if (!window.confirm("Adopt this field observation coordinate for the site?")) return;
+  if (!window.confirm("Bruke denne feltobservasjonens koordinat for stedet?")) return;
   try {
     const site = state.siteCache.get(siteId);
     await api(`/api/sites/${siteId}/observations/${observationId}/adopt-location`, { method: "POST", body: JSON.stringify({ expected_revision: site?.revision }) });
@@ -663,11 +674,11 @@ async function loadDetail(id) {
     root.replaceChildren();
     const coordinates = site.latitude == null ? "Ukjent" : `${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}`;
     const copy = document.createElement("dl"); copy.className = "detail-copy";
-    [["Name", site.name], ["Ekstern nøkkel", site.external_key], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
+    [["Navn", site.name], ["Ekstern nøkkel", site.external_key], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
       ["Sikkerhet", site.confidence || "Ukjent"],
       ["Koordinater", coordinates],
       ["Presisjon", `${site.precision}${site.uncertainty_m == null ? "" : ` (${site.uncertainty_m} m)`}`],
-      ["Tilgang", accessLabel(site.access)], ["Basis", site.location_basis], ["Tilstand", site.condition || "Ukjent"],
+      ["Tilgang", accessLabel(site.access)], ["Grunnlag", VALUE_LABELS[site.location_basis] || site.location_basis], ["Tilstand", site.condition || "Ukjent"],
       ["Observert sted", site.observed_location_text || "Ukjent"]]
       .forEach(([label, value]) => { const dt = document.createElement("dt"); text(dt, label); const dd = document.createElement("dd"); text(dd, value); copy.append(dt, dd); });
     if (site.short_rationale) { const rationale = document.createElement("p"); text(rationale, site.short_rationale); copy.append(rationale); }
@@ -798,20 +809,20 @@ async function loadCandidates() {
     if (requestEpoch !== state.authEpoch) return;
     cacheSites(candidates);
     const list = $("candidate-list"); list.replaceChildren();
-    text($("candidate-summary"), `${candidates.length} candidate${candidates.length === 1 ? "" : "s"} in this view.`);
+    text($("candidate-summary"), `${candidates.length} ${candidates.length === 1 ? "kandidat" : "kandidater"} i dette utvalget.`);
     if (!candidates.length) {
       const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "Ingen kandidater venter på vurdering."); list.append(empty); return;
     }
     candidates.forEach((site) => {
       const item = document.createElement("article"); item.className = "candidate-item";
       const title = document.createElement("strong"); text(title, site.name); item.append(title);
-      const uncertainty = site.uncertainty_m == null ? "uncertainty unknown" : `${Math.round(site.uncertainty_m)} m`;
+      const uncertainty = site.uncertainty_m == null ? "usikkerhet ukjent" : `${Math.round(site.uncertainty_m)} m`;
       const sourceCount = (site.sources || []).length;
       const meta = document.createElement("div"); meta.className = "site-meta";
-      text(meta, `${site.site_kind} | ${site.confidence || "unknown"} | ${uncertainty} | ${accessLabel(site.access)} | ${sourceCount} source${sourceCount === 1 ? "" : "s"}`); item.append(meta);
+      text(meta, `${site.site_kind} | ${VALUE_LABELS[site.confidence] || "Ukjent"} | ${uncertainty} | ${accessLabel(site.access)} | ${sourceCount} ${sourceCount === 1 ? "kilde" : "kilder"}`); item.append(meta);
       if (site.warnings?.length) {
         const warnings = document.createElement("div"); warnings.className = "warning";
-        text(warnings, `${site.warnings.length} warning${site.warnings.length === 1 ? "" : "s"}`); item.append(warnings);
+        text(warnings, `${site.warnings.length} ${site.warnings.length === 1 ? "varsel" : "varsler"}`); item.append(warnings);
       }
       const actions = document.createElement("div"); actions.className = "candidate-actions";
       const details = document.createElement("button"); details.className = "small"; text(details, "Detaljer");
@@ -828,7 +839,7 @@ async function loadCandidates() {
 function renderFieldPriority() {
   const list = $("field-priority-list"); list.replaceChildren();
   const sites = state.prioritySites;
-  text($("field-priority-summary"), `${sites.length} public site${sites.length === 1 ? "" : "s"} in shortlist.`);
+  text($("field-priority-summary"), `${sites.length} ${sites.length === 1 ? "offentlig sted" : "offentlige steder"} i feltutvalget.`);
   if (!sites.length) {
     const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "Ingen steder oppfyller feltlisten."); list.append(empty); return;
   }
@@ -837,8 +848,8 @@ function renderFieldPriority() {
     const head = document.createElement("div"); head.className = "site-item-head";
     const name = document.createElement("h3"); text(name, site.name);
     const badge = document.createElement("span"); badge.className = "badge"; text(badge, statusLabel(site.status)); head.append(name, badge); item.append(head);
-    const uncertainty = site.uncertainty_m == null ? "uncertainty unknown" : `${Math.round(site.uncertainty_m)} m`;
-    const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${site.confidence || "unknown"} | ${uncertainty} | ${accessLabel(site.access)}`); item.append(meta);
+    const uncertainty = site.uncertainty_m == null ? "usikkerhet ukjent" : `${Math.round(site.uncertainty_m)} m`;
+    const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${VALUE_LABELS[site.confidence] || "Ukjent"} | ${uncertainty} | ${accessLabel(site.access)}`); item.append(meta);
     const actions = document.createElement("div"); actions.className = "site-actions";
     const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Detaljer"); details.addEventListener("click", () => loadDetail(site.id));
     const add = document.createElement("button"); add.className = "small"; add.type = "button"; text(add, state.routeSiteIds.includes(site.id) ? "Lagt til" : "Legg til rute"); add.disabled = state.routeSiteIds.includes(site.id); add.addEventListener("click", () => addRouteSite(site.id));
@@ -867,7 +878,7 @@ function formatRouteDuration(duration) {
 
 function renderRouteHistory() {
   const list = $("route-history-list"); list.replaceChildren();
-  text($("route-history-summary"), `${state.routes.length} saved route${state.routes.length === 1 ? "" : "s"}.`);
+  text($("route-history-summary"), `${state.routes.length} ${state.routes.length === 1 ? "lagret rute" : "lagrede ruter"}.`);
   if (!state.routes.length) {
     const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "Ingen lagrede ruter."); list.append(empty); return;
   }
@@ -899,7 +910,7 @@ function renderRouteResult(result) {
   const cautionSites = state.routeSiteIds.map(siteById).filter((site) => site && site.access !== "public");
   if (cautionSites.length) {
     const warning = document.createElement("p"); warning.className = "warning";
-    text(warning, `Tilgang is not established for: ${cautionSites.map((site) => site.name).join(", ")}. Use public approaches only.`); root.append(warning);
+    text(warning, `Tilgang er ikke avklart for: ${cautionSites.map((site) => site.name).join(", ")}. Bruk bare offentlige tilnærminger.`); root.append(warning);
   }
   const href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" }));
   state.gpxObjectUrls.add(href);
@@ -917,11 +928,11 @@ async function loadRoute(id) {
     if (routeLayer) routeLayer.remove();
     routeLayer = L.geoJSON(result.geometry, { style: { color: "#c65d2e", weight: 4 } }).addTo(map);
     map.fitBounds(routeLayer.getBounds(), { padding: [24, 24] });
-    updateRouteStart(result.start, "saved route start");
+    updateRouteStart(result.start, "lagret rutestart");
     state.routeSiteIds = (result.stops || []).map((stop) => stop.site_id).filter((siteId) => siteId != null);
     renderRouteStops();
     renderRouteResult(result);
-    setStatus(`Loaded ${result.name}.`);
+    setStatus(`Lastet inn ${result.name}.`);
   } catch (error) { if (!isStaleRequest(error)) text($("route-result"), error.message); }
 }
 
@@ -933,7 +944,7 @@ async function downloadGeoJSON() {
     if (!response.ok) {
       if (response.status === 401) {
         clearAuthenticatedData();
-        setStatus("Authentication failed; private workspace cleared.");
+        setStatus("Autentisering mislyktes; privat arbeidsområde er tømt.");
         return;
       }
       const body = await response.json().catch(() => ({}));
@@ -970,11 +981,11 @@ function renderRouteStops() {
     const item = document.createElement("li"); item.className = "route-stop";
     const name = document.createElement("span"); name.className = "route-stop-name"; text(name, site.name);
     const access = document.createElement("span"); access.className = "route-stop-meta"; text(access, accessLabel(site.access));
-    const up = document.createElement("button"); up.className = "small"; up.title = "Flytt opp"; text(up, "Up"); up.disabled = index === 0;
+      const up = document.createElement("button"); up.className = "small"; up.title = "Flytt opp"; text(up, "Opp"); up.disabled = index === 0;
     up.addEventListener("click", () => { [state.routeSiteIds[index - 1], state.routeSiteIds[index]] = [state.routeSiteIds[index], state.routeSiteIds[index - 1]]; renderRouteStops(); });
-    const down = document.createElement("button"); down.className = "small"; down.title = "Flytt ned"; text(down, "Down"); down.disabled = index === state.routeSiteIds.length - 1;
+      const down = document.createElement("button"); down.className = "small"; down.title = "Flytt ned"; text(down, "Ned"); down.disabled = index === state.routeSiteIds.length - 1;
     down.addEventListener("click", () => { [state.routeSiteIds[index + 1], state.routeSiteIds[index]] = [state.routeSiteIds[index], state.routeSiteIds[index + 1]]; renderRouteStops(); });
-    const remove = document.createElement("button"); remove.className = "small"; remove.title = "Fjern stopp"; text(remove, "Remove");
+      const remove = document.createElement("button"); remove.className = "small"; remove.title = "Fjern stopp"; text(remove, "Fjern");
     remove.addEventListener("click", () => { state.routeSiteIds.splice(index, 1); renderRouteStops(); renderSiteList(); renderMap(); });
     item.append(name, access, up, down, remove); list.append(item);
   });
@@ -992,7 +1003,7 @@ async function createRoute() {
   state.routeRequestInFlight = true;
   const button = $("create-route"); button.disabled = true; text(button, "Beregner rute ...");
   try {
-    const name = $("route-name").value.trim() || "Trondheim field route";
+    const name = $("route-name").value.trim() || "Feltur i Trondheim";
     const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name, start: state.start, site_ids: routeSites.map((site) => site.id) }) });
     if (requestEpoch !== state.authEpoch) return;
     if (routeLayer) routeLayer.remove();

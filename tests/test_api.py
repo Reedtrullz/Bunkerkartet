@@ -1,5 +1,7 @@
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 import pytest
 
 from app.config import Settings
@@ -19,6 +21,83 @@ def test_health_reports_version_and_database_status(tmp_path):
         "version": "test-sha",
         "database": "ready",
     }
+
+
+def test_readiness_reports_schema_auth_and_optional_routing(tmp_path):
+    ready = TestClient(create_app(Settings(data_dir=tmp_path / "ready", admin_token="admin"))).get(
+        "/api/ready"
+    )
+    assert ready.status_code == 200
+    assert ready.json() == {
+        "status": "ready",
+        "database": "ready",
+        "authentication": "configured",
+        "routing": "optional-unconfigured",
+    }
+
+    not_ready = TestClient(create_app(Settings(data_dir=tmp_path / "missing-auth"))).get(
+        "/api/ready"
+    )
+    assert not_ready.status_code == 503
+    assert not_ready.json()["authentication"] == "not_configured"
+
+
+def test_import_limits_are_enforced_before_commit_validation(tmp_path):
+    api = TestClient(create_app(Settings(data_dir=tmp_path, admin_token="admin")))
+    oversized = {"records": [], "padding": "x" * (2 * 1024 * 1024)}
+    response = api.post(
+        "/api/admin/imports/preview",
+        headers={"Authorization": "Bearer admin"},
+        json=oversized,
+    )
+    assert response.status_code == 413
+
+
+def test_import_work_does_not_block_health_while_worker_waits(tmp_path, monkeypatch):
+    api = TestClient(create_app(Settings(data_dir=tmp_path, admin_token="admin")))
+    started = Event()
+    release = Event()
+
+    def blocked_commit(*_args):
+        started.set()
+        assert release.wait(3)
+        return {"status": "synthetic"}
+
+    monkeypatch.setattr("app.main._commit_package", blocked_commit)
+    payload = {
+        "schema_version": "1.0",
+        "batch_id": "worker-test",
+        "generated_at": "2026-09-14T12:00:00Z",
+        "records": [{
+            "external_key": "worker:test",
+            "name": "Worker test",
+            "site_kind": "bunker",
+            "geometry": {"latitude": 63.4, "longitude": 10.4},
+            "precision": "approximate",
+            "uncertainty_m": 100,
+            "location_basis": "map_reference",
+            "status": "candidate",
+            "access": "unknown",
+            "sources": [{
+                "url": "https://example.com/worker",
+                "title": "Worker source",
+                "source_type": "test",
+                "excerpt": "Synthetic worker source.",
+            }],
+        }],
+    }
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(
+            api.post,
+            "/api/admin/imports/commit",
+            headers={"Authorization": "Bearer admin"},
+            json=payload,
+        )
+        assert started.wait(2)
+        assert api.get("/api/health").status_code == 200
+        release.set()
+        assert future.result().status_code == 200
+
 
 
 def test_private_sites_api_requires_bearer_token(tmp_path):

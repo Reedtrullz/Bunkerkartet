@@ -313,3 +313,20 @@ def test_new_file_read_clears_old_import_before_preview(page: Page, base_url: st
     assert page.locator("#import-result").inner_text() == ""
     page.wait_for_timeout(700)
     assert page.locator("#import-result").inner_text() == "JSON lastet. Forhåndsvis før import."
+
+
+def test_mobile_surface_navigation_is_keyboard_usable_without_overflow(page: Page, base_url: str):
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.emulate_media(reduced_motion="reduce")
+    page.goto(base_url)
+
+    review = page.get_by_role("button", name="Vurdering", exact=True)
+    review.focus()
+    page.keyboard.press("Enter")
+    assert review.get_attribute("aria-pressed") == "true"
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+
+    map_button = page.get_by_role("button", name="Kart", exact=True)
+    map_button.focus()
+    page.keyboard.press("Enter")
+    assert map_button.get_attribute("aria-pressed") == "true"

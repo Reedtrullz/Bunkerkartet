@@ -174,14 +174,14 @@ Verification: full suite `130 passed, 1 warning`; Node 22.22.3 syntax check pass
 
 Non-claims: this is not a visual acceptance sign-off for every device/browser combination; live catalog content and production deployment remain out of scope.
 
-## L11 — Forward repair from recorded v5
+## Review follow-up — v6 forward repair from recorded v5
 
 Status: implemented locally; no production database was opened.
 
-- `CURRENT_SCHEMA_VERSION` is now 6. Fresh databases run v6, and existing v5 databases run an idempotent forward repair that rechecks legacy evidence foreign keys and historical evidence reconstruction.
+- `CURRENT_SCHEMA_VERSION` was 6 at this review point. Fresh databases ran v6, and existing v5 databases ran an idempotent forward repair that rechecked legacy evidence foreign keys and historical evidence reconstruction.
 - A dedicated test starts from a database explicitly marked v5, then proves it reaches v6 and repairs an unresolved legacy evidence row. This avoids claiming that only a v1 fixture covers the migration path.
 
-Verification: `tests/test_db.py` passed with 14 tests; the full suite passed with `130 passed, 1 warning`. No production migration, backup, or catalog mutation was performed.
+Verification: `tests/test_db.py` passed with 14 tests; the full suite passed with `130 passed, 1 warning`. This was a review follow-up, not canonical L11. No production migration, backup, or catalog mutation was performed.
 
 ## Review follow-up — stale GeoJSON auth and observation input
 
@@ -189,3 +189,75 @@ Verification: `tests/test_db.py` passed with 14 tests; the full suite passed wit
 - `photo_urls` now leaves non-list containers to Pydantic, producing controlled 422 responses for numeric, object, and string inputs instead of a validator `TypeError`.
 - Verification: 7 synthetic browser smoke tests, 32 import API tests, full suite `94 passed, 1 warning`, Node 22 syntax, and `git diff --check` passed.
 - Legacy URL read-side screening remains intentionally deferred to L05, which owns evidence/read-response preservation; no historical URL values were auto-rewritten.
+
+## L11 — Synlige relasjoner og bedre duplikatvurdering
+
+Status: implementert lokalt; ingen katalogverdier ble automatisk slått sammen.
+
+- Schema v7 adds `site_relations` and idempotently migrates historical
+  `related_site_keys`, including unresolved external keys shown as `ikke
+  importert`. New self-relations are rejected.
+- Site detail exposes related target key/name/status. Merge targets include
+  valid surviving reviewed sites, while evidence, observations, relations,
+  and event references remain traceable. No automatic merge or statusheving is
+  performed.
+- Duplicate warnings normalize name whitespace/case and classify overlapping
+  uncertainty as `mulig relasjon`, not proof of identity.
+
+## L12 — Observasjonsretry, redigeringskonflikt og lesbar historikk
+
+Status: implementert lokalt; schema is v8 and no production database was
+opened.
+
+- `sites.revision` is returned by site reads; PATCH requires
+  `expected_revision`, and all import/review/merge/coordinate/approach and new
+  observation mutations advance it. Idempotent observation retries do not.
+- Field observations carry nullable `request_id`/`payload_hash` identity with
+  a unique `(site_id, request_id)` index. `BEGIN IMMEDIATE`, rowcount checks,
+  and explicit merge collision rejection cover concurrent retries and merges.
+- Auth-protected event history is bounded at 100 entries, with explicit safe
+  field projections and edit before/after payloads. Location review requires a
+  nonblank reason and current revision.
+
+Verification: focused concurrency/revision tests passed; full local suite was
+`135 passed, 1 warning` excluding browser smoke, with `11 passed` browser smoke.
+
+## L13 — Ressursgrenser, readiness og CI-kontroller
+
+Status: implementert lokalt; no GitHub settings or deployment state was
+changed.
+
+- Import preview/commit stream and reject bodies over 2 MiB before JSON
+  validation; models cap packages at 500 records, 20 sources per record, and
+  30 warnings of 1,000 characters.
+- ORS uses a per-process `BoundedSemaphore(2)`, no wait queue, and returns
+  `429` with `Retry-After` when occupied. `/api/health` remains compatible;
+  `/api/ready` checks integrity/schema/auth and reports optional ORS separately.
+- CI retains full SHA-pinned actions, Python 3.12, read-only/non-root runtime
+  hardening, and now installs only Chromium for the browser smoke job.
+
+## L14 — Kuratorkø, policy og overlevering
+
+Status: implementert som privat policy-/releaseunderlag; no private site
+decisions, coordinates, production data, or GitHub policy changes were added.
+
+- `docs/CURATION_POLICY.md` defines private-by-default review fields, the
+  named unresolved queue, owner decisions, and the non-automatic meaning of
+  `related`.
+- The research prompt preserves schema 1.0 and its hash contract, separates
+  source excerpt from rationale, and defers any future evidence metadata to an
+  explicit versioned contract.
+- `docs/DEPLOYMENT.md` records readiness/limit behavior and recommends
+  required CI, blocked force-push/deletion, and auditable owner bypass without
+  changing GitHub settings.
+
+## Final local matrix
+
+| Area | Evidence | Boundary |
+|---|---|---|
+| Auth, import, DB, routes | 135 non-browser tests passed | local synthetic data only |
+| Browser/UI | 11 Chromium smoke tests passed; Node 22.22.3 syntax check passed | not visual acceptance for every device |
+| Schema | fresh and forward migrations reach v8; migration tests pass | no production migration |
+| Drift/limits | body, cardinality, readiness, ORS busy, SHA/digest checks pass | no load test or live ORS quota use |
+| Curation | policy and queue structure documented | owner must decide identity/access/public selection |
+| Release | runbook and release policy documented | no publish, deploy, merge, push, or GitHub-setting mutation |

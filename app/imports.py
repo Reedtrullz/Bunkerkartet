@@ -145,12 +145,12 @@ class ImportRecord(StrictModel):
     ]
     status: Literal["candidate"]
     access: Literal["unknown", "public", "restricted", "private", "permission_required", "dangerous", "unsafe"]
-    sources: list[SourceEvidence] = Field(min_length=1)
+    sources: list[SourceEvidence] = Field(min_length=1, max_length=20)
     confidence: Literal["high", "medium", "low", "unknown"] | None = None
     short_rationale: str | None = Field(default=None, max_length=2000)
     observed_location_text: str | None = Field(default=None, max_length=2000)
     condition: str | None = Field(default=None, max_length=1000)
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list, max_length=30)
     related_site_keys: list[str] = Field(default_factory=list, max_length=20)
 
     @field_validator("name", "site_kind")
@@ -158,6 +158,13 @@ class ImportRecord(StrictModel):
     def reject_snublesteiner(cls, value: str) -> str:
         if "snublestein" in value.casefold():
             raise ValueError("snublestein records are excluded")
+        return value
+
+    @field_validator("warnings")
+    @classmethod
+    def limit_warning_length(cls, value: list[str]) -> list[str]:
+        if any(len(warning) > 1000 for warning in value):
+            raise ValueError("warnings must be at most 1000 characters each")
         return value
 
     @model_validator(mode="after")
@@ -178,7 +185,7 @@ class ImportPackage(StrictModel):
     schema_version: Literal["1.0"]
     batch_id: str = Field(min_length=1, max_length=200)
     generated_at: datetime
-    records: list[ImportRecord] = Field(min_length=1)
+    records: list[ImportRecord] = Field(min_length=1, max_length=500)
 
     @field_validator("generated_at", mode="before")
     @classmethod

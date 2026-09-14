@@ -49,6 +49,29 @@ def test_route_requires_openrouteservice_key(tmp_path):
     assert response.json()["detail"] == "routing is not configured"
 
 
+def test_route_returns_retryable_busy_response_without_queue(tmp_path, monkeypatch):
+    class BusySemaphore:
+        def acquire(self, *, blocking):
+            assert blocking is False
+            return False
+
+        def release(self):
+            raise AssertionError("busy route must not release an unacquired slot")
+
+    api = TestClient(create_app(Settings(data_dir=tmp_path, admin_token="secret", ors_api_key="ors-key")))
+    site_id = seed_site(api)
+    monkeypatch.setattr("app.main.ORS_SEMAPHORE", BusySemaphore())
+
+    response = api.post(
+        "/api/routes",
+        headers={"Authorization": "Bearer secret"},
+        json={"start": {"lat": 63.4, "lon": 10.4}, "site_ids": [site_id]},
+    )
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "1"
+
+
 def test_route_returns_gpx_and_persists_plan(tmp_path, monkeypatch):
     api = TestClient(
         create_app(

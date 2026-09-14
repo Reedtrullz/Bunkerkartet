@@ -17,6 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, field_validator, model_validator
+from starlette.concurrency import run_in_threadpool
 from urllib.error import HTTPError, URLError
 
 from app.config import Settings
@@ -1083,7 +1084,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if not database.path.exists():
                 database_status = "unavailable"
             else:
-                with sqlite3.connect(f"file:{database.path.resolve()}?mode=ro", uri=True) as connection:
+                with sqlite3.connect(f"{database.path.resolve().as_uri()}?mode=ro", uri=True) as connection:
                     if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                         database_status = "unavailable"
                     elif required_schema_errors(connection, required_schema=REQUIRED_SCHEMA):
@@ -1113,12 +1114,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/admin/imports/preview", dependencies=[Depends(admin_guard)])
     async def preview_import(request: Request) -> dict[str, object]:
         payload = await _read_import_json(request)
-        try:
-            package = validate_import_package(payload)
-        except ValidationError as error:
-            raise HTTPException(422, detail=_validation_detail(error))
-        with database.connect() as connection:
-            return _preview_package(connection, package)
+
+        def work() -> dict[str, object]:
+            try:
+                package = validate_import_package(payload)
+            except ValidationError as error:
+                raise HTTPException(422, detail=_validation_detail(error))
+            with database.connect() as connection:
+                return _preview_package(connection, package)
+
+        return await run_in_threadpool(work)
 
     @app.post("/api/admin/imports/commit", dependencies=[Depends(admin_guard)])
     async def commit_import(
@@ -1126,11 +1131,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         x_import_preview: str | None = Header(default=None),
     ) -> dict[str, object]:
         payload = await _read_import_json(request)
-        try:
-            package = validate_import_package(payload)
-        except ValidationError as error:
-            raise HTTPException(422, detail=_validation_detail(error))
-        return _commit_package(database, package, x_import_preview)
+
+        def work() -> dict[str, object]:
+            try:
+                package = validate_import_package(payload)
+            except ValidationError as error:
+                raise HTTPException(422, detail=_validation_detail(error))
+            return _commit_package(database, package, x_import_preview)
+
+        return await run_in_threadpool(work)
 
     @app.get("/api/sites", dependencies=[Depends(admin_guard)])
     def list_sites(
