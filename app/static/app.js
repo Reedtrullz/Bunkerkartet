@@ -14,7 +14,7 @@ const state = {
   pickingStart: false,
   routeRequestInFlight: false,
   gpxObjectUrls: new Set(),
-  detailTrigger: null,
+  detailOrigin: null,
   detailGeneration: 0,
   navigationGeneration: 0,
   surface: "map",
@@ -219,7 +219,8 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
   state.start = null;
   state.pickingStart = false;
   state.routeRequestInFlight = false;
-  state.detailTrigger = null;
+  state.detailOrigin = null;
+  state.detailGeneration += 1;
   revokeGpxObjectUrls();
   markerLayer.clearLayers();
   uncertaintyLayer.clearLayers();
@@ -237,6 +238,7 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
   $("detail-panel").classList.remove("is-selected");
   text($("site-detail-heading"), "Stedsdetaljer");
   text($("site-detail"), "Velg en markør eller et sted.");
+  $("close-detail").hidden = true;
   $("route-result").replaceChildren();
   text($("route-start"), "Start: ingen start valgt");
   setSurface("map", { scroll: false });
@@ -318,6 +320,37 @@ function hasReviewedPublicApproach(site) {
     site.approach_access === "public" && site.approach_reviewed_at != null;
 }
 
+function markDetailControl(control, siteId, origin) {
+  control.dataset.detailSiteId = String(siteId);
+  control.dataset.detailOrigin = origin;
+  return control;
+}
+
+function openDetail(siteId, surface = state.surface, origin = "list") {
+  state.detailOrigin = { siteId, surface, origin };
+  loadDetail(siteId);
+}
+
+function focusDetailOrigin(origin) {
+  const controls = [...document.querySelectorAll("[data-detail-site-id]")].filter((control) => {
+    return control.dataset.detailSiteId === String(origin.siteId) && control.offsetParent !== null;
+  });
+  const control = controls.find((candidate) => candidate.dataset.detailOrigin === origin.origin) || controls[0];
+  if (control) control.focus({ preventScroll: true });
+}
+
+function closeDetail() {
+  const origin = state.detailOrigin || { siteId: null, surface: "map", origin: "list" };
+  state.detailGeneration += 1;
+  state.detailOrigin = null;
+  $("detail-panel").classList.remove("is-selected");
+  text($("site-detail-heading"), "Stedsdetaljer");
+  text($("site-detail"), "Velg en markør eller et sted.");
+  $("close-detail").hidden = true;
+  setSurface(origin.surface, { scroll: false });
+  if (origin.siteId != null) focusDetailOrigin(origin);
+}
+
 function renderOverlapChoices() {
   const groups = new Map();
   state.sites.filter((site) => site.latitude != null && site.longitude != null).forEach((site) => {
@@ -337,10 +370,10 @@ function renderOverlapChoices() {
     group.forEach((site) => {
       const button = document.createElement("button");
       button.type = "button";
+      markDetailControl(button, site.id, "overlap");
       text(button, `${site.name} — ${site.site_kind} — ${statusLabel(site.status)}`);
       button.addEventListener("click", () => {
-        state.detailTrigger = button;
-        loadDetail(site.id);
+        openDetail(site.id, "map", "overlap");
       });
       groupBox.append(button);
     });
@@ -369,6 +402,12 @@ function renderMap(fit = false) {
       }),
       title: `${category.label}: ${site.name}`,
     }).addTo(markerLayer);
+    const markerElement = marker.getElement();
+    if (markerElement) {
+      markDetailControl(markerElement, site.id, "marker");
+      markerElement.tabIndex = 0;
+      markerElement.setAttribute("aria-label", `${category.label}: ${site.name}`);
+    }
     if (site.uncertainty_m > 0) {
       L.circle(point, {
         color: statusColor(site.status),
@@ -391,8 +430,9 @@ function renderMap(fit = false) {
     actions.className = "site-actions";
     const details = document.createElement("button");
     details.className = "small";
+    markDetailControl(details, site.id, "marker");
     text(details, "Detaljer");
-    details.addEventListener("click", () => { marker.closePopup(); state.detailTrigger = details; loadDetail(site.id); });
+    details.addEventListener("click", () => { marker.closePopup(); openDetail(site.id, "map", "marker"); });
     const add = document.createElement("button");
     add.className = "small";
     const routeReady = hasReviewedPublicApproach(site);
@@ -402,7 +442,7 @@ function renderMap(fit = false) {
     actions.append(details, add);
     popup.append(actions);
     marker.bindPopup(popup);
-    marker.on("click", () => loadDetail(site.id));
+    marker.on("click", () => openDetail(site.id, "map", "marker"));
     (site.observation_points || []).forEach((observation) => {
       if (observation.latitude == null || observation.longitude == null) return;
       const observationPoint = [observation.latitude, observation.longitude];
@@ -419,7 +459,8 @@ function renderMap(fit = false) {
       const meta = document.createElement("div"); meta.className = "site-meta";
       text(meta, `${observation.observed_at} | ${outcomeLabel(observation.outcome)}`); popup.append(meta);
       const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Åpne sted");
-      details.addEventListener("click", () => { observationMarker.closePopup(); state.detailTrigger = details; loadDetail(site.id); });
+      markDetailControl(details, site.id, "marker");
+      details.addEventListener("click", () => { observationMarker.closePopup(); openDetail(site.id, "map", "marker"); });
       popup.append(details);
       observationMarker.bindPopup(popup);
     });
@@ -458,8 +499,9 @@ function renderSiteList() {
     actions.className = "site-actions";
     const details = document.createElement("button");
     details.className = "small";
+    markDetailControl(details, site.id, "list");
     text(details, "Detaljer");
-    details.addEventListener("click", () => { state.detailTrigger = details; loadDetail(site.id); });
+    details.addEventListener("click", () => openDetail(site.id, "map", "list"));
     const add = document.createElement("button");
     add.className = "small";
     const routeReady = hasReviewedPublicApproach(site);
@@ -585,7 +627,7 @@ function compactSection(title, className = "") {
   text(summary, title);
   section.append(summary);
   section.addEventListener("toggle", () => {
-    if (!section.open && state.detailTrigger) state.detailTrigger.focus({ preventScroll: true });
+    if (!section.open) summary.focus({ preventScroll: true });
   });
   return section;
 }
@@ -763,11 +805,16 @@ async function adoptObservationLocation(siteId, observationId) {
 async function loadDetail(id) {
   const requestEpoch = state.authEpoch;
   const detailGeneration = ++state.detailGeneration;
+  if (!state.detailOrigin || state.detailOrigin.siteId !== id) {
+    state.detailOrigin = { siteId: id, surface: state.surface, origin: state.surface === "review" ? "candidate" : "list" };
+  }
   setSurface("review", { scroll: false });
   const navigationGeneration = state.navigationGeneration;
   const panel = $("detail-panel");
   const root = $("site-detail");
   panel.classList.add("is-selected");
+  $("close-detail").hidden = false;
+  text($("close-detail"), state.detailOrigin.surface === "map" ? "Tilbake til kart" : "Tilbake til liste");
   text(root, "Laster stedsdetaljer ...");
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
   $("site-detail-heading").focus({ preventScroll: true });
@@ -934,8 +981,8 @@ async function loadCandidates() {
         text(warnings, `${site.warnings.length} ${site.warnings.length === 1 ? "varsel" : "varsler"}`); item.append(warnings);
       }
       const actions = document.createElement("div"); actions.className = "candidate-actions";
-      const details = document.createElement("button"); details.className = "small"; text(details, "Detaljer");
-      details.addEventListener("click", () => { state.detailTrigger = details; loadDetail(site.id); }); actions.append(details);
+      const details = document.createElement("button"); details.className = "small"; markDetailControl(details, site.id, "candidate"); text(details, "Detaljer");
+      details.addEventListener("click", () => openDetail(site.id, "review", "candidate")); actions.append(details);
       [["Marker som kildegjennomgått", "research", ""], ["Avvis", "reject", "danger"]].forEach(([label, action, style]) => {
         const button = document.createElement("button"); button.className = `small ${style}`; text(button, label);
         button.addEventListener("click", () => runReviewAction(site.id, action)); actions.append(button);
@@ -960,7 +1007,7 @@ function renderFieldPriority() {
     const uncertainty = site.uncertainty_m == null ? "usikkerhet ukjent" : `${Math.round(site.uncertainty_m)} m`;
     const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${VALUE_LABELS[site.confidence] || "Ukjent"} | ${uncertainty} | ${accessLabel(site.access)}`); item.append(meta);
     const actions = document.createElement("div"); actions.className = "site-actions";
-    const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Detaljer"); details.addEventListener("click", () => { state.detailTrigger = details; loadDetail(site.id); });
+    const details = document.createElement("button"); details.className = "small"; details.type = "button"; markDetailControl(details, site.id, "field"); text(details, "Detaljer"); details.addEventListener("click", () => openDetail(site.id, "review", "field"));
     const add = document.createElement("button"); add.className = "small"; add.type = "button"; text(add, state.routeSiteIds.includes(site.id) ? "Lagt til" : "Legg til rute"); add.disabled = state.routeSiteIds.includes(site.id); add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add); item.append(actions); list.append(item);
   });
@@ -1132,6 +1179,7 @@ async function createRoute() {
 }
 
 $("auth-form").addEventListener("submit", (event) => { event.preventDefault(); loadSites(); });
+$("close-detail").addEventListener("click", closeDetail);
 $("lock-app").addEventListener("click", () => { clearAuthenticatedData(); setStatus("Arbeidsflate låst."); });
 $("refresh-sites").addEventListener("click", loadSites);
 $("status-filter").addEventListener("change", loadSites);

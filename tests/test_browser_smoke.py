@@ -393,6 +393,65 @@ def test_identical_points_offer_a_named_choice_without_clustering(page: Page, ba
     page.get_by_role("heading", name="Stedsdetaljer: Synthetic site", exact=True).wait_for(state="visible", timeout=3000)
 
 
+def test_list_detail_back_returns_focus_to_visible_site_control(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    origin = page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True)
+    origin.focus()
+    page.keyboard.press("Enter")
+    page.get_by_role("heading", name="Stedsdetaljer: Synthetic site", exact=True).wait_for()
+    summary = page.locator("details.site-editor > summary")
+    summary.focus()
+    page.keyboard.press("Enter")
+    page.keyboard.press("Enter")
+    assert page.evaluate("document.activeElement === document.querySelector('details.site-editor > summary')")
+    close = page.get_by_role("button", name="Tilbake til kart", exact=True)
+    close.focus()
+    page.keyboard.press("Enter")
+
+    assert page.get_by_role("button", name="Kart", exact=True).get_attribute("aria-pressed") == "true"
+    assert page.locator("#detail-panel").is_hidden()
+    assert page.evaluate("""() => {
+        const active = document.activeElement;
+        return active?.dataset.detailSiteId === '1' && active.offsetParent !== null;
+    }""")
+
+
+def test_overlap_detail_back_returns_focus_to_original_choice(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    origin = page.locator("#overlap-panel button", has_text="Synthetic site")
+    origin.focus()
+    page.keyboard.press("Enter")
+    page.get_by_role("heading", name="Stedsdetaljer: Synthetic site", exact=True).wait_for()
+    page.get_by_role("button", name="Tilbake til kart", exact=True).press("Enter")
+
+    assert page.evaluate("""() => {
+        const active = document.activeElement;
+        return active?.dataset.detailSiteId === '1' && active.dataset.detailOrigin === 'overlap' && active.offsetParent !== null;
+    }""")
+
+
+def test_marker_popup_detail_back_returns_focus_to_named_marker(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    marker = page.locator(".leaflet-marker-icon[data-detail-site-id='1']")
+    marker.wait_for(state="visible")
+    marker.click()
+    popup = page.locator(".leaflet-popup")
+    popup.get_by_role("button", name="Detaljer", exact=True).click()
+    page.get_by_role("heading", name="Stedsdetaljer: Synthetic site", exact=True).wait_for()
+    page.get_by_role("button", name="Tilbake til kart", exact=True).press("Enter")
+
+    assert page.evaluate("""() => {
+        const active = document.activeElement;
+        return active?.dataset.detailSiteId === '1' && active.dataset.detailOrigin === 'marker' && active.getAttribute('aria-label')?.includes('Synthetic site') && active.offsetParent !== null;
+    }""")
+
+
 def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url: str):
     payload = {
         "schema_version": "1.0",
