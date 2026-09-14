@@ -1,7 +1,9 @@
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
+import pytest
 
 from app.config import Settings
-from app.main import create_app
+from app.main import _require_admin, create_app
 
 
 def test_health_reports_version_and_database_status(tmp_path):
@@ -27,6 +29,15 @@ def test_private_sites_api_requires_bearer_token(tmp_path):
     assert client.get(
         "/api/sites", headers={"Authorization": "Bearer admin"}
     ).status_code == 200
+
+
+def test_unicode_bearer_token_is_rejected_without_server_error(tmp_path):
+    settings = Settings(data_dir=tmp_path, admin_token="admin")
+
+    with pytest.raises(HTTPException) as error:
+        _require_admin(settings, "Bearer café")
+
+    assert error.value.status_code == 401
 
 
 def test_responses_include_security_headers_and_api_is_not_cached(tmp_path):

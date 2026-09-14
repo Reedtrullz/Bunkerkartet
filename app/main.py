@@ -488,7 +488,9 @@ def _require_admin(settings: Settings, authorization: str | None) -> None:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "bearer token required")
     token = authorization.removeprefix("Bearer ").strip()
-    if not token or not hmac.compare_digest(token, settings.admin_token):
+    if not token or not hmac.compare_digest(
+        token.encode("utf-8"), settings.admin_token.encode("utf-8")
+    ):
         raise HTTPException(401, "invalid bearer token")
 
 
