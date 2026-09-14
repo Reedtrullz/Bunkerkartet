@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from app.imports import ImportPackage, validate_import_package
+from app.imports import ImportPackage, validate_import_package, validate_reference_url
 
 
 def source():
@@ -108,10 +108,12 @@ def test_geometry_is_required_unless_precision_is_unknown():
     with pytest.raises(ValidationError):
         validate_import_package(package(record(geometry=None, precision="approximate")))
 
-    parsed = validate_import_package(package(record(geometry=None, precision="unknown")))
+    parsed = validate_import_package(
+        package(record(geometry=None, precision="unknown", uncertainty_m=None))
+    )
     assert parsed.records[0].geometry is None
 
-    missing_geometry = record(precision="unknown")
+    missing_geometry = record(precision="unknown", uncertainty_m=None)
     missing_geometry.pop("geometry")
     parsed = validate_import_package(package(missing_geometry))
     assert parsed.records[0].geometry is None
@@ -129,6 +131,41 @@ def test_approximate_uncertainty_is_preserved():
     assert parsed.records[0].uncertainty_m == 875.5
 
 
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"precision": "exact", "location_basis": "llm_inference"},
+        {"precision": "approximate", "uncertainty_m": 0},
+        {"geometry": None, "precision": "unknown", "uncertainty_m": 1},
+    ],
+)
+def test_location_invariants_are_shared_by_import_validation(overrides):
+    with pytest.raises(ValidationError):
+        validate_import_package(package(record(**overrides)))
+
+
 def test_unknown_fields_are_rejected():
     with pytest.raises(ValidationError):
         validate_import_package(package(record(unreviewed_chain_of_thought="secret")))
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://user:password@example.com/map",
+        "https://example.com/map?api_key=synthetic-private-value",
+        "https://example.com/map?X-AmZ-Signature=synthetic-private-value",
+        "https://example.com/map?layer=https%3A%2F%2Fexample.org%2Fwms%3Ftoken%3Dsynthetic-private-value",
+    ],
+)
+def test_reference_urls_reject_credential_like_values_without_echoing_input(url):
+    with pytest.raises(ValueError) as error:
+        validate_reference_url(url)
+
+    assert "synthetic-private-value" not in str(error.value)
+
+
+def test_reference_url_preserves_normal_map_parameters():
+    url = "https://example.com/map?layer=roads&object_id=42&lat=63.4&lon=10.4"
+
+    assert validate_reference_url(url) == url

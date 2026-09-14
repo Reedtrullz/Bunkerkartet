@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="nb">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,185 +13,201 @@
   <header class="app-header">
     <div class="brand">
       <strong>Bunkerkartet</strong>
-      <span>Trondheim field map</span>
+      <span>Trondheims feltkart</span>
     </div>
     <form id="auth-form" class="auth-bar">
-      <label for="admin-token">Admin token</label>
+      <label for="admin-token">Administratortoken</label>
       <input id="admin-token" type="password" autocomplete="off" spellcheck="false">
-      <button id="load-sites" class="primary" type="submit">Load map</button>
+      <button id="load-sites" class="primary" type="submit">Last inn kart</button>
+      <button id="lock-app" type="button">Lås</button>
     </form>
   </header>
 
+  <nav class="surface-nav" aria-label="Arbeidsflater">
+    <button id="surface-map" type="button" data-target="map-tools-panel" aria-pressed="true">Kart</button>
+    <button id="surface-review" type="button" data-target="review-panel" aria-pressed="false">Vurdering</button>
+    <button id="surface-route" type="button" data-target="route-panel" aria-pressed="false">Tur</button>
+  </nav>
+
   <main class="layout">
     <aside class="sidebar">
-      <section id="map-tools-panel" class="panel map-tools-panel" aria-labelledby="map-tools-heading">
+      <section id="map-tools-panel" class="panel map-tools-panel surface-panel" data-surface="map" aria-labelledby="map-tools-heading">
         <div class="panel-heading">
-          <h2 id="map-tools-heading">Map tools</h2>
+          <h2 id="map-tools-heading">Kartverktøy</h2>
         </div>
         <div class="button-row">
-          <button id="pick-start" type="button">Set start on map</button>
-          <button id="use-location" type="button">Use my location</button>
+          <button id="pick-start" type="button">Velg start på kartet</button>
+          <button id="use-location" type="button">Bruk min posisjon</button>
         </div>
-        <div id="location-status" class="site-meta" aria-live="polite">Location access is only used after you choose Use my location.</div>
+        <div id="location-status" class="site-meta" aria-live="polite">Posisjon brukes bare når du velger «Bruk min posisjon».</div>
       </section>
 
-      <section id="detail-panel" class="panel detail-panel" aria-labelledby="site-detail-heading">
-        <div class="panel-heading"><h2 id="site-detail-heading" tabindex="-1">Site detail</h2></div>
-        <div id="site-detail" class="empty-state" aria-live="polite">Select a marker or site.</div>
+      <section id="detail-panel" class="panel detail-panel surface-panel" data-surface="review" aria-labelledby="site-detail-heading">
+        <div class="panel-heading"><h2 id="site-detail-heading" tabindex="-1">Stedsdetaljer</h2><button id="close-detail" class="small" type="button" hidden>Tilbake til kart</button></div>
+        <div id="site-detail" class="empty-state" aria-live="polite">Velg en markør eller et sted.</div>
       </section>
 
-      <section class="panel controls-panel">
+      <section class="panel controls-panel surface-panel" data-surface="map">
         <div class="panel-heading">
-          <h1>Sites</h1>
-          <button id="refresh-sites" class="icon-button" title="Refresh sites" aria-label="Refresh sites">Refresh</button>
+          <h1>Steder</h1>
+          <button id="refresh-sites" class="icon-button" title="Oppdater steder" aria-label="Oppdater steder">Oppdater</button>
         </div>
         <div class="filter-grid">
           <label>Status
             <select id="status-filter">
-              <option value="">All visible</option>
-              <option value="candidate">Candidate</option>
-              <option value="approximate">Approximate</option>
-              <option value="likely">Researched</option>
-              <option value="trusted">Confirmed</option>
-              <option value="field-verified">Field verified</option>
-              <option value="destroyed-or-filled">Destroyed or filled</option>
+              <option value="">Alle synlige</option>
+              <option value="candidate">Kandidat</option>
+              <option value="approximate">Omtrentlig</option>
+              <option value="likely">Kildegjennomgått</option>
+              <option value="trusted">Bekreftet</option>
+              <option value="field-verified">Feltverifisert</option>
+              <option value="destroyed-or-filled">Ødelagt eller fylt igjen</option>
             </select>
           </label>
           <label>Type
-            <input id="kind-filter" type="search" placeholder="bunker, cave...">
+            <input id="kind-filter" type="search" placeholder="bunker, hule ...">
           </label>
-          <label>Search
-            <input id="site-search" type="search" placeholder="Name or location clue">
+          <label>Søk
+            <input id="site-search" type="search" placeholder="Navn eller stedshenvisning">
           </label>
-          <label>Access
+          <label>Tilgang
             <select id="access-filter">
-              <option value="">All access</option>
-              <option value="public">Public approach</option>
-              <option value="private">Private</option>
-              <option value="restricted">Restricted</option>
-              <option value="permission_required">Permission required</option>
-              <option value="dangerous">Dangerous</option>
-              <option value="unsafe">Unsafe</option>
-              <option value="unknown">Unknown</option>
+              <option value="">All tilgang</option>
+              <option value="public">Offentlig tilnærming</option>
+              <option value="private">Privat</option>
+              <option value="restricted">Begrenset</option>
+              <option value="permission_required">Tillatelse kreves</option>
+              <option value="dangerous">Farlig</option>
+              <option value="unsafe">Utrygt</option>
+              <option value="unknown">Ukjent</option>
             </select>
           </label>
-          <label>Confidence
+          <label>Sikkerhet
             <select id="confidence-filter">
-              <option value="">All confidence</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-              <option value="unknown">Unknown</option>
+              <option value="">All sikkerhet</option>
+              <option value="high">Høy</option>
+              <option value="medium">Middels</option>
+              <option value="low">Lav</option>
+              <option value="unknown">Ukjent</option>
             </select>
           </label>
         </div>
         <div class="button-row">
-          <button id="download-geojson" type="button" disabled>Download GeoJSON</button>
+          <button id="download-geojson" type="button" disabled>Eksporter hele katalogen</button>
         </div>
         <div id="site-list" class="site-list" aria-live="polite"></div>
       </section>
 
-      <section class="panel import-panel">
-        <div class="panel-heading"><h2>Import JSON</h2></div>
+      <section id="overlap-panel" class="panel overlap-panel surface-panel" data-surface="map" hidden aria-labelledby="overlap-heading">
+        <div class="panel-heading"><h2 id="overlap-heading">Sammenfallende punkter</h2></div>
+        <p class="site-meta">Velg et navngitt sted når flere poster deler samme punkt.</p>
+        <div id="overlap-list" class="overlap-list"></div>
+      </section>
+
+      <section class="panel import-panel surface-panel" data-surface="map">
+        <div class="panel-heading"><h2>Importer JSON</h2></div>
+        <label for="import-file">JSON-fil</label>
         <input id="import-file" type="file" accept="application/json,.json">
         <div class="button-row">
-          <button id="preview-import" disabled>Preview</button>
-          <button id="commit-import" class="primary" disabled>Commit</button>
+          <button id="preview-import" disabled>Forhåndsvis</button>
+          <button id="commit-import" class="primary" disabled>Importer</button>
         </div>
         <pre id="import-result" class="result-box" aria-live="polite"></pre>
       </section>
 
-      <section class="panel review-panel">
+      <section class="panel review-panel surface-panel" data-surface="review">
         <div class="panel-heading">
-          <h2>Candidate review</h2>
-          <button id="refresh-candidates">Refresh</button>
+          <h2>Kandidater</h2>
+          <button id="refresh-candidates">Oppdater</button>
         </div>
         <div class="filter-grid">
-          <label>Confidence
+          <label>Sikkerhet
             <select id="review-confidence-filter">
-              <option value="">All confidence</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-              <option value="unknown">Unknown</option>
+            <option value="">All sikkerhet</option>
+            <option value="high">Høy</option>
+            <option value="medium">Middels</option>
+            <option value="low">Lav</option>
+            <option value="unknown">Ukjent</option>
             </select>
           </label>
-          <label>Access
+          <label>Tilgang
             <select id="review-access-filter">
-              <option value="">All access</option>
-              <option value="public">Public</option>
-              <option value="private">Private</option>
-              <option value="restricted">Restricted</option>
-              <option value="permission_required">Permission required</option>
-              <option value="unknown">Unknown</option>
-              <option value="dangerous">Dangerous</option>
-              <option value="unsafe">Unsafe</option>
+              <option value="">All tilgang</option>
+              <option value="public">Offentlig</option>
+              <option value="private">Privat</option>
+              <option value="restricted">Begrenset</option>
+              <option value="permission_required">Tillatelse kreves</option>
+              <option value="unknown">Ukjent</option>
+              <option value="dangerous">Farlig</option>
+              <option value="unsafe">Utrygt</option>
             </select>
           </label>
-          <label>Uncertainty
+          <label>Usikkerhet
             <select id="review-uncertainty-filter">
-              <option value="">Any radius</option>
-              <option value="under-100">Up to 100 m</option>
-              <option value="100-500">101-500 m</option>
+              <option value="">Alle radier</option>
+              <option value="under-100">Opptil 100 m</option>
+              <option value="100-500">101–500 m</option>
               <option value="over-500">Over 500 m</option>
-              <option value="unknown">Unknown</option>
+              <option value="unknown">Ukjent</option>
             </select>
           </label>
-          <label>Source type
-            <input id="review-source-filter" type="search" placeholder="forum, newspaper...">
+          <label>Kildetype
+            <input id="review-source-filter" type="search" placeholder="forum, avis ...">
           </label>
         </div>
         <div id="candidate-summary" class="site-meta"></div>
         <div id="candidate-list" class="candidate-list"></div>
       </section>
 
-      <section class="panel field-priority-panel">
+      <section class="panel field-priority-panel surface-panel" data-surface="review">
         <div class="panel-heading">
-          <h2>Field shortlist</h2>
-          <button id="refresh-field-priority">Refresh</button>
+          <h2>Feltliste</h2>
+          <button id="refresh-field-priority">Oppdater</button>
         </div>
         <div id="field-priority-summary" class="site-meta"></div>
         <div id="field-priority-list" class="site-list"></div>
       </section>
 
-      <section class="panel route-panel">
-        <div class="panel-heading"><h2>Walking route</h2></div>
-        <label>Route name
-          <input id="route-name" type="text" value="Trondheim field route" maxlength="200">
+      <section class="panel route-panel surface-panel" data-surface="route">
+        <div class="panel-heading"><h2>Gå-rute</h2></div>
+        <label>Rutenavn
+          <input id="route-name" type="text" value="Feltur i Trondheim" maxlength="200">
         </label>
-        <div id="route-start" class="route-start">Start: map center</div>
+        <div id="route-start" class="route-start">Start: Standardstart i Trondheim</div>
+        <p class="site-meta">Når du beregner ruten, sendes start og stopp til OpenRouteService. Startpunkt og rute lagres i din private rutehistorikk. Du kan velge start manuelt.</p>
         <ol id="route-stops" class="route-stops"></ol>
-        <button id="create-route" class="primary" disabled>Create route</button>
+        <button id="create-route" class="primary" disabled>Beregn rute</button>
         <div id="route-result" class="route-result" aria-live="polite"></div>
       </section>
 
-      <section class="panel saved-routes-panel">
+      <section class="panel saved-routes-panel surface-panel" data-surface="route">
         <div class="panel-heading">
-          <h2>Saved routes</h2>
-          <button id="refresh-routes" type="button">Refresh</button>
+          <h2>Lagrede ruter</h2>
+          <button id="refresh-routes" type="button">Oppdater</button>
         </div>
         <div id="route-history-summary" class="site-meta"></div>
         <div id="route-history-list" class="route-history-list"></div>
       </section>
     </aside>
     <section class="map-shell">
-      <div id="map" aria-label="Map of Trondheim sites"></div>
-      <div class="map-key" aria-label="Map key">
-        <strong>Location type</strong>
-        <span><i class="map-key-marker marker-bunker">B</i>Bunker / military position</span>
-        <span><i class="map-key-marker marker-cave">C</i>Cave / tunnel</span>
-        <span><i class="map-key-marker marker-pow">P</i>POW camp</span>
-        <span><i class="map-key-marker marker-grave">G</i>War grave</span>
-        <span><i class="map-key-marker marker-memorial">M</i>War memorial</span>
-        <span><i class="map-key-marker marker-other">O</i>Other wartime site</span>
-        <strong>Status ring</strong>
-        <span><i class="key-dot key-candidate"></i>Candidate</span>
-        <span><i class="key-dot key-researched"></i>Researched</span>
-        <span><i class="key-dot key-confirmed"></i>Confirmed</span>
-        <span><i class="key-dot key-observation"></i>Field observation</span>
-        <small>Research leads are approximate. Access is not established; stay on public paths and do not enter structures.</small>
-      </div>
-      <div id="map-status" class="map-status" aria-live="polite">Enter the admin token to load sites.</div>
+      <div id="map" aria-label="Kart over steder i Trondheim"></div>
+      <details class="map-key" aria-label="Tegnforklaring">
+        <summary>Tegnforklaring</summary>
+        <strong>Stedstype</strong>
+        <span><i class="map-key-marker marker-bunker">B</i>Bunker / militærstilling</span>
+        <span><i class="map-key-marker marker-cave">C</i>Hule / tunnel</span>
+        <span><i class="map-key-marker marker-pow">P</i>Krigsfangeleir</span>
+        <span><i class="map-key-marker marker-grave">G</i>Krigsgrav</span>
+        <span><i class="map-key-marker marker-memorial">M</i>Krigsminnesmerke</span>
+        <span><i class="map-key-marker marker-other">O</i>Annet krigsminne</span>
+        <strong>Statusring</strong>
+        <span><i class="key-dot key-candidate"></i>Kandidat</span>
+        <span><i class="key-dot key-researched"></i>Kildegjennomgått</span>
+        <span><i class="key-dot key-confirmed"></i>Bekreftet</span>
+        <span><i class="key-dot key-observation"></i>Feltobservasjon</span>
+        <small>Forskningspunkter er omtrentlige. Tilgang er ikke etablert; hold deg på offentlig vei og ikke gå inn i konstruksjoner.</small>
+      </details>
+      <div id="map-status" class="map-status" aria-live="polite">Skriv inn administratortokenet for å laste inn steder.</div>
     </section>
   </main>
 

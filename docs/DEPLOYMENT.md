@@ -20,6 +20,30 @@ ghcr.io/reedtrullz/bunkerkartet@sha256:0123456789abcdef...
 Do not use `latest` or a mutable branch tag. A commit SHA tag is used to find
 the published artifact; the digest is the enforced runtime identity.
 
+## Runtime readiness and limits
+
+`/api/health` remains the liveness and backwards-compatible deployment check.
+`/api/ready` is the readiness check: it reports database integrity/schema,
+admin authentication configuration, and whether optional routing is configured;
+it returns `503` until the database and private API authentication are ready.
+
+Import preview and commit reject request bodies over 2 MiB before JSON parsing,
+packages over 500 records, records with more than 20 sources, or more than 30
+warnings of 1,000 characters each. Routing permits two concurrent
+OpenRouteService calls and returns `429` with `Retry-After` when both slots are
+occupied; callers must retry rather than queue unbounded work.
+
+CI runs the full Python suite, the Playwright browser smoke suite with a pinned
+Python 3.12 environment, frontend syntax validation, and the digest-pinned
+container build. GitHub Actions references remain full commit SHA pinned.
+
+## Recommended GitHub policy
+
+For an authorized repository owner, require the CI workflow before merging to
+`main`, block force-pushes and branch deletion on protected branches, and keep
+the bypass path limited to named owners with an auditable reason. This is
+release guidance only; this repository change does not modify GitHub settings.
+
 ## Ansible preparation
 
 Copy `deploy/inventory.example.yml` to an ignored `deploy/inventory.yml`, then
@@ -78,30 +102,80 @@ trap - EXIT
 Store the archive outside the application directory and retain it according to
 the normal server backup policy.
 
+## Restore preflight
+
+Use a separate staging volume or directory for every restore exercise. Stop the
+writer before handling SQLite files; `bunkerkartet.sqlite3`, its `-wal`, and
+its `-shm` file are one consistency set. Never copy only the main file from a
+live WAL-mode database.
+
+Before stopping the service, reject archives containing absolute paths,
+`..` path components, symlinks, hardlinks, or any member other than the three
+SQLite files. This inspect-only check does not extract anything:
+
+```bash
+python3 - "$ARCHIVE" <<'PY'
+import sys
+import tarfile
+
+allowed = {"bunkerkartet.sqlite3", "bunkerkartet.sqlite3-wal", "bunkerkartet.sqlite3-shm"}
+seen = set()
+root_seen = False
+with tarfile.open(sys.argv[1], "r:gz") as archive:
+    members = archive.getmembers()
+    for member in members:
+        if member.name in {".", "./"}:
+            if root_seen or not member.isdir():
+                raise SystemExit("archive rejected")
+            root_seen = True
+            continue
+        name = member.name[2:] if member.name.startswith("./") else member.name
+        if (member.name.startswith("/") or ".." in name.split("/")
+                or name not in allowed or not member.isreg()
+                or member.issym() or member.islnk() or name in seen):
+            raise SystemExit("archive rejected")
+        seen.add(name)
+    if "bunkerkartet.sqlite3" not in seen:
+        raise SystemExit("archive rejected")
+PY
+```
+
+Extract into staging, then run the repository's read-only verifier against the
+staged database before replacing the volume. It must report the expected
+schema version, `integrity_check=ok`, an empty foreign-key check, and table
+counts. Keep the pre-restore archive until the application health check passes;
+that archive is the rollback point. Record the restore timestamp, expected
+version, archive hash, and whether any writes after the backup are outside the
+RPO.
+
 ## SQLite restore
 
-Restore only during a maintenance window. Pass the archive path and the exact
-deployed commit SHA as arguments. The script first checks the archive, confirms
-the stable volume, stops writes, creates a pre-restore backup, verifies the
-archive contains a database, extracts to a staging directory, and only then
-replaces the current volume contents. Any failed precondition exits before the
-replacement step and the trap starts the service again.
+Restore only during a maintenance window. Pass the archive path, exact
+deployed commit SHA, and schema version as arguments. The script validates the
+archive before stopping writes, confirms the stable volume, creates a
+pre-restore backup, extracts into a separate staging volume, verifies the
+staged database, and only then replaces the current volume contents. Any
+failed precondition exits before replacement and the trap starts the service.
 
 ```bash
 set -eu
 cd /opt/bunkerkartet
-ARCHIVE="${1:?usage: $0 /srv/backups/file.tar.gz COMMIT_SHA}"
-EXPECTED_VERSION="${2:?usage: $0 /srv/backups/file.tar.gz COMMIT_SHA}"
+ARCHIVE="${1:?usage: $0 /srv/backups/file.tar.gz COMMIT_SHA SCHEMA_VERSION}"
+EXPECTED_VERSION="${2:?usage: $0 /srv/backups/file.tar.gz COMMIT_SHA SCHEMA_VERSION}"
+EXPECTED_SCHEMA_VERSION="${3:?usage: $0 /srv/backups/file.tar.gz COMMIT_SHA SCHEMA_VERSION}"
 VOLUME=bunkerkartet-data
 BACKUP_DIR=/srv/backups
 ARCHIVE_DIR=$(cd "$(dirname "$ARCHIVE")" && pwd)
 ARCHIVE_NAME=$(basename "$ARCHIVE")
 PRE_BACKUP="$BACKUP_DIR/bunkerkartet-pre-restore-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
+STAGING_VOLUME="bunkerkartet-restore-staging-$(date -u +%Y%m%dT%H%M%SZ)"
 
 test -s "$ARCHIVE"
 docker volume inspect "$VOLUME" >/dev/null
+python3 scripts/verify_restore_archive.py --archive "$ARCHIVE"
 mkdir -p "$BACKUP_DIR"
-trap 'docker compose start bunkerkartet' EXIT
+docker volume create "$STAGING_VOLUME" >/dev/null
+trap 'rm -rf "${CHECK_DIR:-}"; docker volume rm "$STAGING_VOLUME" >/dev/null 2>&1 || true; docker compose start bunkerkartet' EXIT
 docker compose stop bunkerkartet
 
 docker run --rm \
@@ -111,23 +185,37 @@ docker run --rm \
 test -s "$PRE_BACKUP"
 
 docker run --rm -e ARCHIVE_NAME="$ARCHIVE_NAME" \
-  -v "$ARCHIVE_DIR:/archive:ro" \
-  alpine:3.20 sh -c 'tar -tzf "/archive/$ARCHIVE_NAME" | grep -Eq "(^|\\./)bunkerkartet.sqlite3$"'
-
-docker run --rm -e ARCHIVE_NAME="$ARCHIVE_NAME" \
-  -v "$VOLUME:/data" \
+  -v "$STAGING_VOLUME:/stage" \
   -v "$ARCHIVE_DIR:/archive:ro" \
   alpine:3.20 sh -c '
     set -eu
-    rm -rf /data/.restore-staging
-    mkdir /data/.restore-staging
-    tar -xzf "/archive/$ARCHIVE_NAME" -C /data/.restore-staging
-    test -s /data/.restore-staging/bunkerkartet.sqlite3
-    find /data -mindepth 1 -maxdepth 1 ! -name .restore-staging -exec rm -rf {} +
-    find /data/.restore-staging -mindepth 1 -maxdepth 1 -exec mv {} /data/ \;
-    rmdir /data/.restore-staging
+    tar -xzf "/archive/$ARCHIVE_NAME" -C /stage
+    test -s /stage/bunkerkartet.sqlite3
   '
 
+CHECK_DIR="$BACKUP_DIR/.bunkerkartet-restore-check-$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir "$CHECK_DIR"
+docker run --rm \
+  -v "$STAGING_VOLUME:/stage:ro" \
+  -v "$CHECK_DIR:/check" \
+  alpine:3.20 sh -c 'cp /stage/bunkerkartet.sqlite3* /check/'
+python3 scripts/verify_database.py \
+  --database "$CHECK_DIR/bunkerkartet.sqlite3" \
+  --expected-version "$EXPECTED_SCHEMA_VERSION"
+rm -rf "$CHECK_DIR"
+
+docker run --rm \
+  -v "$VOLUME:/data" \
+  -v "$STAGING_VOLUME:/stage:ro" \
+  alpine:3.20 sh -c '
+    set -eu
+    find /data -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    for name in bunkerkartet.sqlite3 bunkerkartet.sqlite3-wal bunkerkartet.sqlite3-shm; do
+      if [ -e "/stage/$name" ]; then cp "/stage/$name" "/data/$name"; fi
+    done
+  '
+
+docker volume rm "$STAGING_VOLUME" >/dev/null
 docker compose start bunkerkartet
 trap - EXIT
 health=$(curl --fail --silent http://127.0.0.1:8000/api/health)

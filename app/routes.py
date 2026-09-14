@@ -15,6 +15,7 @@ class RouteResult:
     distance_m: float
     duration_s: float
     coordinates: list[tuple[float, float]]
+    waypoint_indices: list[int] | None = None
 
 
 def normalize_ors_response(payload: dict) -> RouteResult:
@@ -48,6 +49,16 @@ def normalize_ors_response(payload: dict) -> RouteResult:
         raise ValueError("routing provider returned too few coordinates")
 
     properties = feature.get("properties", {})
+    waypoint_indices = None
+    if isinstance(properties, dict) and "way_points" in properties:
+        raw_waypoint_indices = properties["way_points"]
+        if (
+            not isinstance(raw_waypoint_indices, list)
+            or any(isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(normalized)
+                   for index in raw_waypoint_indices)
+        ):
+            raise ValueError("routing provider returned invalid waypoint indices")
+        waypoint_indices = raw_waypoint_indices
     summary = properties.get("summary", {}) if isinstance(properties, dict) else {}
     try:
         distance_m = float(summary["distance"])
@@ -58,7 +69,7 @@ def normalize_ors_response(payload: dict) -> RouteResult:
         raise ValueError("routing provider returned non-finite summary values")
     if distance_m < 0 or duration_s < 0:
         raise ValueError("routing provider returned negative summary values")
-    return RouteResult(distance_m, duration_s, normalized)
+    return RouteResult(distance_m, duration_s, normalized, waypoint_indices)
 
 
 def fetch_openrouteservice(

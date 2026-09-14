@@ -1,8 +1,14 @@
 import json
+import sqlite3
+from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.db import SCHEMA
+from app.imports import validate_import_package
 from app.main import create_app
 
 
@@ -54,6 +60,16 @@ def auth(token="secret"):
     return {"Authorization": f"Bearer {token}"}
 
 
+def commit_previewed(api, payload, *, token="secret"):
+    preview = api.post("/api/admin/imports/preview", headers=auth(token), json=payload)
+    assert preview.status_code == 200, preview.text
+    return api.post(
+        "/api/admin/imports/commit",
+        headers={**auth(token), "X-Import-Preview": preview.json()["preview_hash"]},
+        json=payload,
+    )
+
+
 def test_import_preview_and_idempotent_commit(tmp_path):
     api = client(tmp_path)
     payload = package()
@@ -70,9 +86,7 @@ def test_import_preview_and_idempotent_commit(tmp_path):
         "warnings": 0,
     }
 
-    committed = api.post(
-        "/api/admin/imports/commit", headers=auth(), json=payload
-    )
+    committed = commit_previewed(api, payload)
     assert committed.status_code == 200
     assert committed.json()["created"] == 1
     assert committed.json()["idempotent"] is False
@@ -96,6 +110,511 @@ def test_import_preview_and_idempotent_commit(tmp_path):
     assert sites.json()[0]["status"] == "candidate"
 
 
+def test_related_site_keys_are_visible_and_resolve_when_target_arrives_later(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    first["records"][0]["related_site_keys"] = ["forum:later"]
+
+    assert commit_previewed(api, first).status_code == 200
+    relation = api.get("/api/sites/1", headers=auth()).json()["relations"][0]
+    assert relation == {
+        "related_external_key": "forum:later",
+        "relation_kind": "related",
+        "related_site_id": None,
+        "related_name": None,
+        "related_status": "not_imported",
+    }
+
+    later = package("batch-later", external_key="forum:later", name="Later site")
+    assert commit_previewed(api, later).status_code == 200
+    relation = api.get("/api/sites/1", headers=auth()).json()["relations"][0]
+    assert relation["related_site_id"] == 2
+    assert relation["related_name"] == "Later site"
+    assert relation["related_status"] == "candidate"
+
+
+def test_related_site_key_cannot_point_to_itself(tmp_path):
+    api = client(tmp_path)
+    payload = package()
+    payload["records"][0]["related_site_keys"] = [payload["records"][0]["external_key"]]
+
+    response = api.post("/api/admin/imports/preview", headers=auth(), json=payload)
+
+    assert response.status_code == 422
+    assert "itself" in response.text
+
+
+def test_import_cardinality_limits_are_enforced(tmp_path):
+    payload = package()
+    payload["records"] = [
+        {**deepcopy(payload["records"][0]), "external_key": f"forum:{index}"}
+        for index in range(501)
+    ]
+    with pytest.raises(ValueError):
+        validate_import_package(payload)
+
+    payload = package()
+    payload["records"][0]["sources"] *= 21
+    with pytest.raises(ValueError):
+        validate_import_package(payload)
+
+    payload = package()
+    payload["records"][0]["warnings"] = ["warning"] * 31
+    with pytest.raises(ValueError):
+        validate_import_package(payload)
+
+    payload = package()
+    payload["records"][0]["warnings"] = ["x" * 1001]
+    with pytest.raises(ValueError):
+        validate_import_package(payload)
+
+
+def test_duplicate_warning_normalizes_name_and_marks_overlap_as_possible_relation(tmp_path):
+    api = client(tmp_path)
+    first = package(name="Same  bunker")
+    assert commit_previewed(api, first).status_code == 200
+    second = package("batch-overlap", external_key="forum:2", name="Nearby bunker")
+    second["records"][0]["geometry"] = {"latitude": 63.4015, "longitude": 10.4002}
+    second["records"][0]["uncertainty_m"] = 100
+
+    preview = api.post("/api/admin/imports/preview", headers=auth(), json=second)
+
+    assert preview.status_code == 200
+    warnings = preview.json()["records"][0]["warnings"]
+    assert any("possible relation" in warning and "not proof" in warning for warning in warnings)
+
+
+def test_new_commit_requires_a_preview_header(tmp_path):
+    api = client(tmp_path)
+
+    response = api.post("/api/admin/imports/commit", headers=auth(), json=package())
+
+    assert response.status_code == 409
+    assert "fresh preview" in response.text
+
+
+def test_site_patch_uses_revision_and_rejects_stale_writes(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site = api.get("/api/sites/1", headers=auth()).json()
+
+    first = api.patch(
+        "/api/sites/1", headers=auth(),
+        json={"name": "First edit", "expected_revision": site["revision"]},
+    )
+    stale = api.patch(
+        "/api/sites/1", headers=auth(),
+        json={"name": "Stale edit", "expected_revision": site["revision"]},
+    )
+
+    assert first.status_code == 200
+    assert first.json()["revision"] == site["revision"] + 1
+    assert stale.status_code == 409
+    assert api.get("/api/sites/1", headers=auth()).json()["name"] == "First edit"
+
+
+def test_observation_request_id_makes_retry_idempotent_and_conflicting_payloads_fail(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    payload = {
+        "request_id": "observation-retry-1",
+        "observed_at": "2026-09-14",
+        "outcome": "found",
+        "note": "Observed from the public path.",
+    }
+
+    first = api.post("/api/sites/1/observations", headers=auth(), json=payload)
+    repeated = api.post("/api/sites/1/observations", headers=auth(), json=payload)
+    changed = api.post(
+        "/api/sites/1/observations", headers=auth(), json={**payload, "note": "Different note."}
+    )
+
+    assert first.status_code == 201
+    assert first.json()["idempotent"] is False
+    assert repeated.status_code == 200
+    assert repeated.json()["idempotent"] is True
+    assert repeated.json()["observation"]["id"] == first.json()["observation"]["id"]
+    assert changed.status_code == 409
+
+
+def test_parallel_observation_retries_are_serialized_and_revisioned(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    payload = {
+        "request_id": "parallel-observation-1",
+        "observed_at": "2026-09-14",
+        "outcome": "found",
+        "note": "Observed from the public path.",
+    }
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(
+            lambda _: api.post("/api/sites/1/observations", headers=auth(), json=payload), range(2)
+        ))
+
+    assert sorted(response.status_code for response in responses) == [200, 201]
+    assert responses[0].json()["observation"]["id"] == responses[1].json()["observation"]["id"]
+    assert api.get("/api/sites/1", headers=auth()).json()["revision"] == 2
+
+    different = {**payload, "note": "A different payload."}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        conflicts = list(pool.map(
+            lambda _: api.post("/api/sites/1/observations", headers=auth(), json=different), range(2)
+        ))
+    assert [response.status_code for response in conflicts] == [409, 409]
+
+
+def test_merge_rejects_duplicate_observation_request_ids_without_rewriting(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    second = package("batch-2", external_key="forum:2", name="Second bunker")
+    assert commit_previewed(api, second).status_code == 200
+    observation = {
+        "request_id": "same-request-id",
+        "observed_at": "2026-09-14",
+        "outcome": "found",
+        "note": "Observed from the public path.",
+    }
+    assert api.post("/api/sites/1/observations", headers=auth(), json=observation).status_code == 201
+    assert api.post("/api/sites/2/observations", headers=auth(), json=observation).status_code == 201
+
+    response = api.post(
+        "/api/sites/1/review",
+        headers=auth(),
+        json={"action": "merge", "target_site_id": 2},
+    )
+
+    assert response.status_code == 409
+    with api.app.state.database.connect() as connection:
+        rows = connection.execute(
+            "SELECT id, site_id, request_id FROM field_observations ORDER BY id"
+        ).fetchall()
+    assert [(row["id"], row["site_id"], row["request_id"]) for row in rows] == [
+        (1, 1, "same-request-id"),
+        (2, 2, "same-request-id"),
+    ]
+
+
+def test_parallel_reviews_have_one_commit_and_one_conflict(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(
+            lambda _: api.post("/api/sites/1/review", headers=auth(), json={"action": "accept"}), range(2)
+        ))
+
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    site = api.get("/api/sites/1", headers=auth()).json()
+    assert site["status"] == "likely"
+    assert site["revision"] == 2
+
+
+def test_site_events_are_auth_protected_bounded_and_readable(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site = api.get("/api/sites/1", headers=auth()).json()
+    assert api.patch(
+        "/api/sites/1", headers=auth(),
+        json={"name": "Evented edit", "expected_revision": site["revision"]},
+    ).status_code == 200
+
+    too_many = api.get("/api/sites/1/events?limit=101", headers=auth())
+    events = api.get("/api/sites/1/events?limit=50", headers=auth())
+
+    assert too_many.status_code == 422
+    assert events.status_code == 200
+    assert {event["event_type"] for event in events.json()} >= {"import", "edit"}
+    assert "https://example.com/forum/1" not in events.text
+    edit = next(event for event in events.json() if event["event_type"] == "edit")
+    assert edit["payload"] == {
+        "before": {"name": "Leira bunker"},
+        "after": {"name": "Evented edit"},
+    }
+
+
+def test_location_review_requires_reason_and_current_revision(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    with sqlite3.connect(tmp_path / "bunkerkartet.sqlite3") as connection:
+        connection.execute("UPDATE sites SET location_review_required = 1 WHERE id = 1")
+    site = api.get("/api/sites/1", headers=auth()).json()
+
+    reviewed = api.post(
+        "/api/sites/1/location-review", headers=auth(),
+        json={"reason": "Curator rechecked the new map position.", "expected_revision": site["revision"]},
+    )
+    stale = api.post(
+        "/api/sites/1/location-review", headers=auth(),
+        json={"reason": "Stale review.", "expected_revision": site["revision"]},
+    )
+
+    assert reviewed.status_code == 200
+    assert reviewed.json()["site"]["location_review_required"] == 0
+    assert reviewed.json()["site"]["revision"] == site["revision"] + 1
+    assert stale.status_code == 409
+
+
+def test_commit_rejects_stale_preview_after_site_change(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    assert commit_previewed(api, first).status_code == 200
+    candidate_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    second = package("batch-2")
+    preview = api.post("/api/admin/imports/preview", headers=auth(), json=second).json()
+    assert api.patch(
+        f"/api/sites/{candidate_id}", headers=auth(), json={"name": "Curator name", "expected_revision": 1}
+    ).status_code == 200
+
+    response = api.post(
+        "/api/admin/imports/commit",
+        headers={**auth(), "X-Import-Preview": preview["preview_hash"]},
+        json=second,
+    )
+
+    assert response.status_code == 409
+    assert api.get(f"/api/sites/{candidate_id}", headers=auth()).json()["name"] == "Curator name"
+
+
+def test_preview_exposes_stable_payload_hash(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    second = json.loads(json.dumps(first))
+    second["records"][0]["short_rationale"] = "Changed rationale."
+
+    first_preview = api.post("/api/admin/imports/preview", headers=auth(), json=first)
+    second_preview = api.post("/api/admin/imports/preview", headers=auth(), json=second)
+
+    assert first_preview.status_code == second_preview.status_code == 200
+    assert len(first_preview.json()["payload_hash"]) == 64
+    assert first_preview.json()["payload_hash"] != second_preview.json()["payload_hash"]
+
+
+def test_preview_effect_is_deterministic_when_record_order_changes(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    second = package("batch-2", external_key="forum:2", name="Second bunker")
+    payload = {**first, "records": [first["records"][0], second["records"][0]]}
+    reversed_payload = {**payload, "records": list(reversed(payload["records"]))}
+
+    forward = api.post("/api/admin/imports/preview", headers=auth(), json=payload).json()
+    reverse = api.post("/api/admin/imports/preview", headers=auth(), json=reversed_payload).json()
+
+    assert forward["payload_hash"] == reverse["payload_hash"]
+    assert forward["preview_hash"] == reverse["preview_hash"]
+    assert [record["external_key"] for record in forward["records"]] == ["forum:1", "forum:2"]
+
+
+def test_peer_duplicate_warnings_match_preview_and_persisted_sites(tmp_path):
+    api = client(tmp_path)
+    first = package("batch-peer-1", external_key="peer:1", name="Same bunker")
+    second = package("batch-peer-2", external_key="peer:2", name="Same bunker")
+    second["records"][0]["geometry"] = {"latitude": 63.4005, "longitude": 10.4005}
+    payload = {**first, "records": [first["records"][0], second["records"][0]]}
+
+    preview = api.post("/api/admin/imports/preview", headers=auth(), json=payload)
+    assert preview.status_code == 200
+    preview_warnings = {
+        record["external_key"]: record["warnings"] for record in preview.json()["records"]
+    }
+    assert all(warnings for warnings in preview_warnings.values())
+
+    assert api.post(
+        "/api/admin/imports/commit",
+        headers={**auth(), "X-Import-Preview": preview.json()["preview_hash"]},
+        json=payload,
+    ).status_code == 200
+    persisted = {
+        site["external_key"]: site["warnings"]
+        for site in api.get("/api/sites", headers=auth()).json()
+    }
+    assert persisted == preview_warnings
+
+
+def test_same_batch_with_different_payload_is_rejected(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    assert commit_previewed(api, first).status_code == 200
+    changed = json.loads(json.dumps(first))
+    changed["records"][0]["sources"][0]["excerpt"] = "Different excerpt."
+
+    response = commit_previewed(api, changed)
+
+    assert response.status_code == 409
+    assert api.get("/api/sites", headers=auth()).json()[0]["name"] == "Leira bunker"
+
+
+def test_same_source_url_keeps_each_import_excerpt(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    first["records"][0]["sources"][0]["excerpt"] = "First site-specific excerpt."
+    second = package("batch-2")
+    second["records"][0]["sources"][0]["excerpt"] = "Second site-specific excerpt."
+
+    assert commit_previewed(api, first).status_code == 200
+    assert commit_previewed(api, second).status_code == 200
+
+    sources = api.get("/api/sites/1", headers=auth()).json()["sources"]
+    assert [source["excerpt"] for source in sources] == [
+        "First site-specific excerpt.",
+        "Second site-specific excerpt.",
+    ]
+
+
+def test_legacy_credential_url_is_withheld_from_detail(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    sentinel = "synthetic-legacy-secret"
+    with sqlite3.connect(tmp_path / "bunkerkartet.sqlite3") as connection:
+        connection.execute(
+            "UPDATE sources SET url = ? WHERE url = ?",
+            (f"https://example.com/map?token={sentinel}", "https://example.com/forum/1"),
+        )
+
+    response = api.get("/api/sites/1", headers=auth())
+
+    assert response.status_code == 200
+    source = response.json()["sources"][0]
+    assert source["url"] is None
+    assert source["url_status"] == "legacy reference withheld; review required"
+    assert sentinel not in response.text
+
+
+def test_legacy_credential_photo_url_is_withheld_from_detail(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    sentinel = "synthetic-legacy-photo-secret"
+    observation = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={"observed_at": "2026-09-14", "outcome": "found", "note": "Observed."},
+    )
+    observation_id = observation.json()["observation"]["id"]
+    with sqlite3.connect(tmp_path / "bunkerkartet.sqlite3") as connection:
+        connection.execute(
+            "UPDATE field_observations SET photo_urls_json = ? WHERE id = ?",
+            (json.dumps([f"https://example.com/photo?token={sentinel}"]), observation_id),
+        )
+
+    response = api.get(f"/api/sites/{site_id}", headers=auth())
+
+    assert response.status_code == 200
+    observation = response.json()["field_observations"][0]
+    assert observation["photo_urls"] == []
+    assert observation["photo_urls_status"] == "legacy reference withheld; review required"
+    assert sentinel not in response.text
+
+
+@pytest.mark.parametrize("shared_url", [True, False])
+def test_merge_preserves_evidence_after_v1_migration(tmp_path, shared_url):
+    path = tmp_path / "bunkerkartet.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version = 1")
+        for site_id in (1, 2):
+            connection.execute(
+                "INSERT INTO sites (external_key, name, site_kind, precision, location_basis, created_at, updated_at) VALUES (?, ?, 'bunker', 'unknown', 'landmark_description', '2026-09-14', '2026-09-14')",
+                (f"legacy:{site_id}", f"Legacy {site_id}"),
+            )
+            url = "https://example.com/shared" if shared_url else f"https://example.com/source-{site_id}"
+            source_id = connection.execute(
+                "SELECT id FROM sources WHERE url = ?", (url,)
+            ).fetchone()
+            if source_id is None:
+                source_id = connection.execute(
+                    "INSERT INTO sources (url, title, source_type, excerpt, created_at, updated_at) VALUES (?, 'Legacy source', 'test', 'Overwritten', '2026-09-14', '2026-09-14')",
+                    (url,),
+                ).lastrowid
+            else:
+                source_id = source_id[0]
+            batch_id = f"legacy-batch-{site_id}"
+            connection.execute(
+                "INSERT INTO import_batches (batch_id, schema_version, generated_at, created_at, committed_at) VALUES (?, '1.0', '2026-09-14T00:00:00+00:00', '2026-09-14', '2026-09-14')",
+                (batch_id,),
+            )
+            connection.execute(
+                "INSERT INTO import_records (batch_id, external_key, site_id, action, payload_json, created_at) VALUES (?, ?, ?, 'created', ?, '2026-09-14')",
+                (
+                    batch_id,
+                    f"legacy:{site_id}",
+                    site_id,
+                    json.dumps({
+                        "external_key": f"legacy:{site_id}",
+                        "sources": [{
+                            "url": url,
+                            "title": "Legacy source",
+                            "source_type": "test",
+                            "excerpt": f"Site {site_id} evidence",
+                            "publication_date": None,
+                            "access_date": None,
+                        }],
+                    }),
+                ),
+            )
+            connection.execute(
+                "INSERT INTO evidence (site_id, source_id, role, created_at) VALUES (?, ?, 'source', '2026-09-14')",
+                (site_id, source_id),
+            )
+
+    api = client(tmp_path)
+    sites = api.get("/api/sites", headers=auth()).json()
+    response = api.post(
+        f"/api/sites/{sites[0]['id']}/review",
+        headers=auth(),
+        json={"action": "merge", "target_site_id": sites[1]["id"]},
+    )
+
+    assert response.status_code == 200
+    target = api.get(f"/api/sites/{sites[1]['id']}", headers=auth()).json()
+    assert len(target["sources"]) == 2
+    with api.app.state.database.connect() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM evidence_items WHERE site_id = ?", (sites[1]["id"],)
+        ).fetchone()[0] == 2
+        assert connection.execute(
+            "SELECT COUNT(*) FROM evidence_items WHERE legacy_evidence_id IS NOT NULL"
+        ).fetchone()[0] == 0
+
+
+def test_legacy_batch_hash_is_reconstructed_for_exact_retry(tmp_path):
+    path = tmp_path / "bunkerkartet.sqlite3"
+    payload = package()
+    record = validate_import_package(payload).records[0].model_dump(mode="json")
+    with sqlite3.connect(path) as connection:
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version = 1")
+        connection.execute(
+            "INSERT INTO import_batches (batch_id, schema_version, generated_at, created_at, committed_at) VALUES ('batch-1', '1.0', '2026-09-13T12:00:00+00:00', '2026-09-14', '2026-09-14')"
+        )
+        connection.execute(
+            "INSERT INTO import_records (batch_id, external_key, action, payload_json, created_at) VALUES ('batch-1', 'forum:1', 'created', ?, '2026-09-14')",
+            (json.dumps(record),),
+        )
+
+    api = client(tmp_path)
+    response = commit_previewed(api, payload)
+
+    assert response.status_code == 200
+    assert response.json()["idempotent"] is True
+
+
+def test_legacy_batch_without_reconstructable_records_is_explicitly_unverifiable(tmp_path):
+    path = tmp_path / "bunkerkartet.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version = 1")
+        connection.execute(
+            "INSERT INTO import_batches (batch_id, schema_version, generated_at, created_at, committed_at) VALUES ('batch-1', '1.0', '2026-09-13T12:00:00+00:00', '2026-09-14', '2026-09-14')"
+        )
+
+    api = client(tmp_path)
+    response = commit_previewed(api, package())
+
+    assert response.status_code == 409
+    assert "cannot be verified" in response.text
+
+
 def test_import_rejects_duplicate_external_keys_before_commit(tmp_path):
     api = client(tmp_path)
     payload = package()
@@ -114,7 +633,7 @@ def test_import_rejects_duplicate_external_keys_before_commit(tmp_path):
 def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
     api = client(tmp_path)
     first = package()
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    assert commit_previewed(api, first).status_code == 200
 
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
     assert api.post(
@@ -142,20 +661,20 @@ def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
         f"/api/sites/{site_id}",
         headers=auth(),
         json={
+            "expected_revision": api.get(f"/api/sites/{site_id}", headers=auth()).json()["revision"],
             "name": "Curated bunker",
             "latitude": 63.401,
             "longitude": 10.401,
             "precision": "exact",
             "uncertainty_m": 5,
+            "location_basis": "explicit_coordinate",
         },
     )
     assert edited.status_code == 200
 
     second = package("batch-2", name="Imported replacement")
     second["records"][0]["sources"][0]["url"] = "https://example.com/forum/2"
-    committed = api.post(
-        "/api/admin/imports/commit", headers=auth(), json=second
-    )
+    committed = commit_previewed(api, second)
     assert committed.status_code == 200
     assert committed.json()["preserved"] == 1
     assert committed.json()["evidence_attached"] == 1
@@ -164,6 +683,7 @@ def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
     assert site["name"] == "Curated bunker"
     assert site["status"] == "trusted"
     assert site["latitude"] == 63.401
+    assert site["location_review_required"] == 1
     assert len(site["sources"]) == 2
 
 
@@ -175,7 +695,7 @@ def test_import_does_not_erase_candidate_location_or_cautions_when_new_source_ha
         condition="Current condition unknown",
         confidence="medium",
     )
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    assert commit_previewed(api, first).status_code == 200
 
     second = package("batch-2")
     second["records"][0].update(
@@ -191,7 +711,7 @@ def test_import_does_not_erase_candidate_location_or_cautions_when_new_source_ha
     )
     second["records"][0]["sources"][0]["url"] = "https://example.com/forum/no-point"
 
-    response = api.post("/api/admin/imports/commit", headers=auth(), json=second)
+    response = commit_previewed(api, second)
 
     assert response.status_code == 200
     site = api.get("/api/sites/1", headers=auth()).json()
@@ -213,7 +733,7 @@ def test_blank_candidate_text_from_new_source_is_preserved(tmp_path):
         short_rationale="Existing coordinate rationale",
         observed_location_text="Existing landmark clue",
     )
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    assert commit_previewed(api, first).status_code == 200
 
     second = package("batch-2")
     second["records"][0].update(
@@ -228,7 +748,7 @@ def test_blank_candidate_text_from_new_source_is_preserved(tmp_path):
     )
     second["records"][0]["sources"][0]["url"] = "https://example.com/forum/blank-text"
 
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    assert commit_previewed(api, second).status_code == 200
     site = api.get("/api/sites/1", headers=auth()).json()
     assert site["condition"] == "Existing condition note"
     assert site["confidence"] == "medium"
@@ -238,11 +758,11 @@ def test_blank_candidate_text_from_new_source_is_preserved(tmp_path):
 
 def test_site_status_changes_use_review_workflow(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     response = api.patch(
-        f"/api/sites/{site_id}", headers=auth(), json={"status": "trusted"}
+        f"/api/sites/{site_id}", headers=auth(), json={"status": "trusted", "expected_revision": 1}
     )
 
     assert response.status_code == 409
@@ -259,14 +779,70 @@ def test_import_rejects_excluded_snublestein_record(tmp_path):
     assert response.status_code == 422
 
 
+def test_import_url_validation_does_not_echo_nested_secret_value(tmp_path):
+    api = client(tmp_path)
+    payload = package()
+    sentinel = "synthetic-private-value"
+    payload["records"][0]["sources"][0]["url"] = (
+        "https://example.com/map?layer=https%3A%2F%2Fexample.org%2Fwms"
+        "%3Fapi_key%3D" + sentinel
+    )
+
+    response = api.post("/api/admin/imports/preview", headers=auth(), json=payload)
+
+    assert response.status_code == 422
+    assert sentinel not in response.text
+
+
+def test_observation_photo_url_validation_does_not_echo_secret_value(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    sentinel = "synthetic-photo-secret"
+
+    response = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Observed from the public path.",
+            "photo_urls": [f"https://example.com/photo?token={sentinel}"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert sentinel not in response.text
+
+
+@pytest.mark.parametrize("photo_urls", [123, {"url": "https://example.com/photo.jpg"}, "https://example.com/photo.jpg"])
+def test_observation_photo_urls_wrong_container_is_validation_error(tmp_path, photo_urls):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+
+    response = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Observed from the public path.",
+            "photo_urls": photo_urls,
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_candidate_review_accept_reject_restore_and_duplicate_warning(tmp_path):
     api = client(tmp_path)
     first = package()
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    assert commit_previewed(api, first).status_code == 200
     first_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     second = package("batch-2", external_key="forum:2")
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    assert commit_previewed(api, second).status_code == 200
     preview = api.post(
         "/api/admin/imports/preview", headers=auth(), json=package("batch-3", external_key="forum:3")
     )
@@ -285,7 +861,7 @@ def test_candidate_review_accept_reject_restore_and_duplicate_warning(tmp_path):
 
 def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     researched = api.post(
@@ -343,7 +919,7 @@ def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
 
 def test_review_exposes_explicit_approximate_and_destroyed_transitions(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     approximate = api.post(
@@ -372,7 +948,7 @@ def test_review_exposes_explicit_approximate_and_destroyed_transitions(tmp_path)
 
 def test_field_verification_requires_an_observation(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     assert api.post(
@@ -390,7 +966,7 @@ def test_field_verification_requires_an_observation(tmp_path):
 
 def test_field_verification_requires_a_found_observation(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     assert api.post(
@@ -414,8 +990,8 @@ def test_observations_are_rejected_for_rejected_or_merged_sites(tmp_path):
     api = client(tmp_path)
     first = package()
     second = package("batch-2", external_key="forum:2", name="Second bunker")
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    assert commit_previewed(api, first).status_code == 200
+    assert commit_previewed(api, second).status_code == 200
     sites = api.get("/api/sites", headers=auth()).json()
     first_id = next(site["id"] for site in sites if site["external_key"] == "forum:1")
     second_id = next(site["id"] for site in sites if site["external_key"] == "forum:2")
@@ -437,24 +1013,38 @@ def test_observations_are_rejected_for_rejected_or_merged_sites(tmp_path):
 
 def test_site_edit_requires_consistent_coordinates_and_precision(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
 
     clear_without_precision = api.patch(
-        "/api/sites/1", headers=auth(), json={"latitude": None, "longitude": None}
+        "/api/sites/1", headers=auth(), json={"latitude": None, "longitude": None, "expected_revision": 1}
     )
     assert clear_without_precision.status_code == 422
 
     missing_uncertainty = api.patch(
         "/api/sites/1",
         headers=auth(),
-        json={"latitude": 63.4, "longitude": 10.4, "uncertainty_m": None},
+        json={"latitude": 63.4, "longitude": 10.4, "uncertainty_m": None, "expected_revision": 1},
     )
     assert missing_uncertainty.status_code == 422
+
+    exact_inferred = api.patch(
+        "/api/sites/1",
+        headers=auth(),
+        json={
+            "expected_revision": 1,
+            "latitude": 63.4,
+            "longitude": 10.4,
+            "precision": "exact",
+            "uncertainty_m": 1,
+            "location_basis": "llm_inference",
+        },
+    )
+    assert exact_inferred.status_code == 422
 
     cleared = api.patch(
         "/api/sites/1",
         headers=auth(),
-        json={"latitude": None, "longitude": None, "precision": "unknown"},
+        json={"latitude": None, "longitude": None, "precision": "unknown", "expected_revision": 1},
     )
     assert cleared.status_code == 200
     assert cleared.json()["latitude"] is None
@@ -463,7 +1053,7 @@ def test_site_edit_requires_consistent_coordinates_and_precision(tmp_path):
 
 def test_site_list_exposes_observation_points(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     observed = api.post(
@@ -496,7 +1086,7 @@ def test_site_list_exposes_observation_points(tmp_path):
 
 def test_found_observation_coordinate_can_be_adopted_with_audit_event(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
     observed = api.post(
         f"/api/sites/{site_id}/observations",
@@ -507,6 +1097,8 @@ def test_found_observation_coordinate_can_be_adopted_with_audit_event(tmp_path):
             "note": "Entrance found beside the marked path.",
             "latitude": 63.401,
             "longitude": 10.401,
+            "point_role": "feature",
+            "uncertainty_m": 8,
         },
     )
     observation_id = observed.json()["observation"]["id"]
@@ -537,9 +1129,42 @@ def test_found_observation_coordinate_can_be_adopted_with_audit_event(tmp_path):
     }
 
 
+def test_adopting_new_feature_coordinate_on_trusted_site_requires_location_review(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"action": "research"}).status_code == 200
+    baseline = api.post(
+        f"/api/sites/{site_id}/observations", headers=auth(), json={
+            "observed_at": "2026-09-14", "outcome": "found", "note": "Feature confirmed."
+        }
+    )
+    assert baseline.status_code == 201
+    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"action": "field_verify"}).status_code == 200
+    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"action": "confirm"}).status_code == 200
+    observation_id = api.post(
+        f"/api/sites/{site_id}/observations", headers=auth(), json={
+            "observed_at": "2026-09-14", "outcome": "found", "note": "New feature point.",
+            "latitude": 63.401, "longitude": 10.401, "point_role": "feature", "uncertainty_m": 8,
+        }
+    ).json()["observation"]["id"]
+
+    adopted = api.post(
+        f"/api/sites/{site_id}/observations/{observation_id}/adopt-location", headers=auth()
+    )
+
+    assert adopted.status_code == 200
+    assert adopted.json()["site"]["location_review_required"] == 1
+    repeated = api.post(
+        f"/api/sites/{site_id}/observations/{observation_id}/adopt-location", headers=auth()
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["site"]["location_review_required"] == 1
+
+
 def test_only_found_observation_with_coordinates_can_be_adopted(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
     not_found = api.post(
         f"/api/sites/{site_id}/observations",
@@ -570,6 +1195,35 @@ def test_only_found_observation_with_coordinates_can_be_adopted(tmp_path):
     ).status_code == 409
 
 
+def test_adoption_requires_feature_role_and_explicit_radius(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    missing_radius = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14", "outcome": "found", "note": "Feature.",
+            "latitude": 63.401, "longitude": 10.401, "point_role": "feature",
+        },
+    ).json()["observation"]["id"]
+    entrance = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14", "outcome": "found", "note": "Entrance.",
+            "latitude": 63.401, "longitude": 10.401, "point_role": "entrance", "uncertainty_m": 8,
+        },
+    ).json()["observation"]["id"]
+
+    assert api.post(
+        f"/api/sites/{site_id}/observations/{missing_radius}/adopt-location", headers=auth()
+    ).status_code == 409
+    assert api.post(
+        f"/api/sites/{site_id}/observations/{entrance}/adopt-location", headers=auth()
+    ).status_code == 409
+
+
 def test_field_priority_returns_only_public_sites_in_research_order(tmp_path):
     api = client(tmp_path)
     records = [
@@ -582,7 +1236,7 @@ def test_field_priority_returns_only_public_sites_in_research_order(tmp_path):
         payload = package(f"batch-{key}", name=name, external_key=f"field:{key}")
         payload["records"][0]["sources"][0]["url"] = f"https://example.com/field/{key}"
         payload["records"][0].update(access=access, confidence=confidence, uncertainty_m=uncertainty)
-        assert api.post("/api/admin/imports/commit", headers=auth(), json=payload).status_code == 200
+        assert commit_previewed(api, payload).status_code == 200
 
     response = api.get("/api/field-priority?limit=10", headers=auth())
 
@@ -611,8 +1265,8 @@ def test_candidate_review_filters_combine_curator_fields(tmp_path):
         uncertainty_m=80,
         sources=[{**narrow["records"][0]["sources"][0], "source_type": "website"}],
     )
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=broad).status_code == 200
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=narrow).status_code == 200
+    assert commit_previewed(api, broad).status_code == 200
+    assert commit_previewed(api, narrow).status_code == 200
 
     response = api.get(
         "/api/review/candidates?confidence=low&access=permission_required"
@@ -630,8 +1284,8 @@ def test_site_kind_filter_matches_case_insensitive_substrings(tmp_path):
     bunker = package()
     cave = package("batch-cave", name="Ridge cave", external_key="forum:cave")
     cave["records"][0]["site_kind"] = "cave"
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=bunker).status_code == 200
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=cave).status_code == 200
+    assert commit_previewed(api, bunker).status_code == 200
+    assert commit_previewed(api, cave).status_code == 200
 
     response = api.get("/api/sites?site_kind=BUNK", headers=auth())
 
@@ -647,8 +1301,8 @@ def test_site_list_filters_access_and_confidence(tmp_path):
     unknown = package("batch-unknown", name="Unknown lead", external_key="site:unknown")
     unknown["records"][0]["sources"][0]["url"] = "https://example.com/site/unknown"
     unknown["records"][0].update(access="unknown", confidence="low")
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=public).status_code == 200
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=unknown).status_code == 200
+    assert commit_previewed(api, public).status_code == 200
+    assert commit_previewed(api, unknown).status_code == 200
 
     response = api.get("/api/sites?access=public&confidence=high", headers=auth())
 
@@ -665,8 +1319,8 @@ def test_site_search_matches_name_and_rationale(tmp_path):
         "batch-second", name="Harbour feature", external_key="forum:second"
     )
     second["records"][0]["short_rationale"] = "Near the Kuhaugen ridge."
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    assert commit_previewed(api, first).status_code == 200
+    assert commit_previewed(api, second).status_code == 200
 
     response = api.get("/api/sites?q=KUHAUGEN", headers=auth())
 
@@ -679,7 +1333,7 @@ def test_site_search_matches_name_and_rationale(tmp_path):
 
 def test_geojson_export_contains_sites_and_observations(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
     assert api.post(
         f"/api/sites/{site_id}/observations",
@@ -707,11 +1361,11 @@ def test_geojson_export_contains_sites_and_observations(tmp_path):
 
 def test_editing_warnings_updates_the_json_column(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     response = api.patch(
-        f"/api/sites/{site_id}", headers=auth(), json={"warnings": ["Check gate"]}
+        f"/api/sites/{site_id}", headers=auth(), json={"warnings": ["Check gate"], "expected_revision": 1}
     )
 
     assert response.status_code == 200
@@ -720,11 +1374,11 @@ def test_editing_warnings_updates_the_json_column(tmp_path):
 
 def test_edit_rejects_null_for_required_site_fields(tmp_path):
     api = client(tmp_path)
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     response = api.patch(
-        f"/api/sites/{site_id}", headers=auth(), json={"name": None}
+        f"/api/sites/{site_id}", headers=auth(), json={"name": None, "expected_revision": 1}
     )
 
     assert response.status_code == 422
@@ -734,8 +1388,8 @@ def test_merge_transfers_evidence_without_duplicate_failure(tmp_path):
     api = client(tmp_path)
     first = package()
     second = package("batch-2", external_key="forum:2")
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    assert commit_previewed(api, first).status_code == 200
+    assert commit_previewed(api, second).status_code == 200
     sites = api.get("/api/sites", headers=auth()).json()
     observation = api.post(
         f"/api/sites/{sites[0]['id']}/observations",
@@ -757,7 +1411,7 @@ def test_merge_transfers_evidence_without_duplicate_failure(tmp_path):
     assert response.status_code == 200
     assert response.json()["status"] == "merged"
     target = api.get(f"/api/sites/{sites[1]['id']}", headers=auth()).json()
-    assert len(target["sources"]) == 1
+    assert len(target["sources"]) == 2
     assert len(target["field_observations"]) == 1
 
 
@@ -765,8 +1419,8 @@ def test_merged_sites_cannot_be_reviewed_or_used_as_merge_targets(tmp_path):
     api = client(tmp_path)
     first = package()
     second = package("batch-2", external_key="forum:2")
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    assert commit_previewed(api, first).status_code == 200
+    assert commit_previewed(api, second).status_code == 200
     sites = api.get("/api/sites", headers=auth()).json()
 
     merged = api.post(
@@ -789,7 +1443,7 @@ def test_merged_sites_cannot_be_reviewed_or_used_as_merge_targets(tmp_path):
     assert target_rejected.status_code == 200
 
     third = package("batch-3", external_key="forum:3")
-    assert api.post("/api/admin/imports/commit", headers=auth(), json=third).status_code == 200
+    assert commit_previewed(api, third).status_code == 200
     third_id = next(
         site["id"]
         for site in api.get("/api/sites", headers=auth()).json()

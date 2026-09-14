@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,15 +27,12 @@ def test_ci_checks_frontend_syntax():
 
 def test_ci_actions_are_commit_pinned():
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    action_refs = re.findall(r"uses:\s+[^@\s]+@([^\s#]+)", workflow)
+    assert action_refs
+    assert all(re.fullmatch(r"[0-9a-f]{40}", reference) for reference in action_refs)
 
-    for action in (
-        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-        "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
-        "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
-        "docker/login-action@dbcb813823bdd20940b903addbd779551569679f",
-        "docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a",
-    ):
-        assert action in workflow
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    assert re.search(r"FROM python:3\.12-slim@sha256:[0-9a-f]{64}", dockerfile)
 
 
 def test_dependabot_tracks_runtime_container_and_actions():

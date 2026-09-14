@@ -31,7 +31,8 @@ LLM- eller researchoppsett og lastes inn som et strengt JSON-format.
   tilgjengelige for tilnærming.
 - Gå-rute via OpenRouteService, lagring av ruter, GPX-nedlasting og GeoJSON-
   eksport. Nettleserens posisjon kan brukes opt-in som startpunkt for en rute;
-  posisjonen lagres ikke av denne funksjonen.
+  posisjonen lagres ikke som en egen observasjon av denne funksjonen, og
+  nettleserens målenøyaktighet brukes ikke som stedets usikkerhetsradius.
 
 ## Kjør lokalt
 
@@ -79,13 +80,15 @@ Den samme forhåndsvisningen og innlastingen kan gjøres mot API-et:
 export BUNKERKARTET_URL=https://bunker.reidar.tech
 export ADMIN_TOKEN='bruk-tokenet-fra-en-hemmelighetsløsning'
 
-curl --fail-with-body -sS "$BUNKERKARTET_URL/api/admin/imports/preview" \
+PREVIEW=$(curl --fail-with-body -sS "$BUNKERKARTET_URL/api/admin/imports/preview" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   --data-binary @package.json
+PREVIEW_HASH=$(printf '%s' "$PREVIEW" | python3 -c 'import json, sys; print(json.load(sys.stdin)["preview_hash"])')
 
 curl --fail-with-body -sS "$BUNKERKARTET_URL/api/admin/imports/commit" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "X-Import-Preview: $PREVIEW_HASH" \
   -H 'Content-Type: application/json' \
   --data-binary @package.json
 ```
