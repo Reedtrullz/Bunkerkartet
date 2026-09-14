@@ -166,6 +166,90 @@ def test_new_commit_requires_a_preview_header(tmp_path):
     assert "fresh preview" in response.text
 
 
+def test_site_patch_uses_revision_and_rejects_stale_writes(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site = api.get("/api/sites/1", headers=auth()).json()
+
+    first = api.patch(
+        "/api/sites/1", headers=auth(),
+        json={"name": "First edit", "expected_revision": site["revision"]},
+    )
+    stale = api.patch(
+        "/api/sites/1", headers=auth(),
+        json={"name": "Stale edit", "expected_revision": site["revision"]},
+    )
+
+    assert first.status_code == 200
+    assert first.json()["revision"] == site["revision"] + 1
+    assert stale.status_code == 409
+    assert api.get("/api/sites/1", headers=auth()).json()["name"] == "First edit"
+
+
+def test_observation_request_id_makes_retry_idempotent_and_conflicting_payloads_fail(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    payload = {
+        "request_id": "observation-retry-1",
+        "observed_at": "2026-09-14",
+        "outcome": "found",
+        "note": "Observed from the public path.",
+    }
+
+    first = api.post("/api/sites/1/observations", headers=auth(), json=payload)
+    repeated = api.post("/api/sites/1/observations", headers=auth(), json=payload)
+    changed = api.post(
+        "/api/sites/1/observations", headers=auth(), json={**payload, "note": "Different note."}
+    )
+
+    assert first.status_code == 201
+    assert first.json()["idempotent"] is False
+    assert repeated.status_code == 200
+    assert repeated.json()["idempotent"] is True
+    assert repeated.json()["observation"]["id"] == first.json()["observation"]["id"]
+    assert changed.status_code == 409
+
+
+def test_site_events_are_auth_protected_bounded_and_readable(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site = api.get("/api/sites/1", headers=auth()).json()
+    assert api.patch(
+        "/api/sites/1", headers=auth(),
+        json={"name": "Evented edit", "expected_revision": site["revision"]},
+    ).status_code == 200
+
+    too_many = api.get("/api/sites/1/events?limit=101", headers=auth())
+    events = api.get("/api/sites/1/events?limit=50", headers=auth())
+
+    assert too_many.status_code == 422
+    assert events.status_code == 200
+    assert {event["event_type"] for event in events.json()} >= {"import", "edit"}
+    assert "https://example.com/forum/1" not in events.text
+
+
+def test_location_review_requires_reason_and_current_revision(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    with sqlite3.connect(tmp_path / "bunkerkartet.sqlite3") as connection:
+        connection.execute("UPDATE sites SET location_review_required = 1 WHERE id = 1")
+    site = api.get("/api/sites/1", headers=auth()).json()
+
+    reviewed = api.post(
+        "/api/sites/1/location-review", headers=auth(),
+        json={"reason": "Curator rechecked the new map position.", "expected_revision": site["revision"]},
+    )
+    stale = api.post(
+        "/api/sites/1/location-review", headers=auth(),
+        json={"reason": "Stale review.", "expected_revision": site["revision"]},
+    )
+
+    assert reviewed.status_code == 200
+    assert reviewed.json()["site"]["location_review_required"] == 0
+    assert reviewed.json()["site"]["revision"] == site["revision"] + 1
+    assert stale.status_code == 409
+
+
 def test_commit_rejects_stale_preview_after_site_change(tmp_path):
     api = client(tmp_path)
     first = package()
@@ -174,7 +258,7 @@ def test_commit_rejects_stale_preview_after_site_change(tmp_path):
     second = package("batch-2")
     preview = api.post("/api/admin/imports/preview", headers=auth(), json=second).json()
     assert api.patch(
-        f"/api/sites/{candidate_id}", headers=auth(), json={"name": "Curator name"}
+        f"/api/sites/{candidate_id}", headers=auth(), json={"name": "Curator name", "expected_revision": 1}
     ).status_code == 200
 
     response = api.post(
@@ -472,6 +556,7 @@ def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
         f"/api/sites/{site_id}",
         headers=auth(),
         json={
+            "expected_revision": api.get(f"/api/sites/{site_id}", headers=auth()).json()["revision"],
             "name": "Curated bunker",
             "latitude": 63.401,
             "longitude": 10.401,
@@ -572,7 +657,7 @@ def test_site_status_changes_use_review_workflow(tmp_path):
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     response = api.patch(
-        f"/api/sites/{site_id}", headers=auth(), json={"status": "trusted"}
+        f"/api/sites/{site_id}", headers=auth(), json={"status": "trusted", "expected_revision": 1}
     )
 
     assert response.status_code == 409
@@ -826,14 +911,14 @@ def test_site_edit_requires_consistent_coordinates_and_precision(tmp_path):
     assert commit_previewed(api, package()).status_code == 200
 
     clear_without_precision = api.patch(
-        "/api/sites/1", headers=auth(), json={"latitude": None, "longitude": None}
+        "/api/sites/1", headers=auth(), json={"latitude": None, "longitude": None, "expected_revision": 1}
     )
     assert clear_without_precision.status_code == 422
 
     missing_uncertainty = api.patch(
         "/api/sites/1",
         headers=auth(),
-        json={"latitude": 63.4, "longitude": 10.4, "uncertainty_m": None},
+        json={"latitude": 63.4, "longitude": 10.4, "uncertainty_m": None, "expected_revision": 1},
     )
     assert missing_uncertainty.status_code == 422
 
@@ -841,6 +926,7 @@ def test_site_edit_requires_consistent_coordinates_and_precision(tmp_path):
         "/api/sites/1",
         headers=auth(),
         json={
+            "expected_revision": 1,
             "latitude": 63.4,
             "longitude": 10.4,
             "precision": "exact",
@@ -853,7 +939,7 @@ def test_site_edit_requires_consistent_coordinates_and_precision(tmp_path):
     cleared = api.patch(
         "/api/sites/1",
         headers=auth(),
-        json={"latitude": None, "longitude": None, "precision": "unknown"},
+        json={"latitude": None, "longitude": None, "precision": "unknown", "expected_revision": 1},
     )
     assert cleared.status_code == 200
     assert cleared.json()["latitude"] is None
@@ -1174,7 +1260,7 @@ def test_editing_warnings_updates_the_json_column(tmp_path):
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     response = api.patch(
-        f"/api/sites/{site_id}", headers=auth(), json={"warnings": ["Check gate"]}
+        f"/api/sites/{site_id}", headers=auth(), json={"warnings": ["Check gate"], "expected_revision": 1}
     )
 
     assert response.status_code == 200
@@ -1187,7 +1273,7 @@ def test_edit_rejects_null_for_required_site_fields(tmp_path):
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     response = api.patch(
-        f"/api/sites/{site_id}", headers=auth(), json={"name": None}
+        f"/api/sites/{site_id}", headers=auth(), json={"name": None, "expected_revision": 1}
     )
 
     assert response.status_code == 422

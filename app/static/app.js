@@ -427,6 +427,8 @@ async function runReviewAction(id, action, targetSiteId = null) {
   try {
     const payload = { action };
     if (targetSiteId) payload.target_site_id = targetSiteId;
+    const currentSite = state.siteCache.get(id);
+    if (currentSite?.revision) payload.expected_revision = currentSite.revision;
     const result = await api(`/api/sites/${id}/review`, { method: "POST", body: JSON.stringify(payload) });
     if (result.site) state.siteCache.set(result.site.id, result.site);
     await loadSites();
@@ -511,6 +513,7 @@ function renderSiteEditor(site, root) {
           confidence: confidence.value, access: access.value, precision: precision.value,
           uncertainty_m: numberOrNull(uncertainty.value), location_basis: basis.value,
           latitude: numberOrNull(latitude.value), longitude: numberOrNull(longitude.value),
+          expected_revision: site.revision,
           condition: condition.value.trim(), short_rationale: rationale.value.trim(),
           observed_location_text: observedText.value.trim(),
           warnings: warnings.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
@@ -537,7 +540,7 @@ function renderSiteEditor(site, root) {
     try {
       await api(`/api/sites/${site.id}/approach`, {
         method: "POST",
-        body: JSON.stringify({ latitude: numberOrNull(approachBreddegrad.value), longitude: numberOrNull(approachLengdegrad.value), access: approachTilgang.value, note: approachNote.value.trim() }),
+        body: JSON.stringify({ expected_revision: site.revision, latitude: numberOrNull(approachBreddegrad.value), longitude: numberOrNull(approachLengdegrad.value), access: approachTilgang.value, note: approachNote.value.trim() }),
       });
       setStatus("Tilnærmingsvurdering lagret.");
       await loadSites();
@@ -545,6 +548,20 @@ function renderSiteEditor(site, root) {
     } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
   });
   const approachHeading = document.createElement("h3"); text(approachHeading, "Vurdering av offentlig tilnærming"); section.append(approachHeading, approachForm);
+  if (site.location_review_required) {
+    const reviewForm = document.createElement("form"); reviewForm.className = "observation-form";
+    const reason = textareaControl(); reason.required = true; reason.placeholder = "Hvorfor er den nye plasseringen vurdert?";
+    const saveReview = document.createElement("button"); saveReview.className = "primary"; saveReview.type = "submit"; text(saveReview, "Marker plassering som vurdert");
+    reviewForm.append(labeledControl("Begrunnelse for lokaliseringsreview", reason), saveReview);
+    reviewForm.addEventListener("submit", async (event) => {
+      event.preventDefault(); saveReview.disabled = true;
+      try {
+        await api(`/api/sites/${site.id}/location-review`, { method: "POST", body: JSON.stringify({ reason: reason.value.trim(), expected_revision: site.revision }) });
+        setStatus("Lokaliseringsreview lagret."); await loadSites(); await loadDetail(site.id);
+      } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); saveReview.disabled = false; }
+    });
+    section.append(reviewForm);
+  }
 }
 
 function renderObservations(site, root) {
@@ -581,6 +598,7 @@ function renderObservations(site, root) {
   else section.append(observations);
 
   const form = document.createElement("form"); form.className = "observation-form";
+  const requestId = crypto.randomUUID();
   const localToday = new Date(); localToday.setMinutes(localToday.getMinutes() - localToday.getTimezoneOffset());
   const observedAt = inputControl("date", localToday.toISOString().slice(0, 10)); observedAt.name = "observed_at"; observedAt.required = true;
   const outcome = selectControl(["found", "not_found", "inaccessible", "needs_follow_up"], "found", { found: "Funnet", not_found: "Ikke funnet", inaccessible: "Utilgjengelig", needs_follow_up: "Må følges opp" }); outcome.name = "outcome";
@@ -603,6 +621,7 @@ function renderObservations(site, root) {
       await api(`/api/sites/${site.id}/observations`, {
         method: "POST",
         body: JSON.stringify({
+          request_id: requestId,
           observed_at: observedAt.value, outcome: outcome.value, note: note.value.trim(),
           latitude: numberOrUndefined(latitude.value), longitude: numberOrUndefined(longitude.value),
           point_role: pointRole.value, uncertainty_m: numberOrUndefined(uncertainty.value),
@@ -621,7 +640,8 @@ function renderObservations(site, root) {
 async function adoptObservationLocation(siteId, observationId) {
   if (!window.confirm("Adopt this field observation coordinate for the site?")) return;
   try {
-    await api(`/api/sites/${siteId}/observations/${observationId}/adopt-location`, { method: "POST" });
+    const site = state.siteCache.get(siteId);
+    await api(`/api/sites/${siteId}/observations/${observationId}/adopt-location`, { method: "POST", body: JSON.stringify({ expected_revision: site?.revision }) });
     setStatus("Observasjonskoordinat tatt i bruk.");
     await loadSites();
     await loadDetail(siteId);
@@ -637,7 +657,7 @@ async function loadDetail(id) {
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
   $("site-detail-heading").focus({ preventScroll: true });
   try {
-    const site = await api(`/api/sites/${id}`);
+    const [site, events] = await Promise.all([api(`/api/sites/${id}`), api(`/api/sites/${id}/events?limit=50`)]);
     state.siteCache.set(site.id, site);
     text($("site-detail-heading"), `Stedsdetaljer: ${site.name}`);
     root.replaceChildren();
@@ -666,6 +686,13 @@ async function loadDetail(id) {
         relationList.append(item);
       });
       root.append(relationList);
+    }
+    if (events.length) {
+      const history = document.createElement("details");
+      const historySummary = document.createElement("summary"); text(historySummary, "Historikk"); history.append(historySummary);
+      const historyList = document.createElement("ul"); historyList.className = "source-list";
+      events.forEach((event) => { const item = document.createElement("li"); text(item, `${event.created_at} — ${event.event_type}: ${JSON.stringify(event.payload)}`); historyList.append(item); });
+      history.append(historyList); root.append(history);
     }
     if (site.latitude != null && site.longitude != null) {
       const copyKoordinater = document.createElement("button"); copyKoordinater.className = "small"; copyKoordinater.type = "button"; text(copyKoordinater, "Kopier koordinater");

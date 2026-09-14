@@ -169,8 +169,11 @@ V7_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V6_REQUIRED_SCHE
 V7_REQUIRED_SCHEMA["site_relations"] = {
     "id", "site_id", "related_external_key", "relation_kind", "created_at",
 }
-CURRENT_SCHEMA_VERSION = 7
-REQUIRED_SCHEMA = V7_REQUIRED_SCHEMA
+V8_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V7_REQUIRED_SCHEMA.items()}
+V8_REQUIRED_SCHEMA["sites"].add("revision")
+V8_REQUIRED_SCHEMA["field_observations"].update({"request_id", "payload_hash"})
+CURRENT_SCHEMA_VERSION = 8
+REQUIRED_SCHEMA = V8_REQUIRED_SCHEMA
 
 
 def now_iso() -> str:
@@ -210,6 +213,7 @@ class Database:
                     _run_migration(connection, _migrate_v5)
                     _run_migration(connection, _migrate_v6)
                     _run_migration(connection, _migrate_v7)
+                    _run_migration(connection, _migrate_v8)
             except sqlite3.DatabaseError as exc:
                 raise RuntimeError("database initialization failed") from exc
             return
@@ -227,6 +231,7 @@ class Database:
                     else V4_REQUIRED_SCHEMA if version == 4
                     else V5_REQUIRED_SCHEMA if version == 5
                     else V6_REQUIRED_SCHEMA if version == 6
+                    else V7_REQUIRED_SCHEMA if version == 7
                     else REQUIRED_SCHEMA
                 )
                 errors = required_schema_errors(
@@ -239,7 +244,7 @@ class Database:
                 while version < CURRENT_SCHEMA_VERSION:
                     migration = {
                         1: _migrate_v1, 2: _migrate_v2, 3: _migrate_v3, 4: _migrate_v4,
-                        5: _migrate_v5, 6: _migrate_v6, 7: _migrate_v7,
+                        5: _migrate_v5, 6: _migrate_v6, 7: _migrate_v7, 8: _migrate_v8,
                     }.get(version + 1)
                     if migration is None:
                         raise RuntimeError("database migration is not available")
@@ -506,6 +511,23 @@ def _migrate_v7(connection: sqlite3.Connection) -> None:
                 (record["site_id"], related_external_key, now_iso()),
             )
     connection.execute("PRAGMA user_version = 7")
+
+
+def _migrate_v8(connection: sqlite3.Connection) -> None:
+    site_columns = {row[1] for row in connection.execute("PRAGMA table_info(sites)")}
+    if "revision" not in site_columns:
+        connection.execute("ALTER TABLE sites ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+    observation_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(field_observations)")
+    }
+    if "request_id" not in observation_columns:
+        connection.execute("ALTER TABLE field_observations ADD COLUMN request_id TEXT")
+    if "payload_hash" not in observation_columns:
+        connection.execute("ALTER TABLE field_observations ADD COLUMN payload_hash TEXT")
+    connection.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_field_observations_request ON field_observations(site_id, request_id)"
+    )
+    connection.execute("PRAGMA user_version = 8")
 
 
 def _repair_evidence_item_fk(connection: sqlite3.Connection) -> None:

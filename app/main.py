@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from html import escape as escape_html
+import hashlib
 import hmac
 import json
 import math
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Literal
 
@@ -68,6 +70,7 @@ SECURITY_HEADERS = {
 class SitePatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    expected_revision: int = Field(gt=0)
     name: str | None = Field(default=None, min_length=1, max_length=500)
     site_kind: str | None = Field(default=None, min_length=1, max_length=100)
     latitude: float | None = Field(default=None, ge=-90, le=90)
@@ -122,6 +125,7 @@ class SitePatch(BaseModel):
 class FieldObservation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    request_id: str | None = Field(default=None, min_length=1, max_length=200)
     observed_at: date
     outcome: Literal["found", "not_found", "inaccessible", "needs_follow_up"]
     note: str = Field(min_length=1, max_length=4000)
@@ -168,6 +172,27 @@ class ReviewRequest(BaseModel):
         "merge",
     ]
     target_site_id: int | None = Field(default=None, gt=0)
+    expected_revision: int | None = Field(default=None, gt=0)
+
+
+class LocationReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=2000)
+    expected_revision: int = Field(gt=0)
+
+    @field_validator("reason")
+    @classmethod
+    def require_nonblank_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("location review reason cannot be blank")
+        return value
+
+
+class ExpectedRevisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int | None = Field(default=None, gt=0)
 
 
 class RoutePoint(BaseModel):
@@ -180,6 +205,7 @@ class RoutePoint(BaseModel):
 class ApproachRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    expected_revision: int | None = Field(default=None, gt=0)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     access: Literal["unknown", "public"]
@@ -211,6 +237,11 @@ class RouteRequest(BaseModel):
 
 def _validation_detail(error: ValidationError) -> list[dict[str, object]]:
     return safe_validation_errors(error.errors())
+
+
+def _payload_digest(payload: dict[str, object]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _distance_m(first: tuple[float, float], second: tuple[float, float]) -> float:
@@ -798,7 +829,7 @@ def _commit_package(
                     UPDATE sites SET name = ?, site_kind = ?, latitude = ?, longitude = ?,
                         precision = ?, uncertainty_m = ?, location_basis = ?, status = ?,
                         access = ?, confidence = ?, condition = ?, warnings_json = ?, short_rationale = ?,
-                        observed_location_text = ?, updated_at = ?
+                        observed_location_text = ?, updated_at = ?, revision = revision + 1
                     WHERE id = ?
                     """,
                     (
@@ -930,6 +961,16 @@ def _route_summary(row: sqlite3.Row) -> dict[str, object]:
         route["stops"] = []
         route["legacy_route"] = True
     return route
+
+
+def _safe_event_payload(event_type: str, payload_json: str) -> dict[str, object]:
+    payload = load_json(payload_json, {})
+    if not isinstance(payload, dict):
+        return {}
+    if event_type == "import":
+        return {key: payload[key] for key in ("external_key", "action") if key in payload}
+    blocked = {"url", "sources", "photo_urls", "excerpt"}
+    return {key: value for key, value in payload.items() if key not in blocked}
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -1173,6 +1214,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ).fetchall()
             return [_site_detail(connection, row) for row in rows]
 
+    @app.get("/api/sites/{site_id}/events", dependencies=[Depends(admin_guard)])
+    def get_site_events(site_id: int, limit: int = Query(default=50, ge=1, le=100)) -> list[dict[str, object]]:
+        with database.connect() as connection:
+            if connection.execute("SELECT 1 FROM sites WHERE id = ?", (site_id,)).fetchone() is None:
+                raise HTTPException(404, "site not found")
+            rows = connection.execute(
+                "SELECT id, event_type, payload_json, created_at FROM site_events WHERE site_id = ? ORDER BY id DESC LIMIT ?",
+                (site_id, limit),
+            ).fetchall()
+            return [
+                {
+                    "id": row["id"],
+                    "event_type": row["event_type"],
+                    "created_at": row["created_at"],
+                    "payload": _safe_event_payload(row["event_type"], row["payload_json"]),
+                }
+                for row in rows
+            ]
+
     @app.get("/api/sites/{site_id}", dependencies=[Depends(admin_guard)])
     def get_site(site_id: int) -> dict[str, object]:
         with database.connect() as connection:
@@ -1184,6 +1244,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.patch("/api/sites/{site_id}", dependencies=[Depends(admin_guard)])
     def edit_site(site_id: int, patch: SitePatch) -> dict[str, object]:
         values = patch.model_dump(exclude_unset=True)
+        expected_revision = values.pop("expected_revision")
         if "name" in values and values["name"] is not None and "snublestein" in values["name"].casefold():
             raise HTTPException(422, "snublestein records are excluded")
         if "site_kind" in values and values["site_kind"] is not None and "snublestein" in values["site_kind"].casefold():
@@ -1194,6 +1255,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if row["revision"] != expected_revision:
+                raise HTTPException(409, "site revision is stale; reload before editing")
             new_latitude = values.get("latitude", row["latitude"])
             new_longitude = values.get("longitude", row["longitude"])
             if (new_latitude is None) != (new_longitude is None):
@@ -1227,15 +1290,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if not values:
                 raise HTTPException(400, "no site fields supplied")
             assignments = ", ".join(f"{field} = ?" for field in values)
-            values["updated_at"] = now_iso()
-            params = [*values.values(), site_id]
-            connection.execute(
-                f"UPDATE sites SET {assignments}, updated_at = ? WHERE id = ?",
-                params,
+            timestamp = now_iso()
+            cursor = connection.execute(
+                f"UPDATE sites SET {assignments}, updated_at = ?, revision = revision + 1 WHERE id = ? AND revision = ?",
+                [*values.values(), timestamp, site_id, expected_revision],
             )
+            if cursor.rowcount != 1:
+                raise HTTPException(409, "site revision is stale; reload before editing")
             connection.execute(
                 "INSERT INTO site_events (site_id, event_type, payload_json, created_at) VALUES (?, 'edit', ?, ?)",
-                (site_id, dump_json(values), now_iso()),
+                (site_id, dump_json(values), timestamp),
             )
             updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             return _site_detail(connection, updated)
@@ -1250,37 +1314,77 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(404, "site not found")
             if row["merged_into_id"] is not None:
                 raise HTTPException(409, "merged site cannot set an approach")
+            expected_revision = request.expected_revision or row["revision"]
+            if expected_revision != row["revision"]:
+                raise HTTPException(409, "site revision is stale; reload before editing")
+            timestamp = now_iso()
             connection.execute(
                 """
                 UPDATE sites
                 SET approach_latitude = ?, approach_longitude = ?, approach_access = ?,
-                    approach_note = ?, approach_reviewed_at = ?, updated_at = ?
-                WHERE id = ?
+                    approach_note = ?, approach_reviewed_at = ?, updated_at = ?, revision = revision + 1
+                WHERE id = ? AND revision = ?
                 """,
                 (
                     request.latitude, request.longitude, request.access, request.note.strip(),
-                    reviewed_at, timestamp, site_id,
+                    reviewed_at, timestamp, site_id, expected_revision,
                 ),
             )
             connection.execute(
                 "INSERT INTO site_events (site_id, event_type, payload_json, created_at) VALUES (?, 'approach_review', ?, ?)",
-                (site_id, dump_json({**request.model_dump(), "reviewed_at": reviewed_at}), timestamp),
+                (site_id, dump_json({**request.model_dump(exclude={"expected_revision"}), "reviewed_at": reviewed_at}), timestamp),
             )
             updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             return _site_detail(connection, updated)
 
-    @app.post(
-        "/api/sites/{site_id}/observations",
-        status_code=201,
-        dependencies=[Depends(admin_guard)],
-    )
-    def add_field_observation(site_id: int, observation: FieldObservation) -> dict[str, object]:
-        timestamp = now_iso()
-        payload = observation.model_dump(mode="json")
+    @app.post("/api/sites/{site_id}/location-review", dependencies=[Depends(admin_guard)])
+    def review_site_location(site_id: int, request: LocationReviewRequest) -> dict[str, object]:
         with database.connect() as connection:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if row["merged_into_id"] is not None:
+                raise HTTPException(409, "merged site cannot review location")
+            if row["revision"] != request.expected_revision:
+                raise HTTPException(409, "site revision is stale; reload before reviewing location")
+            if not row["location_review_required"]:
+                raise HTTPException(409, "site does not require a location review")
+            timestamp = now_iso()
+            updated = connection.execute(
+                "UPDATE sites SET location_review_required = 0, updated_at = ?, revision = revision + 1 WHERE id = ? AND revision = ?",
+                (timestamp, site_id, request.expected_revision),
+            )
+            if updated.rowcount != 1:
+                raise HTTPException(409, "site revision is stale; reload before reviewing location")
+            connection.execute(
+                "INSERT INTO site_events (site_id, event_type, payload_json, created_at) VALUES (?, 'location_review', ?, ?)",
+                (site_id, dump_json({"reason": request.reason.strip()}), timestamp),
+            )
+            current = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
+            return {"status": "location_reviewed", "site": _site_detail(connection, current)}
+
+    @app.post("/api/sites/{site_id}/observations", dependencies=[Depends(admin_guard)])
+    def add_field_observation(site_id: int, observation: FieldObservation) -> dict[str, object]:
+        timestamp = now_iso()
+        request_id = observation.request_id or str(uuid.uuid4())
+        payload = observation.model_dump(mode="json", exclude={"request_id"})
+        payload_hash = _payload_digest(payload)
+        with database.connect() as connection:
+            row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
+            if row is None:
+                raise HTTPException(404, "site not found")
+            existing = connection.execute(
+                "SELECT * FROM field_observations WHERE site_id = ? AND request_id = ?",
+                (site_id, request_id),
+            ).fetchone()
+            if existing is not None:
+                if existing["payload_hash"] != payload_hash:
+                    raise HTTPException(409, "observation request_id already has a different payload")
+                return {
+                    "observation": _safe_observation(existing),
+                    "site": _site_detail(connection, row),
+                    "idempotent": True,
+                }
             if row["merged_into_id"] is not None:
                 raise HTTPException(409, "merged site cannot receive observations")
             if row["status"] == "rejected":
@@ -1290,8 +1394,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 INSERT INTO field_observations
                     (site_id, observed_at, outcome, note, latitude, longitude,
                      point_role, uncertainty_m, observed_location_text, access_notes,
-                     photo_urls_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     photo_urls_json, request_id, payload_hash, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     site_id,
@@ -1305,6 +1409,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     observation.observed_location_text,
                     observation.access_notes,
                     dump_json(payload["photo_urls"]),
+                    request_id,
+                    payload_hash,
                     timestamp,
                 ),
             )
@@ -1316,16 +1422,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 (site_id, dump_json(payload), timestamp),
             )
             updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
-            return {
-                "observation": _safe_observation(observation_row),
-                "site": _site_detail(connection, updated),
-            }
+            return JSONResponse(
+                status_code=201,
+                content={
+                    "observation": _safe_observation(observation_row),
+                    "site": _site_detail(connection, updated),
+                    "idempotent": False,
+                },
+            )
 
     @app.post(
         "/api/sites/{site_id}/observations/{observation_id}/adopt-location",
         dependencies=[Depends(admin_guard)],
     )
-    def adopt_observation_location(site_id: int, observation_id: int) -> dict[str, object]:
+    def adopt_observation_location(
+        site_id: int, observation_id: int, request: ExpectedRevisionRequest | None = None
+    ) -> dict[str, object]:
         with database.connect() as connection:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
@@ -1334,6 +1446,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(409, "merged site cannot adopt an observation coordinate")
             if row["status"] == "rejected":
                 raise HTTPException(409, "rejected site cannot adopt an observation coordinate")
+            expected_revision = (request.expected_revision if request else None) or row["revision"]
+            if expected_revision != row["revision"]:
+                raise HTTPException(409, "site revision is stale; reload before editing")
             observation = connection.execute(
                 "SELECT * FROM field_observations WHERE id = ? AND site_id = ?",
                 (observation_id, site_id),
@@ -1374,8 +1489,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 """
                 UPDATE sites
                 SET latitude = ?, longitude = ?, precision = 'approximate', uncertainty_m = ?,
-                    location_basis = ?, location_review_required = ?, short_rationale = ?, updated_at = ?
-                WHERE id = ?
+                    location_basis = ?, location_review_required = ?, short_rationale = ?, updated_at = ?,
+                    revision = revision + 1
+                WHERE id = ? AND revision = ?
                 """,
                 (
                     observation["latitude"],
@@ -1386,6 +1502,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     rationale,
                     timestamp,
                     site_id,
+                    expected_revision,
                 ),
             )
             connection.execute(
@@ -1418,6 +1535,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(404, "site not found")
             if row["merged_into_id"] is not None:
                 raise HTTPException(409, "merged site cannot be reviewed")
+            expected_revision = request.expected_revision or row["revision"]
+            if expected_revision != row["revision"]:
+                raise HTTPException(409, "site revision is stale; reload before reviewing")
             if request.action == "merge":
                 if request.target_site_id is None or request.target_site_id == site_id:
                     raise HTTPException(400, "merge requires a different target site")
@@ -1429,8 +1549,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if target is None:
                     raise HTTPException(404, "merge target not found")
                 connection.execute(
-                    "UPDATE sites SET merged_into_id = ?, status = 'rejected', updated_at = ? WHERE id = ?",
-                    (request.target_site_id, now_iso(), site_id),
+                    "UPDATE sites SET merged_into_id = ?, status = 'rejected', updated_at = ?, revision = revision + 1 WHERE id = ? AND revision = ?",
+                    (request.target_site_id, now_iso(), site_id, expected_revision),
+                )
+                connection.execute(
+                    "UPDATE sites SET revision = revision + 1, updated_at = ? WHERE id = ?",
+                    (now_iso(), request.target_site_id),
                 )
                 connection.execute(
                     """
@@ -1492,13 +1616,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 }:
                     raise HTTPException(409, "field verification is required before confirmation")
                 connection.execute(
-                    "UPDATE sites SET status = ?, updated_at = ? WHERE id = ?",
-                    (status, now_iso(), site_id),
+                    "UPDATE sites SET status = ?, updated_at = ?, revision = revision + 1 WHERE id = ? AND revision = ?",
+                    (status, now_iso(), site_id, expected_revision),
                 )
             connection.execute(
                 "INSERT INTO site_events (site_id, event_type, payload_json, created_at) VALUES (?, 'review', ?, ?)",
-                (site_id, dump_json(request.model_dump()), now_iso()),
+                (site_id, dump_json(request.model_dump(exclude={"expected_revision"})), now_iso()),
             )
+            if request.action == "merge":
+                connection.execute(
+                    "INSERT INTO site_events (site_id, event_type, payload_json, created_at) VALUES (?, 'merge_received', ?, ?)",
+                    (request.target_site_id, dump_json({"merged_from_site_id": site_id}), now_iso()),
+                )
             updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             return {"status": status, "site": _site_detail(connection, updated)}
 

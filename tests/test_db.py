@@ -456,7 +456,7 @@ def test_v6_repairs_a_database_that_already_recorded_v5(tmp_path):
         row = connection.execute(
             "SELECT excerpt, provenance_status FROM evidence_items WHERE legacy_evidence_id = 1"
         ).fetchone()
-    assert version == 7
+    assert version == 8
     assert tuple(row) == ("kept", "legacy_unresolved")
 
 
@@ -486,5 +486,32 @@ def test_v7_creates_site_relations_and_migrates_existing_import_keys(tmp_path):
             "SELECT site_id, related_external_key, relation_kind FROM site_relations"
         ).fetchone()
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-    assert version == 7
+    assert version == 8
     assert tuple(relation) == (1, "legacy:missing", "related")
+
+
+def test_v8_adds_site_revision_and_observation_request_identity(tmp_path):
+    path = tmp_path / "existing-v7.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.row_factory = sqlite3.Row
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version = 1")
+        db_module._migrate_v2(connection)
+        db_module._migrate_v3(connection)
+        db_module._migrate_v4(connection)
+        db_module._migrate_v5(connection)
+        db_module._migrate_v6(connection)
+        db_module._migrate_v7(connection)
+    database = Database(path)
+
+    database.initialize()
+
+    with database.connect() as connection:
+        site_columns = {row[1] for row in connection.execute("PRAGMA table_info(sites)")}
+        observation_columns = {row[1] for row in connection.execute("PRAGMA table_info(field_observations)")}
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        indexes = {row[1] for row in connection.execute("PRAGMA index_list(field_observations)")}
+    assert version == 8
+    assert "revision" in site_columns
+    assert {"request_id", "payload_hash"} <= observation_columns
+    assert "idx_field_observations_request" in indexes
