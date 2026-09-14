@@ -205,6 +205,37 @@ def test_import_does_not_erase_candidate_location_or_cautions_when_new_source_ha
     assert len(site["sources"]) == 2
 
 
+def test_blank_candidate_text_from_new_source_is_preserved(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    first["records"][0].update(
+        condition="Existing condition note",
+        short_rationale="Existing coordinate rationale",
+        observed_location_text="Existing landmark clue",
+    )
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+
+    second = package("batch-2")
+    second["records"][0].update(
+        geometry=None,
+        precision="unknown",
+        uncertainty_m=None,
+        location_basis="landmark_description",
+        confidence="unknown",
+        condition=" ",
+        short_rationale="",
+        observed_location_text="   ",
+    )
+    second["records"][0]["sources"][0]["url"] = "https://example.com/forum/blank-text"
+
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    site = api.get("/api/sites/1", headers=auth()).json()
+    assert site["condition"] == "Existing condition note"
+    assert site["confidence"] == "medium"
+    assert site["short_rationale"] == "Existing coordinate rationale"
+    assert site["observed_location_text"] == "Existing landmark clue"
+
+
 def test_site_status_changes_use_review_workflow(tmp_path):
     api = client(tmp_path)
     assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200

@@ -460,6 +460,12 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                 if not isinstance(existing_warnings, list):
                     existing_warnings = []
                 warnings = list(dict.fromkeys([*existing_warnings, *warnings]))
+                confidence = record.confidence
+                if confidence in (None, "unknown") and existing["confidence"] not in (None, "unknown"):
+                    confidence = existing["confidence"]
+                condition = record.condition.strip() if record.condition and record.condition.strip() else existing["condition"]
+                rationale = record.short_rationale.strip() if record.short_rationale and record.short_rationale.strip() else existing["short_rationale"]
+                observed_location = record.observed_location_text.strip() if record.observed_location_text and record.observed_location_text.strip() else existing["observed_location_text"]
                 connection.execute(
                     """
                     UPDATE sites SET name = ?, site_kind = ?, latitude = ?, longitude = ?,
@@ -478,11 +484,11 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                         existing["location_basis"] if preserve_candidate_point else record.location_basis,
                         "candidate",
                         existing["access"] if record.access == "unknown" and existing["access"] != "unknown" else record.access,
-                        record.confidence if record.confidence is not None else existing["confidence"],
-                        record.condition if record.condition is not None else existing["condition"],
+                        confidence,
+                        condition,
                         dump_json(warnings),
-                        record.short_rationale if record.short_rationale is not None else existing["short_rationale"],
-                        record.observed_location_text if record.observed_location_text is not None else existing["observed_location_text"],
+                        rationale,
+                        observed_location,
                         timestamp,
                         existing["id"],
                     ),
