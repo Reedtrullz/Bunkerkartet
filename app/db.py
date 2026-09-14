@@ -164,8 +164,13 @@ V4_REQUIRED_SCHEMA["route_plans"].add("stops_json")
 V5_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V4_REQUIRED_SCHEMA.items()}
 V5_REQUIRED_SCHEMA["sites"].add("location_review_required")
 V5_REQUIRED_SCHEMA["route_plans"].add("route_warnings_json")
-CURRENT_SCHEMA_VERSION = 6
-REQUIRED_SCHEMA = V5_REQUIRED_SCHEMA
+V6_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V5_REQUIRED_SCHEMA.items()}
+V7_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V6_REQUIRED_SCHEMA.items()}
+V7_REQUIRED_SCHEMA["site_relations"] = {
+    "id", "site_id", "related_external_key", "relation_kind", "created_at",
+}
+CURRENT_SCHEMA_VERSION = 7
+REQUIRED_SCHEMA = V7_REQUIRED_SCHEMA
 
 
 def now_iso() -> str:
@@ -204,6 +209,7 @@ class Database:
                     _run_migration(connection, _migrate_v4)
                     _run_migration(connection, _migrate_v5)
                     _run_migration(connection, _migrate_v6)
+                    _run_migration(connection, _migrate_v7)
             except sqlite3.DatabaseError as exc:
                 raise RuntimeError("database initialization failed") from exc
             return
@@ -220,6 +226,7 @@ class Database:
                     else V3_REQUIRED_SCHEMA if version == 3
                     else V4_REQUIRED_SCHEMA if version == 4
                     else V5_REQUIRED_SCHEMA if version == 5
+                    else V6_REQUIRED_SCHEMA if version == 6
                     else REQUIRED_SCHEMA
                 )
                 errors = required_schema_errors(
@@ -232,7 +239,7 @@ class Database:
                 while version < CURRENT_SCHEMA_VERSION:
                     migration = {
                         1: _migrate_v1, 2: _migrate_v2, 3: _migrate_v3, 4: _migrate_v4,
-                        5: _migrate_v5, 6: _migrate_v6,
+                        5: _migrate_v5, 6: _migrate_v6, 7: _migrate_v7,
                     }.get(version + 1)
                     if migration is None:
                         raise RuntimeError("database migration is not available")
@@ -465,6 +472,40 @@ def _migrate_v6(connection: sqlite3.Connection) -> None:
     _repair_evidence_item_fk(connection)
     _repair_v2_history(connection)
     connection.execute("PRAGMA user_version = 6")
+
+
+def _migrate_v7(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS site_relations (
+            id INTEGER PRIMARY KEY,
+            site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+            related_external_key TEXT NOT NULL,
+            relation_kind TEXT NOT NULL DEFAULT 'related'
+                CHECK(relation_kind IN ('related')),
+            created_at TEXT NOT NULL,
+            UNIQUE(site_id, related_external_key, relation_kind)
+        )
+        """
+    )
+    for record in connection.execute(
+        "SELECT site_id, payload_json FROM import_records WHERE site_id IS NOT NULL"
+    ).fetchall():
+        try:
+            payload = json.loads(record["payload_json"])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        related_keys = payload.get("related_site_keys", []) if isinstance(payload, dict) else []
+        if not isinstance(related_keys, list):
+            continue
+        for related_external_key in related_keys:
+            if not isinstance(related_external_key, str) or not related_external_key:
+                continue
+            connection.execute(
+                "INSERT OR IGNORE INTO site_relations (site_id, related_external_key, relation_kind, created_at) VALUES (?, ?, 'related', ?)",
+                (record["site_id"], related_external_key, now_iso()),
+            )
+    connection.execute("PRAGMA user_version = 7")
 
 
 def _repair_evidence_item_fk(connection: sqlite3.Connection) -> None:

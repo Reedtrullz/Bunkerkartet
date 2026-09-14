@@ -456,5 +456,35 @@ def test_v6_repairs_a_database_that_already_recorded_v5(tmp_path):
         row = connection.execute(
             "SELECT excerpt, provenance_status FROM evidence_items WHERE legacy_evidence_id = 1"
         ).fetchone()
-    assert version == 6
+    assert version == 7
     assert tuple(row) == ("kept", "legacy_unresolved")
+
+
+def test_v7_creates_site_relations_and_migrates_existing_import_keys(tmp_path):
+    path = tmp_path / "existing-v6.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version = 1")
+    Database(path).initialize()
+    with sqlite3.connect(path) as connection:
+        connection.execute("PRAGMA user_version = 6")
+        connection.execute(
+            "INSERT INTO sites (external_key, name, site_kind, precision, location_basis, created_at, updated_at) VALUES ('legacy:one', 'Legacy one', 'bunker', 'unknown', 'landmark_description', '2026-09-14', '2026-09-14')"
+        )
+        connection.execute(
+            "INSERT INTO import_batches (batch_id, schema_version, generated_at, created_at, committed_at) VALUES ('legacy-relations', '1.0', '2026-09-14T00:00:00Z', '2026-09-14', '2026-09-14')"
+        )
+        connection.execute(
+            "INSERT INTO import_records (batch_id, external_key, site_id, action, payload_json, created_at) VALUES ('legacy-relations', 'legacy:one', 1, 'created', ?, '2026-09-14')",
+            (json.dumps({"external_key": "legacy:one", "related_site_keys": ["legacy:missing"]}),),
+        )
+
+    Database(path).initialize()
+
+    with Database(path).connect() as connection:
+        relation = connection.execute(
+            "SELECT site_id, related_external_key, relation_kind FROM site_relations"
+        ).fetchone()
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+    assert version == 7
+    assert tuple(relation) == (1, "legacy:missing", "related")

@@ -460,12 +460,12 @@ function renderLivssyklusActions(site, root) {
   section.append(actions); root.append(section);
   if (site.status === "candidate") {
     const targets = [...state.siteCache.values()]
-      .filter((candidate) => candidate.id !== site.id && candidate.status === "candidate" && candidate.merged_into_id == null)
+      .filter((candidate) => candidate.id !== site.id && candidate.status !== "rejected" && candidate.merged_into_id == null)
       .sort((first, second) => first.name.localeCompare(second.name));
     if (targets.length) {
       const target = document.createElement("select");
       const placeholder = document.createElement("option"); placeholder.value = ""; text(placeholder, "Velg sted som skal bestå"); target.append(placeholder);
-      targets.forEach((candidate) => { const option = document.createElement("option"); option.value = candidate.id; text(option, `${candidate.name} (#${candidate.id})`); target.append(option); });
+      targets.forEach((candidate) => { const option = document.createElement("option"); option.value = candidate.id; text(option, `${candidate.name} — ${statusLabel(candidate.status)} (#${candidate.id})`); target.append(option); });
       const merge = document.createElement("button"); merge.className = "small danger"; merge.type = "button"; merge.disabled = true; text(merge, "Slå sammen med valgt");
       target.addEventListener("change", () => { merge.disabled = !target.value; });
       merge.addEventListener("click", () => runReviewAction(site.id, "merge", Number(target.value)));
@@ -639,7 +639,7 @@ async function loadDetail(id) {
   try {
     const site = await api(`/api/sites/${id}`);
     state.siteCache.set(site.id, site);
-    text($("site-detail-heading"), `Site detail: ${site.name}`);
+    text($("site-detail-heading"), `Stedsdetaljer: ${site.name}`);
     root.replaceChildren();
     const coordinates = site.latitude == null ? "Ukjent" : `${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}`;
     const copy = document.createElement("dl"); copy.className = "detail-copy";
@@ -656,11 +656,22 @@ async function loadDetail(id) {
     const sources = document.createElement("dd"); const sourceList = document.createElement("ul"); sourceList.className = "source-list";
     (site.sources || []).forEach((source) => { const li = document.createElement("li"); if (source.url) { const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); } else { const withheld = document.createElement("span"); text(withheld, source.title || "Referanse holdt tilbake"); li.append(withheld); } const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "source", source.published_at && `publisert ${source.published_at}`, source.accessed_at && `lest ${source.accessed_at}`, source.url_status].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
     sources.append(sourceList); copy.append(sources); root.append(copy);
+    if (site.relations?.length) {
+      const relationsTitle = document.createElement("h3"); text(relationsTitle, "Relaterte steder"); root.append(relationsTitle);
+      const relationList = document.createElement("ul"); relationList.className = "source-list";
+      site.relations.forEach((relation) => {
+        const item = document.createElement("li");
+        const target = relation.related_name || "Ikke importert";
+        text(item, `${target} (${relation.related_external_key}) — ${relation.related_status === "not_imported" ? "ikke importert" : statusLabel(relation.related_status)}`);
+        relationList.append(item);
+      });
+      root.append(relationList);
+    }
     if (site.latitude != null && site.longitude != null) {
       const copyKoordinater = document.createElement("button"); copyKoordinater.className = "small"; copyKoordinater.type = "button"; text(copyKoordinater, "Kopier koordinater");
       copyKoordinater.addEventListener("click", async () => {
-        try { await navigator.clipboard.writeText(`${site.latitude}, ${site.longitude}`); setStatus("Koordinater copied."); }
-        catch { setStatus("Clipboard is unavailable; use the coordinates shown above."); }
+        try { await navigator.clipboard.writeText(`${site.latitude}, ${site.longitude}`); setStatus("Koordinater kopiert."); }
+        catch { setStatus("Utklippstavlen er ikke tilgjengelig; bruk koordinatene som vises over."); }
       });
       root.append(copyKoordinater);
     }

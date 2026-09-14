@@ -151,7 +151,7 @@ class ImportRecord(StrictModel):
     observed_location_text: str | None = Field(default=None, max_length=2000)
     condition: str | None = Field(default=None, max_length=1000)
     warnings: list[str] = Field(default_factory=list)
-    related_site_keys: list[str] = Field(default_factory=list)
+    related_site_keys: list[str] = Field(default_factory=list, max_length=20)
 
     @field_validator("name", "site_kind")
     @classmethod
@@ -169,6 +169,8 @@ class ImportRecord(StrictModel):
             self.uncertainty_m,
             self.location_basis,
         )
+        if self.external_key in self.related_site_keys:
+            raise ValueError("related_site_keys cannot point to the record itself")
         return self
 
 

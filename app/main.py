@@ -330,8 +330,31 @@ def _site_summary(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str,
     return site
 
 
+def _site_relations(connection: sqlite3.Connection, site_id: int) -> list[dict[str, object]]:
+    rows = connection.execute(
+        """
+        SELECT site_relations.related_external_key, site_relations.relation_kind,
+               related.id AS related_site_id, related.name AS related_name,
+               related.status AS related_status
+        FROM site_relations
+        LEFT JOIN sites AS related ON related.external_key = site_relations.related_external_key
+        WHERE site_relations.site_id = ?
+        ORDER BY site_relations.related_external_key
+        """,
+        (site_id,),
+    ).fetchall()
+    relations: list[dict[str, object]] = []
+    for row in rows:
+        relation = dict(row)
+        if relation["related_site_id"] is None:
+            relation["related_status"] = "not_imported"
+        relations.append(relation)
+    return relations
+
+
 def _site_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
     site = site_from_row(row)
+    site["relations"] = _site_relations(connection, int(row["id"]))
     site["sources"] = _source_rows(connection, int(row["id"]))
     observations = connection.execute(
         """
@@ -366,6 +389,14 @@ def _existing_site(connection: sqlite3.Connection, external_key: str) -> sqlite3
     ).fetchone()
 
 
+def _normalized_label(value: str) -> str:
+    return " ".join(value.split()).casefold()
+
+
+def _possible_relation_warning(external_key: str) -> str:
+    return f"possible relation of {external_key}: overlapping uncertainty areas; not proof of the same object"
+
+
 def _duplicate_warnings(
     connection: sqlite3.Connection, record: ImportRecord
 ) -> list[str]:
@@ -373,7 +404,7 @@ def _duplicate_warnings(
     warnings = list(record.warnings)
     rows = connection.execute(
         """
-        SELECT external_key, name, site_kind, latitude, longitude
+        SELECT external_key, name, site_kind, latitude, longitude, uncertainty_m
         FROM sites
         WHERE merged_into_id IS NULL AND external_key <> ?
         """,
@@ -381,9 +412,9 @@ def _duplicate_warnings(
     ).fetchall()
     # ponytail: bounded O(n^2) scan is enough for the private v1 catalogue; add a spatial index at scale.
     for row in rows:
-        if row["name"].casefold() != record.name.casefold():
+        if _normalized_label(row["name"]) != _normalized_label(record.name):
             continue
-        if row["site_kind"].casefold() != record.site_kind.casefold():
+        if _normalized_label(row["site_kind"]) != _normalized_label(record.site_kind):
             continue
         if geometry is None or row["latitude"] is None or row["longitude"] is None:
             warnings.append(f"possible duplicate of {row['external_key']}")
@@ -396,6 +427,32 @@ def _duplicate_warnings(
             warnings.append(
                 f"possible duplicate of {row['external_key']} ({round(distance)} m away)"
             )
+        elif (
+            record.uncertainty_m is not None
+            and row["uncertainty_m"] is not None
+            and distance <= record.uncertainty_m + float(row["uncertainty_m"])
+        ):
+            warnings.append(_possible_relation_warning(row["external_key"]))
+    for row in rows:
+        if (
+            _normalized_label(row["site_kind"]) != _normalized_label(record.site_kind)
+            or _normalized_label(row["name"]) == _normalized_label(record.name)
+        ):
+            continue
+        if (
+            geometry is None
+            or row["latitude"] is None
+            or row["longitude"] is None
+            or record.uncertainty_m is None
+            or row["uncertainty_m"] is None
+        ):
+            continue
+        distance = _distance_m(
+            (float(geometry.longitude), float(geometry.latitude)),
+            (float(row["longitude"]), float(row["latitude"])),
+        )
+        if distance <= record.uncertainty_m + float(row["uncertainty_m"]):
+            warnings.append(_possible_relation_warning(row["external_key"]))
     return list(dict.fromkeys(warnings))
 
 
@@ -428,7 +485,7 @@ def _peer_duplicate_warnings(record: ImportRecord, records: list[ImportRecord]) 
     for other in sorted(records, key=lambda item: item.external_key):
         if other.external_key == record.external_key:
             continue
-        if other.name.casefold() != record.name.casefold() or other.site_kind.casefold() != record.site_kind.casefold():
+        if _normalized_label(other.name) != _normalized_label(record.name) or _normalized_label(other.site_kind) != _normalized_label(record.site_kind):
             continue
         if record.geometry is None or other.geometry is None:
             warnings.append(f"possible duplicate of {other.external_key}")
@@ -439,6 +496,32 @@ def _peer_duplicate_warnings(record: ImportRecord, records: list[ImportRecord]) 
         )
         if distance <= 100:
             warnings.append(f"possible duplicate of {other.external_key} ({round(distance)} m away)")
+        elif (
+            record.uncertainty_m is not None
+            and other.uncertainty_m is not None
+            and distance <= record.uncertainty_m + other.uncertainty_m
+        ):
+            warnings.append(_possible_relation_warning(other.external_key))
+    for other in sorted(records, key=lambda item: item.external_key):
+        if (
+            other.external_key == record.external_key
+            or _normalized_label(other.site_kind) != _normalized_label(record.site_kind)
+            or _normalized_label(other.name) == _normalized_label(record.name)
+        ):
+            continue
+        if (
+            record.geometry is None
+            or other.geometry is None
+            or record.uncertainty_m is None
+            or other.uncertainty_m is None
+        ):
+            continue
+        distance = _distance_m(
+            (record.geometry.longitude, record.geometry.latitude),
+            (other.geometry.longitude, other.geometry.latitude),
+        )
+        if distance <= record.uncertainty_m + other.uncertainty_m:
+            warnings.append(_possible_relation_warning(other.external_key))
     return warnings
 
 
@@ -520,6 +603,7 @@ def _preview_record(
         "changes": changes,
         "preserved_fields": preserved_fields,
         "evidence": evidence,
+        "related_site_keys": list(record.related_site_keys),
         "warnings": warnings,
     }
 
@@ -768,6 +852,11 @@ def _commit_package(
                 (package.batch_id, record.external_key, site_id, action, payload_json, timestamp),
             )
             import_record_id = int(import_record.lastrowid)
+            for related_external_key in record.related_site_keys:
+                connection.execute(
+                    "INSERT OR IGNORE INTO site_relations (site_id, related_external_key, relation_kind, created_at) VALUES (?, ?, 'related', ?)",
+                    (site_id, related_external_key, timestamp),
+                )
             for source_index, (source_id, source) in enumerate(source_links):
                 connection.execute(
                     """
@@ -1354,6 +1443,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "UPDATE evidence_items SET site_id = ? WHERE site_id = ?",
                     (request.target_site_id, site_id),
                 )
+                connection.execute(
+                    "INSERT OR IGNORE INTO site_relations (site_id, related_external_key, relation_kind, created_at) SELECT ?, related_external_key, relation_kind, created_at FROM site_relations WHERE site_id = ?",
+                    (request.target_site_id, site_id),
+                )
+                connection.execute("DELETE FROM site_relations WHERE site_id = ?", (site_id,))
                 connection.execute("DELETE FROM evidence WHERE site_id = ?", (site_id,))
                 connection.execute(
                     "UPDATE field_observations SET site_id = ? WHERE site_id = ?",

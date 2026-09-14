@@ -108,6 +108,55 @@ def test_import_preview_and_idempotent_commit(tmp_path):
     assert sites.json()[0]["status"] == "candidate"
 
 
+def test_related_site_keys_are_visible_and_resolve_when_target_arrives_later(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    first["records"][0]["related_site_keys"] = ["forum:later"]
+
+    assert commit_previewed(api, first).status_code == 200
+    relation = api.get("/api/sites/1", headers=auth()).json()["relations"][0]
+    assert relation == {
+        "related_external_key": "forum:later",
+        "relation_kind": "related",
+        "related_site_id": None,
+        "related_name": None,
+        "related_status": "not_imported",
+    }
+
+    later = package("batch-later", external_key="forum:later", name="Later site")
+    assert commit_previewed(api, later).status_code == 200
+    relation = api.get("/api/sites/1", headers=auth()).json()["relations"][0]
+    assert relation["related_site_id"] == 2
+    assert relation["related_name"] == "Later site"
+    assert relation["related_status"] == "candidate"
+
+
+def test_related_site_key_cannot_point_to_itself(tmp_path):
+    api = client(tmp_path)
+    payload = package()
+    payload["records"][0]["related_site_keys"] = [payload["records"][0]["external_key"]]
+
+    response = api.post("/api/admin/imports/preview", headers=auth(), json=payload)
+
+    assert response.status_code == 422
+    assert "itself" in response.text
+
+
+def test_duplicate_warning_normalizes_name_and_marks_overlap_as_possible_relation(tmp_path):
+    api = client(tmp_path)
+    first = package(name="Same  bunker")
+    assert commit_previewed(api, first).status_code == 200
+    second = package("batch-overlap", external_key="forum:2", name="Nearby bunker")
+    second["records"][0]["geometry"] = {"latitude": 63.4015, "longitude": 10.4002}
+    second["records"][0]["uncertainty_m"] = 100
+
+    preview = api.post("/api/admin/imports/preview", headers=auth(), json=second)
+
+    assert preview.status_code == 200
+    warnings = preview.json()["records"][0]["warnings"]
+    assert any("possible relation" in warning and "not proof" in warning for warning in warnings)
+
+
 def test_new_commit_requires_a_preview_header(tmp_path):
     api = client(tmp_path)
 
