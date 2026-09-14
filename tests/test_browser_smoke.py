@@ -76,18 +76,18 @@ def page():
 
 def test_saved_route_download_survives_normal_user_delay(page: Page, base_url: str):
     page.goto(base_url)
-    page.get_by_label("Admin token", exact=True).fill("audit-only")
-    page.get_by_role("button", name="Load map", exact=True).click()
-    page.get_by_role("button", name="Load route", exact=True).click()
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    page.get_by_role("button", name="Last inn rute", exact=True).click()
     page.wait_for_timeout(150)
     with page.expect_download() as download:
-        page.get_by_text("Download GPX", exact=True).click()
+        page.get_by_text("Last ned GPX", exact=True).click()
     root = ET.parse(download.value.path()).getroot()
     assert root.tag == "{http://www.topografix.com/GPX/1/1}gpx"
     assert root.findall(".//{http://www.topografix.com/GPX/1/1}trkpt")
     page.wait_for_timeout(1100)
     with page.expect_download() as second_download:
-        page.get_by_text("Download GPX", exact=True).focus()
+        page.get_by_text("Last ned GPX", exact=True).focus()
         page.keyboard.press("Enter")
     assert ET.parse(second_download.value.path()).getroot().tag == root.tag
 
@@ -96,20 +96,43 @@ def test_location_is_opt_in_and_only_sets_route_start(page: Page, base_url: str)
     page.context.grant_permissions(["geolocation"], origin=base_url)
     page.context.set_geolocation({"latitude": 63.44, "longitude": 10.42, "accuracy": 12})
     page.goto(base_url)
-    page.get_by_role("button", name="Use my location", exact=True).click()
-    page.wait_for_function("document.getElementById('location-status').textContent.includes('accuracy')")
+    page.get_by_role("button", name="Bruk min posisjon", exact=True).click()
+    page.wait_for_function("document.getElementById('location-status').textContent.includes('nøyaktighet')")
 
-    assert "accuracy 12 m" in page.locator("#location-status").inner_text()
-    assert page.locator("#route-start").inner_text() == "Start: current location"
+    assert "nøyaktighet 12 m" in page.locator("#location-status").inner_text()
+    assert page.locator("#route-start").inner_text() == "Start: nåværende posisjon"
+
+
+def test_delayed_geolocation_cannot_restore_route_start_after_lock(page: Page, base_url: str):
+    page.goto(base_url)
+    page.evaluate(
+        """() => {
+            navigator.geolocation.getCurrentPosition = (success, error) => {
+                window.__delayedGpsSuccess = success;
+                window.__delayedGpsError = error;
+            };
+        }"""
+    )
+    page.get_by_role("button", name="Bruk min posisjon", exact=True).click()
+    page.get_by_role("button", name="Lås", exact=True).click()
+    page.evaluate(
+        """() => window.__delayedGpsSuccess({
+            coords: {latitude: 63.44, longitude: 10.42, accuracy: 12}
+        })"""
+    )
+    page.wait_for_timeout(100)
+
+    assert page.locator("#route-start").inner_text() == "Start: ingen start valgt"
+    assert "Posisjon brukes bare" in page.locator("#location-status").inner_text()
 
 
 def test_lock_clears_private_site_and_route_dom(page: Page, base_url: str):
     page.goto(base_url)
-    page.get_by_label("Admin token", exact=True).fill("audit-only")
-    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
     page.get_by_text("Synthetic site", exact=True).first.click()
-    page.get_by_role("button", name="Load route", exact=True).click()
-    page.get_by_role("button", name="Lock", exact=True).click(timeout=1000)
+    page.get_by_role("button", name="Last inn rute", exact=True).click()
+    page.get_by_role("button", name="Lås", exact=True).click(timeout=1000)
 
     assert "Synthetic site" not in page.locator("body").inner_text()
     assert "Synthetic excerpt" not in page.locator("body").inner_text()
@@ -119,8 +142,8 @@ def test_lock_clears_private_site_and_route_dom(page: Page, base_url: str):
 
 def test_delayed_detail_response_cannot_restore_private_dom(page: Page, base_url: str):
     page.goto(base_url)
-    page.get_by_label("Admin token", exact=True).fill("audit-only")
-    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
     page.wait_for_timeout(250)
 
     def delay_detail(route):
@@ -128,8 +151,8 @@ def test_delayed_detail_response_cannot_restore_private_dom(page: Page, base_url
         route.continue_()
 
     page.route("**/api/sites/1", delay_detail)
-    page.locator("#site-list button", has_text="Details").click()
-    page.get_by_role("button", name="Lock", exact=True).click(timeout=1000)
+    page.locator("#site-list button", has_text="Detaljer").click()
+    page.get_by_role("button", name="Lås", exact=True).click(timeout=1000)
     page.wait_for_timeout(700)
 
     assert "Synthetic excerpt" not in page.locator("body").inner_text()
@@ -138,8 +161,8 @@ def test_delayed_detail_response_cannot_restore_private_dom(page: Page, base_url
 
 def test_auth_failure_outside_load_sites_clears_private_workspace(page: Page, base_url: str):
     page.goto(base_url)
-    page.get_by_label("Admin token", exact=True).fill("audit-only")
-    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
     page.get_by_text("Synthetic site", exact=True).first.click()
     page.wait_for_timeout(150)
 
@@ -147,41 +170,41 @@ def test_auth_failure_outside_load_sites_clears_private_workspace(page: Page, ba
         "**/api/sites/1",
         lambda route: route.fulfill(status=401, content_type="application/json", body='{"detail":"expired"}'),
     )
-    page.locator("#site-list button", has_text="Details").click()
+    page.locator("#site-list button", has_text="Detaljer").click()
     page.wait_for_timeout(250)
 
     assert "Synthetic excerpt" not in page.locator("body").inner_text()
-    assert page.locator("#site-detail").inner_text() == "Select a marker or site."
-    assert not page.get_by_role("button", name="Load map", exact=True).is_disabled()
+    assert page.locator("#site-detail").inner_text() == "Velg en markør eller et sted."
+    assert not page.get_by_role("button", name="Last inn kart", exact=True).is_disabled()
 
 
 def test_auth_failure_allows_retry_and_lock_resets_busy_controls(page: Page, base_url: str):
     page.goto(base_url)
-    token = page.get_by_label("Admin token", exact=True)
+    token = page.get_by_label("Administratortoken", exact=True)
     token.fill("wrong")
-    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
     page.wait_for_timeout(250)
-    assert not page.get_by_role("button", name="Load map", exact=True).is_disabled()
+    assert not page.get_by_role("button", name="Last inn kart", exact=True).is_disabled()
 
     token.fill("audit-only")
-    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
     page.get_by_text("Synthetic site", exact=True).first.wait_for()
 
     page.route("**/api/sites?*", lambda route: (time.sleep(0.5), route.continue_()))
-    page.get_by_role("button", name="Load map", exact=True).click()
-    page.get_by_role("button", name="Lock", exact=True).click()
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    page.get_by_role("button", name="Lås", exact=True).click()
     page.wait_for_timeout(700)
 
-    assert not page.get_by_role("button", name="Load map", exact=True).is_disabled()
-    assert page.get_by_role("button", name="Preview", exact=True).is_disabled()
-    assert page.get_by_role("button", name="Commit", exact=True).is_disabled()
+    assert not page.get_by_role("button", name="Last inn kart", exact=True).is_disabled()
+    assert page.get_by_role("button", name="Forhåndsvis", exact=True).is_disabled()
+    assert page.get_by_role("button", name="Importer", exact=True).is_disabled()
 
 
 def test_stale_geojson_401_cannot_clear_new_session(page: Page, base_url: str):
     page.goto(base_url)
-    token = page.get_by_label("Admin token", exact=True)
+    token = page.get_by_label("Administratortoken", exact=True)
     token.fill("audit-only")
-    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
     page.get_by_text("Synthetic site", exact=True).first.wait_for()
 
     def delayed_unauthorized(route):
@@ -189,10 +212,10 @@ def test_stale_geojson_401_cannot_clear_new_session(page: Page, base_url: str):
         route.fulfill(status=401, content_type="application/json", body='{"detail":"expired"}')
 
     page.route("**/api/sites.geojson", delayed_unauthorized)
-    page.get_by_role("button", name="Download GeoJSON", exact=True).click()
-    page.get_by_role("button", name="Lock", exact=True).click()
+    page.get_by_role("button", name="Eksporter hele katalogen", exact=True).click()
+    page.get_by_role("button", name="Lås", exact=True).click()
     token.fill("audit-only")
-    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
     page.get_by_text("Synthetic site", exact=True).first.wait_for()
     page.wait_for_timeout(700)
 
@@ -213,17 +236,17 @@ def test_lock_discards_delayed_import_file_read(page: Page, base_url: str):
             input.dispatchEvent(new Event('change', {bubbles: true}));
         }"""
     )
-    page.get_by_role("button", name="Lock", exact=True).click()
+    page.get_by_role("button", name="Lås", exact=True).click()
     page.wait_for_timeout(700)
 
     assert page.locator("#import-result").inner_text() == ""
-    assert page.get_by_role("button", name="Preview", exact=True).is_disabled()
+    assert page.get_by_role("button", name="Forhåndsvis", exact=True).is_disabled()
 
 
 def test_stale_preview_cannot_enable_commit_for_new_file(page: Page, base_url: str):
     page.goto(base_url)
-    page.get_by_label("Admin token", exact=True).fill("audit-only")
-    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
     payload = {
         "schema_version": "1.0",
         "batch_id": "browser-preview",
@@ -248,14 +271,14 @@ def test_stale_preview_cannot_enable_commit_for_new_file(page: Page, base_url: s
     }
     page.route("**/api/admin/imports/preview", lambda route: (time.sleep(0.5), route.continue_()))
     page.locator("#import-file").set_input_files({"name": "a.json", "mimeType": "application/json", "buffer": json.dumps(payload).encode()})
-    page.get_by_role("button", name="Preview", exact=True).click()
+    page.get_by_role("button", name="Forhåndsvis", exact=True).click()
     page.locator("#import-file").set_input_files({"name": "b.json", "mimeType": "application/json", "buffer": json.dumps({**payload, "batch_id": "browser-preview-b"}).encode()})
     page.wait_for_timeout(700)
 
-    assert page.get_by_role("button", name="Commit", exact=True).is_disabled()
-    page.get_by_role("button", name="Preview", exact=True).click()
+    assert page.get_by_role("button", name="Importer", exact=True).is_disabled()
+    page.get_by_role("button", name="Forhåndsvis", exact=True).click()
     page.wait_for_timeout(700)
-    assert not page.get_by_role("button", name="Commit", exact=True).is_disabled()
+    assert not page.get_by_role("button", name="Importer", exact=True).is_disabled()
 
 
 def test_new_file_read_clears_old_import_before_preview(page: Page, base_url: str):
@@ -284,9 +307,9 @@ def test_new_file_read_clears_old_import_before_preview(page: Page, base_url: st
         }"""
     )
 
-    assert page.get_by_role("button", name="Preview", exact=True).is_disabled()
-    assert page.get_by_role("button", name="Commit", exact=True).is_disabled()
+    assert page.get_by_role("button", name="Forhåndsvis", exact=True).is_disabled()
+    assert page.get_by_role("button", name="Importer", exact=True).is_disabled()
     page.locator("#preview-import").evaluate("button => button.click()")
     assert page.locator("#import-result").inner_text() == ""
     page.wait_for_timeout(700)
-    assert page.locator("#import-result").inner_text() == "JSON loaded. Preview before commit."
+    assert page.locator("#import-result").inner_text() == "JSON lastet. Forhåndsvis før import."

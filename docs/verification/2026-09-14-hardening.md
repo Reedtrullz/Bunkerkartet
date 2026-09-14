@@ -140,13 +140,13 @@ Verification: full suite `118 passed, 1 warning`; browser smoke `9 passed`; Node
 
 Status: implemented locally; no live route or production database was used.
 
-- Schema v4 adds explicit site approach coordinates, `approach_access`, review note/timestamp, and nullable route `stops_json`; v5 is a forward repair for v2/v3/v4 databases that had already run earlier migration code, including missing route warning/review columns and idempotent historical evidence repair.
+- Schema v4 adds explicit site approach coordinates, `approach_access`, review note/timestamp, and nullable route `stops_json`; v5 adds the review/warning columns, while v6 is the forward repair for databases that had already recorded v5 before the final evidence repair code existed.
 - New routes accept only `site_ids`; the server resolves current reviewed public approach points and rejects missing, merged, unreviewed, or `location_review_required` sites before ORS. The structure coordinate and site access label do not grant route eligibility.
 - Saved routes retain stable stop IDs, names, role, reviewed timestamp, access note, stop warnings, provider warnings, and a `current_site_changed` signal. Legacy waypoint routes remain readable and are explicitly marked as uncontrolled legacy routes.
 - Provider `way_points` indices are validated when present; missing indices produce an explicit uncontrolled-snapping warning. Named stop deviations over 50 m are retained in route warnings and GPX labels.
 - The UI exposes approach review controls and observation point-role/radius controls; adoption remains disabled unless the observation is a feature with an explicit radius.
 
-Verification: full suite `128 passed, 1 warning`; focused route/DB tests and 10 browser-smoke tests passed; Node 22 syntax and `git diff --check` passed. A pre-existing local v4 database was upgraded by the forward repair migration; no production database was opened.
+Verification: full suite `130 passed, 1 warning`; focused route/DB tests and 13 browser-smoke tests passed; Node 22 syntax and `git diff --check` passed. Synthetic local v4 and v5 databases were upgraded by forward repair migrations; no production database was opened.
 
 Non-claims: reviewed public approach is not structure access, ownership, safety, field verification, or proof that an ORS route is walkable. Actual catalogue approach decisions remain curator-owned.
 
@@ -158,9 +158,30 @@ Status: implemented locally; no real user location was requested.
 - The route UI reports the browser-provided accuracy as start-point information only. It never converts that accuracy into a site radius or changes a site record.
 - Permission failure leaves a manually chosen route start intact. The default is labelled `Standardstart i Trondheim`, and the route panel explains that route start/stops are sent to ORS and stored in private route history when a route is calculated.
 
-Verification: synthetic Chromium geolocation/browser smoke passed as part of the full suite (`128 passed, 1 warning`); Node 22 syntax and `git diff --check` passed.
+Verification: synthetic Chromium geolocation/browser smoke passed as part of the full suite (`130 passed, 1 warning`); delayed GPS success after Lock is ignored by the auth epoch guard. Node 22 syntax and `git diff --check` passed.
 
 Non-claims: this does not establish a personal-data retention policy for shared use, prove a real GPS fix, or prove route walkability.
+
+## L10 — Norwegian responsive operator surfaces
+
+Status: implemented locally; no production UI was changed.
+
+- The operator UI now declares Norwegian language metadata, uses Norwegian labels/statuses for map, review, import, and route actions, and exposes three ordinary surface buttons: `Kart`, `Vurdering`, and `Tur`.
+- The map legend is collapsed by default, the primary accent meets the light-theme contrast target, the layout prevents horizontal overflow on narrow screens, and reduced-motion preferences disable smooth scrolling transitions.
+- Geolocation success and error callbacks capture the initiating `authEpoch`; Lock clears the location status and invalidates delayed callbacks before they can restore the private route start.
+
+Verification: full suite `130 passed, 1 warning`; Node 22.22.3 syntax check passed. Browser coverage includes a delayed synthetic GPS callback after Lock. No production UI or data was changed.
+
+Non-claims: this is not a visual acceptance sign-off for every device/browser combination; live catalog content and production deployment remain out of scope.
+
+## L11 — Forward repair from recorded v5
+
+Status: implemented locally; no production database was opened.
+
+- `CURRENT_SCHEMA_VERSION` is now 6. Fresh databases run v6, and existing v5 databases run an idempotent forward repair that rechecks legacy evidence foreign keys and historical evidence reconstruction.
+- A dedicated test starts from a database explicitly marked v5, then proves it reaches v6 and repairs an unresolved legacy evidence row. This avoids claiming that only a v1 fixture covers the migration path.
+
+Verification: `tests/test_db.py` passed with 14 tests; the full suite passed with `130 passed, 1 warning`. No production migration, backup, or catalog mutation was performed.
 
 ## Review follow-up — stale GeoJSON auth and observation input
 

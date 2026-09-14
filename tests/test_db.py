@@ -430,3 +430,31 @@ def test_v5_repairs_old_legacy_evidence_fk_without_losing_rows(tmp_path):
         foreign_key = next(item for item in connection.execute("PRAGMA foreign_key_list(evidence_items)") if item[3] == "legacy_evidence_id")
     assert row[0] == "kept"
     assert foreign_key[6] == "SET NULL"
+
+
+def test_v6_repairs_a_database_that_already_recorded_v5(tmp_path):
+    path = tmp_path / "existing-v5.sqlite3"
+    database = Database(path)
+    database.initialize()
+    with database.connect() as connection:
+        connection.execute(
+            "INSERT INTO sites (external_key, name, site_kind, precision, location_basis, created_at, updated_at) VALUES ('legacy:v5', 'Legacy v5 site', 'bunker', 'unknown', 'landmark_description', '2026-09-14', '2026-09-14')"
+        )
+        source_id = connection.execute(
+            "INSERT INTO sources (url, title, source_type, excerpt, created_at, updated_at) VALUES ('https://example.com/v5', 'v5', 'test', 'kept', '2026-09-14', '2026-09-14')"
+        ).lastrowid
+        connection.execute(
+            "INSERT INTO evidence (site_id, source_id, role, created_at) VALUES (1, ?, 'source', '2026-09-14')",
+            (source_id,),
+        )
+        connection.execute("PRAGMA user_version = 5")
+
+    database.initialize()
+
+    with database.connect() as connection:
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        row = connection.execute(
+            "SELECT excerpt, provenance_status FROM evidence_items WHERE legacy_evidence_id = 1"
+        ).fetchone()
+    assert version == 6
+    assert tuple(row) == ("kept", "legacy_unresolved")

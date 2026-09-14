@@ -37,46 +37,48 @@ const $ = (id) => document.getElementById(id);
 const text = (node, value) => { node.textContent = value ?? ""; return node; };
 
 const STATUS_LABELS = {
-  candidate: "Candidate",
-  approximate: "Approximate",
-  likely: "Researched",
-  trusted: "Confirmed",
-  "field-verified": "Field verified",
-  "destroyed-or-filled": "Destroyed or filled",
-  rejected: "Rejected",
+  candidate: "Kandidat",
+  approximate: "Omtrentlig",
+  likely: "Kildegjennomgått",
+  trusted: "Bekreftet",
+  "field-verified": "Feltverifisert",
+  "destroyed-or-filled": "Ødelagt eller fylt igjen",
+  rejected: "Avvist",
 };
 const ACCESS_LABELS = {
-  public: "Public approach",
-  private: "Private",
-  restricted: "Restricted",
-  unknown: "Access unknown",
-  permission_required: "Permission required",
-  dangerous: "Dangerous",
-  unsafe: "Unsafe",
+  public: "Offentlig tilnærming",
+  private: "Privat",
+  restricted: "Begrenset",
+  unknown: "Tilgang ukjent",
+  permission_required: "Tillatelse kreves",
+  dangerous: "Farlig",
+  unsafe: "Utrygt",
 };
 
 const statusLabel = (status) => STATUS_LABELS[status] || status;
 const accessLabel = (access) => ACCESS_LABELS[access] || access;
-const outcomeLabel = (outcome) => outcome.replaceAll("_", " ");
+const outcomeLabel = (outcome) => ({
+  found: "Funnet", not_found: "Ikke funnet", inaccessible: "Utilgjengelig", needs_follow_up: "Må følges opp",
+}[outcome] || outcome);
 
 function locationCategory(siteKind) {
   const kind = String(siteKind || "").toLowerCase();
   if (kind.includes("pow") || kind.includes("fangeleir") || kind.includes("prisoner")) {
-    return { key: "pow", label: "POW camp", glyph: "P" };
+    return { key: "pow", label: "Krigsfangeleir", glyph: "P" };
   }
   if (kind.includes("war grave") || kind.includes("grave")) {
-    return { key: "grave", label: "War grave", glyph: "G" };
+    return { key: "grave", label: "Krigsgrav", glyph: "G" };
   }
   if (kind.includes("war memorial") || kind.includes("memorial") || kind.includes("monument")) {
-    return { key: "memorial", label: "War memorial", glyph: "M" };
+    return { key: "memorial", label: "Krigsminnesmerke", glyph: "M" };
   }
   if (kind.includes("cave") || kind.includes("tunnel")) {
-    return { key: "cave", label: "Cave / tunnel", glyph: "C" };
+    return { key: "cave", label: "Hule / tunnel", glyph: "C" };
   }
   if (["bunker", "fort", "battery", "searchlight", "observation", "communications"].some((term) => kind.includes(term))) {
-    return { key: "bunker", label: "Bunker / military position", glyph: "B" };
+    return { key: "bunker", label: "Bunker / militærstilling", glyph: "B" };
   }
-  return { key: "other", label: "Other wartime site", glyph: "O" };
+  return { key: "other", label: "Annet krigsminne", glyph: "O" };
 }
 
 function statusClass(status) {
@@ -126,6 +128,13 @@ function textareaControl(value = "") {
 
 function setStatus(message) { text($("map-status"), message); }
 
+document.querySelectorAll(".surface-nav button").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".surface-nav button").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+    document.getElementById(button.dataset.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+});
+
 function revokeGpxObjectUrls() {
   state.gpxObjectUrls.forEach((url) => URL.revokeObjectURL(url));
   state.gpxObjectUrls.clear();
@@ -164,20 +173,21 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
   $("candidate-list").replaceChildren();
   text($("candidate-summary"), "");
   $("detail-panel").classList.remove("is-selected");
-  text($("site-detail-heading"), "Site detail");
-  text($("site-detail"), "Select a marker or site.");
+  text($("site-detail-heading"), "Stedsdetaljer");
+  text($("site-detail"), "Velg en markør eller et sted.");
   $("route-result").replaceChildren();
-  text($("route-start"), "Start: no route start selected");
+  text($("route-start"), "Start: ingen start valgt");
+  text($("location-status"), "Posisjon brukes bare når du velger «Bruk min posisjon».");
   $("import-file").value = "";
   $("import-file").disabled = false;
   $("preview-import").disabled = true;
   $("commit-import").disabled = true;
-  text($("preview-import"), "Preview");
-  text($("commit-import"), "Commit");
+  text($("preview-import"), "Forhåndsvis");
+  text($("commit-import"), "Importer");
   text($("import-result"), "");
   $("load-sites").disabled = false;
-  text($("load-sites"), "Load map");
-  text($("create-route"), "Create route");
+  text($("load-sites"), "Last inn kart");
+  text($("create-route"), "Beregn rute");
   if (resetToken) {
     state.token = "";
     $("admin-token").value = "";
@@ -200,7 +210,7 @@ function renderImportPreview(result) {
     root.append(item);
   });
   const technical = document.createElement("details");
-  const label = document.createElement("summary"); text(label, "Show technical preview"); technical.append(label);
+  const label = document.createElement("summary"); text(label, "Vis teknisk forhåndsvisning"); technical.append(label);
   const raw = document.createElement("pre"); text(raw, JSON.stringify(result, null, 2)); technical.append(raw); root.append(technical);
 }
 
@@ -287,12 +297,12 @@ function renderMap(fit = false) {
     actions.className = "site-actions";
     const details = document.createElement("button");
     details.className = "small";
-    text(details, "Details");
+    text(details, "Detaljer");
     details.addEventListener("click", () => { marker.closePopup(); loadDetail(site.id); });
     const add = document.createElement("button");
     add.className = "small";
     const routeReady = hasReviewedPublicApproach(site);
-    text(add, !routeReady ? "No reviewed approach" : state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
+    text(add, !routeReady ? "Ingen gjennomgått tilnærming" : state.routeSiteIds.includes(site.id) ? "Lagt til" : "Legg til rute");
     add.disabled = !routeReady || state.routeSiteIds.includes(site.id);
     add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add);
@@ -311,10 +321,10 @@ function renderMap(fit = false) {
         weight: 2,
       }).addTo(observationLayer);
       const popup = document.createElement("div");
-      const heading = document.createElement("strong"); text(heading, "Field observation"); popup.append(heading);
+      const heading = document.createElement("strong"); text(heading, "Feltobservasjon"); popup.append(heading);
       const meta = document.createElement("div"); meta.className = "site-meta";
       text(meta, `${observation.observed_at} | ${outcomeLabel(observation.outcome)}`); popup.append(meta);
-      const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Open site");
+      const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Åpne sted");
       details.addEventListener("click", () => { observationMarker.closePopup(); loadDetail(site.id); });
       popup.append(details);
       observationMarker.bindPopup(popup);
@@ -329,7 +339,7 @@ function renderSiteList() {
   if (!state.sites.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    text(empty, "No sites match the current filters.");
+    text(empty, "Ingen steder passer filtrene.");
     list.append(empty);
     return;
   }
@@ -353,12 +363,12 @@ function renderSiteList() {
     actions.className = "site-actions";
     const details = document.createElement("button");
     details.className = "small";
-    text(details, "Details");
+    text(details, "Detaljer");
     details.addEventListener("click", () => loadDetail(site.id));
     const add = document.createElement("button");
     add.className = "small";
     const routeReady = hasReviewedPublicApproach(site);
-    text(add, !routeReady ? "No reviewed approach" : state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
+    text(add, !routeReady ? "Ingen gjennomgått tilnærming" : state.routeSiteIds.includes(site.id) ? "Lagt til" : "Legg til rute");
     add.disabled = !routeReady || state.routeSiteIds.includes(site.id);
     add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add);
@@ -371,9 +381,9 @@ async function loadSites() {
   const token = $("admin-token").value.trim();
   if (token !== state.token) clearAuthenticatedData({ resetToken: false });
   state.token = token;
-  if (!state.token) { setStatus("Enter the admin token to load sites."); return; }
+  if (!state.token) { setStatus("Skriv inn administratortokenet for å laste inn steder."); return; }
   const requestEpoch = state.authEpoch;
-  const loadButton = $("load-sites"); loadButton.disabled = true; text(loadButton, "Loading...");
+  const loadButton = $("load-sites"); loadButton.disabled = true; text(loadButton, "Laster inn ...");
   const params = new URLSearchParams();
   const status = $("status-filter").value;
   const kind = $("kind-filter").value.trim();
@@ -396,8 +406,8 @@ async function loadSites() {
     setStatus(state.sites.length
       ? `${state.sites.length} site${state.sites.length === 1 ? "" : "s"} loaded.`
       : hasFilters
-        ? "No sites match the current filters."
-        : "Authenticated. No site records imported yet.");
+        ? "Ingen steder passer filtrene."
+        : "Innlogget. Ingen steder er importert ennå.");
     await loadCandidates();
     await loadFieldPriority();
     await loadRoutes();
@@ -406,12 +416,12 @@ async function loadSites() {
     if (error.status === 401 || error.status === 503) clearAuthenticatedData();
     setStatus(error.message);
   } finally {
-    if (requestEpoch === state.authEpoch) { loadButton.disabled = false; text(loadButton, "Load map"); }
+    if (requestEpoch === state.authEpoch) { loadButton.disabled = false; text(loadButton, "Last inn kart"); }
   }
 }
 
 async function runReviewAction(id, action, targetSiteId = null) {
-  if (action === "reject" && !window.confirm("Reject this candidate?")) return;
+  if (action === "reject" && !window.confirm("Avvis this candidate?")) return;
   if (action === "mark_destroyed" && !window.confirm("Mark this site as destroyed or filled?")) return;
   if (action === "merge" && !window.confirm("Merge this record into the selected surviving site?")) return;
   try {
@@ -424,27 +434,27 @@ async function runReviewAction(id, action, targetSiteId = null) {
   } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
 }
 
-function renderLifecycleActions(site, root) {
+function renderLivssyklusActions(site, root) {
   const section = document.createElement("section");
   section.className = "detail-section";
-  const heading = document.createElement("h3"); text(heading, "Lifecycle"); section.append(heading);
+  const heading = document.createElement("h3"); text(heading, "Livssyklus"); section.append(heading);
   const actions = document.createElement("div"); actions.className = "candidate-actions";
   const transitions = {
-    candidate: [["Mark researched", "research", ""], ["Mark approximate", "mark_approximate", ""], ["Mark destroyed or filled", "mark_destroyed", "danger"]],
-    approximate: [["Mark researched", "research", ""], ["Mark destroyed or filled", "mark_destroyed", "danger"]],
-    likely: [["Mark field verified", "field_verify", ""], ["Mark destroyed or filled", "mark_destroyed", "danger"]],
-    "field-verified": [["Confirm", "confirm", ""], ["Mark destroyed or filled", "mark_destroyed", "danger"]],
-    trusted: [["Mark destroyed or filled", "mark_destroyed", "danger"]],
+    candidate: [["Marker som kildegjennomgått", "research", ""], ["Marker som omtrentlig", "mark_approximate", ""], ["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
+    approximate: [["Marker som kildegjennomgått", "research", ""], ["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
+    likely: [["Mark field verified", "field_verify", ""], ["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
+    "field-verified": [["Bekreft", "confirm", ""], ["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
+    trusted: [["Marker som ødelagt eller fylt igjen", "mark_destroyed", "danger"]],
   };
   (transitions[site.status] || []).forEach(([label, action, style]) => {
     const button = document.createElement("button"); button.className = `small ${style}`; button.type = "button"; text(button, label);
     button.addEventListener("click", () => runReviewAction(site.id, action)); actions.append(button);
   });
   if (site.status !== "rejected") {
-    const reject = document.createElement("button"); reject.className = "small danger"; reject.type = "button"; text(reject, "Reject");
+    const reject = document.createElement("button"); reject.className = "small danger"; reject.type = "button"; text(reject, "Avvis");
     reject.addEventListener("click", () => runReviewAction(site.id, "reject")); actions.append(reject);
   } else {
-    const restore = document.createElement("button"); restore.className = "small"; restore.type = "button"; text(restore, "Restore candidate");
+    const restore = document.createElement("button"); restore.className = "small"; restore.type = "button"; text(restore, "Gjenopprett kandidat");
     restore.addEventListener("click", () => runReviewAction(site.id, "restore")); actions.append(restore);
   }
   section.append(actions); root.append(section);
@@ -454,19 +464,19 @@ function renderLifecycleActions(site, root) {
       .sort((first, second) => first.name.localeCompare(second.name));
     if (targets.length) {
       const target = document.createElement("select");
-      const placeholder = document.createElement("option"); placeholder.value = ""; text(placeholder, "Choose surviving site"); target.append(placeholder);
+      const placeholder = document.createElement("option"); placeholder.value = ""; text(placeholder, "Velg sted som skal bestå"); target.append(placeholder);
       targets.forEach((candidate) => { const option = document.createElement("option"); option.value = candidate.id; text(option, `${candidate.name} (#${candidate.id})`); target.append(option); });
-      const merge = document.createElement("button"); merge.className = "small danger"; merge.type = "button"; merge.disabled = true; text(merge, "Merge into selected");
+      const merge = document.createElement("button"); merge.className = "small danger"; merge.type = "button"; merge.disabled = true; text(merge, "Slå sammen med valgt");
       target.addEventListener("change", () => { merge.disabled = !target.value; });
       merge.addEventListener("click", () => runReviewAction(site.id, "merge", Number(target.value)));
-      section.append(labeledControl("Merge duplicate into", target), merge);
+      section.append(labeledControl("Slå sammen duplikat med", target), merge);
     }
   }
 }
 
 function renderSiteEditor(site, root) {
   const section = document.createElement("section"); section.className = "detail-section";
-  const heading = document.createElement("h3"); text(heading, "Curate site"); section.append(heading);
+  const heading = document.createElement("h3"); text(heading, "Kurater sted"); section.append(heading);
   const form = document.createElement("form"); form.className = "detail-form";
   const grid = document.createElement("div"); grid.className = "detail-grid";
   const name = inputControl("text", site.name); name.name = "name";
@@ -478,18 +488,18 @@ function renderSiteEditor(site, root) {
   const basis = selectControl(["explicit_coordinate", "address", "map_reference", "landmark_description", "llm_inference"], site.location_basis); basis.name = "location_basis";
   const latitude = inputControl("number", site.latitude); latitude.name = "latitude"; latitude.step = "0.000001"; latitude.min = "-90"; latitude.max = "90";
   const longitude = inputControl("number", site.longitude); longitude.name = "longitude"; longitude.step = "0.000001"; longitude.min = "-180"; longitude.max = "180";
-  [["Name", name], ["Type", kind], ["Confidence", confidence], ["Access", access], ["Precision", precision], ["Uncertainty (m)", uncertainty], ["Location basis", basis], ["Latitude", latitude], ["Longitude", longitude]]
+  [["Name", name], ["Type", kind], ["Sikkerhet", confidence], ["Tilgang", access], ["Presisjon", precision], ["Usikkerhet (m)", uncertainty], ["Stedsgrunnlag", basis], ["Breddegrad", latitude], ["Lengdegrad", longitude]]
     .forEach(([label, control]) => grid.append(labeledControl(label, control)));
   form.append(grid);
   const condition = inputControl("text", site.condition || ""); condition.name = "condition";
   const rationale = textareaControl(site.short_rationale || ""); rationale.name = "short_rationale";
   const observedText = textareaControl(site.observed_location_text || ""); observedText.name = "observed_location_text";
   const warnings = textareaControl((site.warnings || []).join("\n")); warnings.name = "warnings";
-  form.append(labeledControl("Condition", condition));
-  form.append(labeledControl("Coordinate rationale", rationale));
-  form.append(labeledControl("Observed location", observedText));
+  form.append(labeledControl("Tilstand", condition));
+  form.append(labeledControl("Begrunnelse for koordinat", rationale));
+  form.append(labeledControl("Observert sted", observedText));
   form.append(labeledControl("Warnings (one per line)", warnings));
-  const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Save site changes"); form.append(save);
+  const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Lagre stedsendringer"); form.append(save);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const numberOrNull = (value) => value === "" ? null : Number(value);
@@ -506,56 +516,56 @@ function renderSiteEditor(site, root) {
           warnings: warnings.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
         }),
       });
-      setStatus("Site changes saved.");
+      setStatus("Stedsendringer lagret.");
       await loadSites();
       await loadDetail(site.id);
     } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
   });
   section.append(form); root.append(section);
   const approachForm = document.createElement("form"); approachForm.className = "observation-form";
-  const approachLatitude = inputControl("number", site.approach_latitude); approachLatitude.step = "0.000001"; approachLatitude.min = "-90"; approachLatitude.max = "90";
-  const approachLongitude = inputControl("number", site.approach_longitude); approachLongitude.step = "0.000001"; approachLongitude.min = "-180"; approachLongitude.max = "180";
-  const approachAccess = selectControl(["unknown", "public"], site.approach_access || "unknown");
+  const approachBreddegrad = inputControl("number", site.approach_latitude); approachBreddegrad.step = "0.000001"; approachBreddegrad.min = "-90"; approachBreddegrad.max = "90";
+  const approachLengdegrad = inputControl("number", site.approach_longitude); approachLengdegrad.step = "0.000001"; approachLengdegrad.min = "-180"; approachLengdegrad.max = "180";
+  const approachTilgang = selectControl(["unknown", "public"], site.approach_access || "unknown");
   const approachNote = textareaControl(site.approach_note || ""); approachNote.required = true;
   const approachGrid = document.createElement("div"); approachGrid.className = "detail-grid";
-  approachGrid.append(labeledControl("Approach latitude", approachLatitude), labeledControl("Approach longitude", approachLongitude), labeledControl("Approach access", approachAccess));
-  approachForm.append(approachGrid, labeledControl("Approach review note", approachNote));
-  const approachSave = document.createElement("button"); approachSave.className = "primary"; approachSave.type = "submit"; text(approachSave, "Save public approach review"); approachForm.append(approachSave);
+  approachGrid.append(labeledControl("Tilnærming breddegrad", approachBreddegrad), labeledControl("Tilnærming lengdegrad", approachLengdegrad), labeledControl("Tilgang ved tilnærming", approachTilgang));
+  approachForm.append(approachGrid, labeledControl("Notat om tilnærmingsvurdering", approachNote));
+  const approachSave = document.createElement("button"); approachSave.className = "primary"; approachSave.type = "submit"; text(approachSave, "Lagre vurdering av offentlig tilnærming"); approachForm.append(approachSave);
   approachForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const numberOrNull = (value) => value === "" ? null : Number(value);
     try {
       await api(`/api/sites/${site.id}/approach`, {
         method: "POST",
-        body: JSON.stringify({ latitude: numberOrNull(approachLatitude.value), longitude: numberOrNull(approachLongitude.value), access: approachAccess.value, note: approachNote.value.trim() }),
+        body: JSON.stringify({ latitude: numberOrNull(approachBreddegrad.value), longitude: numberOrNull(approachLengdegrad.value), access: approachTilgang.value, note: approachNote.value.trim() }),
       });
-      setStatus("Approach review saved.");
+      setStatus("Tilnærmingsvurdering lagret.");
       await loadSites();
       await loadDetail(site.id);
     } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
   });
-  const approachHeading = document.createElement("h3"); text(approachHeading, "Public approach review"); section.append(approachHeading, approachForm);
+  const approachHeading = document.createElement("h3"); text(approachHeading, "Vurdering av offentlig tilnærming"); section.append(approachHeading, approachForm);
 }
 
 function renderObservations(site, root) {
   const section = document.createElement("section"); section.className = "detail-section";
-  const heading = document.createElement("h3"); text(heading, "Field observations"); section.append(heading);
+  const heading = document.createElement("h3"); text(heading, "Feltobservasjoner"); section.append(heading);
   const observations = document.createElement("ul"); observations.className = "observation-list";
   (site.field_observations || []).forEach((observation) => {
     const item = document.createElement("li");
     const title = document.createElement("strong"); text(title, `${observation.observed_at} | ${outcomeLabel(observation.outcome)}`); item.append(title);
     const note = document.createElement("p"); text(note, observation.note); item.append(note);
     if (observation.observed_location_text) { const location = document.createElement("div"); location.className = "site-meta"; text(location, observation.observed_location_text); item.append(location); }
-    if (observation.access_notes) { const access = document.createElement("div"); access.className = "site-meta"; text(access, `Access: ${observation.access_notes}`); item.append(access); }
+    if (observation.access_notes) { const access = document.createElement("div"); access.className = "site-meta"; text(access, `Tilgang: ${observation.access_notes}`); item.append(access); }
     const observationMeta = document.createElement("div"); observationMeta.className = "site-meta";
-    text(observationMeta, `Point role: ${observation.point_role || "unknown"}${observation.uncertainty_m == null ? " | radius unknown" : ` | ${observation.uncertainty_m} m radius`}`); item.append(observationMeta);
+    text(observationMeta, `Punktrolle: ${observation.point_role || "unknown"}${observation.uncertainty_m == null ? " | radius unknown" : ` | ${observation.uncertainty_m} m radius`}`); item.append(observationMeta);
     if (observation.latitude != null && observation.longitude != null) {
       const coordinates = document.createElement("div"); coordinates.className = "site-meta";
       text(coordinates, `Coordinate: ${observation.latitude.toFixed(5)}, ${observation.longitude.toFixed(5)}`); item.append(coordinates);
       if (observation.outcome === "found") {
         const actions = document.createElement("div"); actions.className = "candidate-actions";
         const adopt = document.createElement("button"); adopt.className = "small"; adopt.type = "button"; adopt.disabled = observation.point_role !== "feature" || observation.uncertainty_m == null; adopt.title = "Only a feature point with an explicit radius can update the site marker";
-        text(adopt, "Adopt coordinate"); adopt.addEventListener("click", () => adoptObservationLocation(site.id, observation.id));
+        text(adopt, "Bruk koordinat"); adopt.addEventListener("click", () => adoptObservationLocation(site.id, observation.id));
         actions.append(adopt); item.append(actions);
       }
     }
@@ -567,13 +577,13 @@ function renderObservations(site, root) {
     if (observation.photo_urls_status) { const withheld = document.createElement("div"); withheld.className = "site-meta"; text(withheld, observation.photo_urls_status); item.append(withheld); }
     observations.append(item);
   });
-  if (!observations.children.length) { const empty = document.createElement("p"); empty.className = "empty-state"; text(empty, "No field observations recorded."); section.append(empty); }
+  if (!observations.children.length) { const empty = document.createElement("p"); empty.className = "empty-state"; text(empty, "Ingen feltobservasjoner er registrert."); section.append(empty); }
   else section.append(observations);
 
   const form = document.createElement("form"); form.className = "observation-form";
   const localToday = new Date(); localToday.setMinutes(localToday.getMinutes() - localToday.getTimezoneOffset());
   const observedAt = inputControl("date", localToday.toISOString().slice(0, 10)); observedAt.name = "observed_at"; observedAt.required = true;
-  const outcome = selectControl(["found", "not_found", "inaccessible", "needs_follow_up"], "found", { found: "Found", not_found: "Not found", inaccessible: "Inaccessible", needs_follow_up: "Needs follow-up" }); outcome.name = "outcome";
+  const outcome = selectControl(["found", "not_found", "inaccessible", "needs_follow_up"], "found", { found: "Funnet", not_found: "Ikke funnet", inaccessible: "Utilgjengelig", needs_follow_up: "Må følges opp" }); outcome.name = "outcome";
   const note = textareaControl(); note.name = "note"; note.required = true; note.placeholder = "What was observed?";
   const latitude = inputControl("number"); latitude.name = "latitude"; latitude.step = "0.000001"; latitude.min = "-90"; latitude.max = "90";
   const longitude = inputControl("number"); longitude.name = "longitude"; longitude.step = "0.000001"; longitude.min = "-180"; longitude.max = "180";
@@ -581,11 +591,11 @@ function renderObservations(site, root) {
   const uncertainty = inputControl("number"); uncertainty.name = "uncertainty_m"; uncertainty.min = "0"; uncertainty.step = "1";
   const location = textareaControl(); location.name = "observed_location_text";
   const access = textareaControl(); access.name = "access_notes";
-  const photos = textareaControl(); photos.name = "photo_urls"; photos.placeholder = "One photo URL per line";
+  const photos = textareaControl(); photos.name = "photo_urls"; photos.placeholder = "Én bilde-URL per linje";
   const grid = document.createElement("div"); grid.className = "detail-grid";
-  grid.append(labeledControl("Date", observedAt), labeledControl("Outcome", outcome), labeledControl("Point role", pointRole), labeledControl("Radius (m)", uncertainty), labeledControl("Observed latitude", latitude), labeledControl("Observed longitude", longitude));
-  form.append(grid, labeledControl("Observation note", note), labeledControl("Observed location", location), labeledControl("Access notes", access), labeledControl("Photo URLs", photos));
-  const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Save observation"); form.append(save);
+  grid.append(labeledControl("Date", observedAt), labeledControl("Utfall", outcome), labeledControl("Punktrolle", pointRole), labeledControl("Radius (m)", uncertainty), labeledControl("Observert breddegrad", latitude), labeledControl("Observert lengdegrad", longitude));
+  form.append(grid, labeledControl("Observasjonsnotat", note), labeledControl("Observert sted", location), labeledControl("Tilgang notes", access), labeledControl("Bilde-URL-er", photos));
+  const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Lagre observasjon"); form.append(save);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const numberOrUndefined = (value) => value === "" ? undefined : Number(value);
@@ -600,7 +610,7 @@ function renderObservations(site, root) {
           photo_urls: photos.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
         }),
       });
-      setStatus("Field observation saved.");
+      setStatus("Feltobservasjon saved.");
       await loadSites();
       await loadDetail(site.id);
     } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
@@ -612,7 +622,7 @@ async function adoptObservationLocation(siteId, observationId) {
   if (!window.confirm("Adopt this field observation coordinate for the site?")) return;
   try {
     await api(`/api/sites/${siteId}/observations/${observationId}/adopt-location`, { method: "POST" });
-    setStatus("Observation coordinate adopted.");
+    setStatus("Observasjonskoordinat tatt i bruk.");
     await loadSites();
     await loadDetail(siteId);
   } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
@@ -623,7 +633,7 @@ async function loadDetail(id) {
   const panel = $("detail-panel");
   const root = $("site-detail");
   panel.classList.add("is-selected");
-  text(root, "Loading site details...");
+  text(root, "Laster stedsdetaljer ...");
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
   $("site-detail-heading").focus({ preventScroll: true });
   try {
@@ -631,30 +641,30 @@ async function loadDetail(id) {
     state.siteCache.set(site.id, site);
     text($("site-detail-heading"), `Site detail: ${site.name}`);
     root.replaceChildren();
-    const coordinates = site.latitude == null ? "Unknown" : `${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}`;
+    const coordinates = site.latitude == null ? "Ukjent" : `${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}`;
     const copy = document.createElement("dl"); copy.className = "detail-copy";
-    [["Name", site.name], ["External key", site.external_key], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
-      ["Confidence", site.confidence || "Unknown"],
-      ["Coordinates", coordinates],
-      ["Precision", `${site.precision}${site.uncertainty_m == null ? "" : ` (${site.uncertainty_m} m)`}`],
-      ["Access", accessLabel(site.access)], ["Basis", site.location_basis], ["Condition", site.condition || "Unknown"],
-      ["Observed location", site.observed_location_text || "Unknown"]]
+    [["Name", site.name], ["Ekstern nøkkel", site.external_key], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
+      ["Sikkerhet", site.confidence || "Ukjent"],
+      ["Koordinater", coordinates],
+      ["Presisjon", `${site.precision}${site.uncertainty_m == null ? "" : ` (${site.uncertainty_m} m)`}`],
+      ["Tilgang", accessLabel(site.access)], ["Basis", site.location_basis], ["Tilstand", site.condition || "Ukjent"],
+      ["Observert sted", site.observed_location_text || "Ukjent"]]
       .forEach(([label, value]) => { const dt = document.createElement("dt"); text(dt, label); const dd = document.createElement("dd"); text(dd, value); copy.append(dt, dd); });
     if (site.short_rationale) { const rationale = document.createElement("p"); text(rationale, site.short_rationale); copy.append(rationale); }
     if (site.warnings?.length) { const warning = document.createElement("p"); warning.className = "warning"; text(warning, site.warnings.join(" | ")); copy.append(warning); }
-    const sourcesTitle = document.createElement("dt"); text(sourcesTitle, "Sources"); copy.append(sourcesTitle);
+    const sourcesTitle = document.createElement("dt"); text(sourcesTitle, "Kilder"); copy.append(sourcesTitle);
     const sources = document.createElement("dd"); const sourceList = document.createElement("ul"); sourceList.className = "source-list";
-    (site.sources || []).forEach((source) => { const li = document.createElement("li"); if (source.url) { const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); } else { const withheld = document.createElement("span"); text(withheld, source.title || "Reference withheld"); li.append(withheld); } const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "source", source.published_at && `published ${source.published_at}`, source.accessed_at && `accessed ${source.accessed_at}`, source.url_status].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
+    (site.sources || []).forEach((source) => { const li = document.createElement("li"); if (source.url) { const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); } else { const withheld = document.createElement("span"); text(withheld, source.title || "Referanse holdt tilbake"); li.append(withheld); } const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "source", source.published_at && `publisert ${source.published_at}`, source.accessed_at && `lest ${source.accessed_at}`, source.url_status].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
     sources.append(sourceList); copy.append(sources); root.append(copy);
     if (site.latitude != null && site.longitude != null) {
-      const copyCoordinates = document.createElement("button"); copyCoordinates.className = "small"; copyCoordinates.type = "button"; text(copyCoordinates, "Copy coordinates");
-      copyCoordinates.addEventListener("click", async () => {
-        try { await navigator.clipboard.writeText(`${site.latitude}, ${site.longitude}`); setStatus("Coordinates copied."); }
+      const copyKoordinater = document.createElement("button"); copyKoordinater.className = "small"; copyKoordinater.type = "button"; text(copyKoordinater, "Kopier koordinater");
+      copyKoordinater.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(`${site.latitude}, ${site.longitude}`); setStatus("Koordinater copied."); }
         catch { setStatus("Clipboard is unavailable; use the coordinates shown above."); }
       });
-      root.append(copyCoordinates);
+      root.append(copyKoordinater);
     }
-    renderLifecycleActions(site, root);
+    renderLivssyklusActions(site, root);
     renderSiteEditor(site, root);
     renderObservations(site, root);
   } catch (error) { if (!isStaleRequest(error)) text($("site-detail"), error.message); }
@@ -670,7 +680,7 @@ async function readImport(file) {
     state.previewHash = null;
     $("preview-import").disabled = false;
     $("commit-import").disabled = true;
-    text($("import-result"), "JSON loaded. Preview before commit.");
+    text($("import-result"), "JSON lastet. Forhåndsvis før import.");
   } catch (error) {
     if (requestEpoch !== state.authEpoch || generation !== state.importGeneration) return;
     state.pendingImport = null;
@@ -686,7 +696,7 @@ async function previewImport() {
   const generation = state.importGeneration;
   const pendingImport = state.pendingImport;
   state.importRequestInFlight = true;
-  const button = $("preview-import"); button.disabled = true; text(button, "Previewing...");
+  const button = $("preview-import"); button.disabled = true; text(button, "Forhåndsviser ...");
   try {
     const result = await api("/api/admin/imports/preview", { method: "POST", body: JSON.stringify(pendingImport) });
     if (requestEpoch !== state.authEpoch || generation !== state.importGeneration || pendingImport !== state.pendingImport) return;
@@ -700,7 +710,7 @@ async function previewImport() {
   finally {
     if (requestEpoch === state.authEpoch && generation === state.importGeneration) {
       state.importRequestInFlight = false;
-      text(button, "Preview");
+      text(button, "Forhåndsvis");
       button.disabled = !state.pendingImport;
     }
   }
@@ -713,7 +723,7 @@ async function commitImport() {
   const pendingImport = state.pendingImport;
   const previewHash = state.previewHash;
   state.importRequestInFlight = true;
-  const button = $("commit-import"); button.disabled = true; text(button, "Committing...");
+  const button = $("commit-import"); button.disabled = true; text(button, "Importerer ...");
   $("import-file").disabled = true;
   try {
     const result = await api("/api/admin/imports/commit", { method: "POST", headers: { "X-Import-Preview": previewHash }, body: JSON.stringify(pendingImport) });
@@ -727,7 +737,7 @@ async function commitImport() {
     if (requestEpoch === state.authEpoch && generation === state.importGeneration) {
       state.importRequestInFlight = false;
       $("import-file").disabled = false;
-      text(button, "Commit");
+      text(button, "Importer");
       button.disabled = !state.pendingImport || !state.previewHash;
     }
   }
@@ -752,7 +762,7 @@ async function loadCandidates() {
     const list = $("candidate-list"); list.replaceChildren();
     text($("candidate-summary"), `${candidates.length} candidate${candidates.length === 1 ? "" : "s"} in this view.`);
     if (!candidates.length) {
-      const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "No candidates waiting for review."); list.append(empty); return;
+      const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "Ingen kandidater venter på vurdering."); list.append(empty); return;
     }
     candidates.forEach((site) => {
       const item = document.createElement("article"); item.className = "candidate-item";
@@ -766,9 +776,9 @@ async function loadCandidates() {
         text(warnings, `${site.warnings.length} warning${site.warnings.length === 1 ? "" : "s"}`); item.append(warnings);
       }
       const actions = document.createElement("div"); actions.className = "candidate-actions";
-      const details = document.createElement("button"); details.className = "small"; text(details, "Details");
+      const details = document.createElement("button"); details.className = "small"; text(details, "Detaljer");
       details.addEventListener("click", () => loadDetail(site.id)); actions.append(details);
-      [["Mark researched", "research", ""], ["Reject", "reject", "danger"]].forEach(([label, action, style]) => {
+      [["Marker som kildegjennomgått", "research", ""], ["Avvis", "reject", "danger"]].forEach(([label, action, style]) => {
         const button = document.createElement("button"); button.className = `small ${style}`; text(button, label);
         button.addEventListener("click", () => runReviewAction(site.id, action)); actions.append(button);
       });
@@ -782,7 +792,7 @@ function renderFieldPriority() {
   const sites = state.prioritySites;
   text($("field-priority-summary"), `${sites.length} public site${sites.length === 1 ? "" : "s"} in shortlist.`);
   if (!sites.length) {
-    const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "No sites meet the field shortlist."); list.append(empty); return;
+    const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "Ingen steder oppfyller feltlisten."); list.append(empty); return;
   }
   sites.forEach((site) => {
     const item = document.createElement("article"); item.className = `site-item status-${site.status}`;
@@ -792,8 +802,8 @@ function renderFieldPriority() {
     const uncertainty = site.uncertainty_m == null ? "uncertainty unknown" : `${Math.round(site.uncertainty_m)} m`;
     const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${site.confidence || "unknown"} | ${uncertainty} | ${accessLabel(site.access)}`); item.append(meta);
     const actions = document.createElement("div"); actions.className = "site-actions";
-    const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Details"); details.addEventListener("click", () => loadDetail(site.id));
-    const add = document.createElement("button"); add.className = "small"; add.type = "button"; text(add, state.routeSiteIds.includes(site.id) ? "Added" : "Add route"); add.disabled = state.routeSiteIds.includes(site.id); add.addEventListener("click", () => addRouteSite(site.id));
+    const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Detaljer"); details.addEventListener("click", () => loadDetail(site.id));
+    const add = document.createElement("button"); add.className = "small"; add.type = "button"; text(add, state.routeSiteIds.includes(site.id) ? "Lagt til" : "Legg til rute"); add.disabled = state.routeSiteIds.includes(site.id); add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add); item.append(actions); list.append(item);
   });
 }
@@ -821,14 +831,14 @@ function renderRouteHistory() {
   const list = $("route-history-list"); list.replaceChildren();
   text($("route-history-summary"), `${state.routes.length} saved route${state.routes.length === 1 ? "" : "s"}.`);
   if (!state.routes.length) {
-    const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "No saved routes."); list.append(empty); return;
+    const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "Ingen lagrede ruter."); list.append(empty); return;
   }
   state.routes.forEach((route) => {
     const item = document.createElement("article"); item.className = "route-item";
     const name = document.createElement("h3"); text(name, route.name); item.append(name);
     const meta = document.createElement("div"); meta.className = "site-meta";
     text(meta, `${new Date(route.created_at).toLocaleString()} | ${formatRouteDistance(route.distance_m)} | ${formatRouteDuration(route.duration_s)}`); item.append(meta);
-    const load = document.createElement("button"); load.className = "small"; load.type = "button"; text(load, "Load route"); load.addEventListener("click", () => loadRoute(route.id)); item.append(load);
+    const load = document.createElement("button"); load.className = "small"; load.type = "button"; text(load, "Last inn rute"); load.addEventListener("click", () => loadRoute(route.id)); item.append(load);
     list.append(item);
   });
 }
@@ -851,14 +861,14 @@ function renderRouteResult(result) {
   const cautionSites = state.routeSiteIds.map(siteById).filter((site) => site && site.access !== "public");
   if (cautionSites.length) {
     const warning = document.createElement("p"); warning.className = "warning";
-    text(warning, `Access is not established for: ${cautionSites.map((site) => site.name).join(", ")}. Use public approaches only.`); root.append(warning);
+    text(warning, `Tilgang is not established for: ${cautionSites.map((site) => site.name).join(", ")}. Use public approaches only.`); root.append(warning);
   }
   const href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" }));
   state.gpxObjectUrls.add(href);
   const download = document.createElement("a");
   download.href = href;
   download.download = "bunkerkartet-route.gpx";
-  text(download, "Download GPX"); root.append(download);
+  text(download, "Last ned GPX"); root.append(download);
 }
 
 async function loadRoute(id) {
@@ -899,7 +909,7 @@ async function downloadGeoJSON() {
     link.download = "bunkerkartet-sites.geojson";
     link.click();
     setTimeout(() => { URL.revokeObjectURL(link.href); state.gpxObjectUrls.delete(link.href); }, 1000);
-    setStatus("GeoJSON downloaded.");
+    setStatus("GeoJSON lastet ned.");
   } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
 }
 
@@ -922,11 +932,11 @@ function renderRouteStops() {
     const item = document.createElement("li"); item.className = "route-stop";
     const name = document.createElement("span"); name.className = "route-stop-name"; text(name, site.name);
     const access = document.createElement("span"); access.className = "route-stop-meta"; text(access, accessLabel(site.access));
-    const up = document.createElement("button"); up.className = "small"; up.title = "Move earlier"; text(up, "Up"); up.disabled = index === 0;
+    const up = document.createElement("button"); up.className = "small"; up.title = "Flytt opp"; text(up, "Up"); up.disabled = index === 0;
     up.addEventListener("click", () => { [state.routeSiteIds[index - 1], state.routeSiteIds[index]] = [state.routeSiteIds[index], state.routeSiteIds[index - 1]]; renderRouteStops(); });
-    const down = document.createElement("button"); down.className = "small"; down.title = "Move later"; text(down, "Down"); down.disabled = index === state.routeSiteIds.length - 1;
+    const down = document.createElement("button"); down.className = "small"; down.title = "Flytt ned"; text(down, "Down"); down.disabled = index === state.routeSiteIds.length - 1;
     down.addEventListener("click", () => { [state.routeSiteIds[index + 1], state.routeSiteIds[index]] = [state.routeSiteIds[index], state.routeSiteIds[index + 1]]; renderRouteStops(); });
-    const remove = document.createElement("button"); remove.className = "small"; remove.title = "Remove stop"; text(remove, "Remove");
+    const remove = document.createElement("button"); remove.className = "small"; remove.title = "Fjern stopp"; text(remove, "Remove");
     remove.addEventListener("click", () => { state.routeSiteIds.splice(index, 1); renderRouteStops(); renderSiteList(); renderMap(); });
     item.append(name, access, up, down, remove); list.append(item);
   });
@@ -937,12 +947,12 @@ async function createRoute() {
   if (!state.start || state.routeSiteIds.length === 0 || state.routeRequestInFlight) return;
   const routeSites = state.routeSiteIds.map(siteById).filter((site) => site && hasReviewedPublicApproach(site));
   if (routeSites.length !== state.routeSiteIds.length) {
-    setStatus("Some selected stops are no longer available with coordinates.");
+    setStatus("Noen valgte stopp er ikke lenger tilgjengelige med koordinater.");
     return;
   }
   const requestEpoch = state.authEpoch;
   state.routeRequestInFlight = true;
-  const button = $("create-route"); button.disabled = true; text(button, "Creating route...");
+  const button = $("create-route"); button.disabled = true; text(button, "Beregner rute ...");
   try {
     const name = $("route-name").value.trim() || "Trondheim field route";
     const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name, start: state.start, site_ids: routeSites.map((site) => site.id) }) });
@@ -957,7 +967,7 @@ async function createRoute() {
   finally {
     if (requestEpoch === state.authEpoch) {
       state.routeRequestInFlight = false;
-      text(button, "Create route");
+      text(button, "Beregn rute");
       renderRouteStops();
     }
   }
@@ -979,7 +989,7 @@ $("import-file").addEventListener("change", (event) => {
   state.importRequestInFlight = false;
   $("preview-import").disabled = true;
   $("commit-import").disabled = true;
-  text($("preview-import"), "Preview");
+  text($("preview-import"), "Forhåndsvis");
   text($("import-result"), "");
   if (event.target.files[0]) readImport(event.target.files[0]);
 });
@@ -992,22 +1002,26 @@ $("review-confidence-filter").addEventListener("change", loadCandidates);
 $("review-access-filter").addEventListener("change", loadCandidates);
 $("review-uncertainty-filter").addEventListener("change", loadCandidates);
 $("review-source-filter").addEventListener("change", loadCandidates);
-$("pick-start").addEventListener("click", () => { state.pickingStart = true; setStatus("Click the map to set the route start."); });
+$("pick-start").addEventListener("click", () => { state.pickingStart = true; setStatus("Klikk på kartet for å sette rutestart."); });
 $("use-location").addEventListener("click", () => {
+  const requestEpoch = state.authEpoch;
   if (!navigator.geolocation) {
-    text($("location-status"), "Location is not available in this browser.");
-    setStatus("Location is not available in this browser.");
+    if (requestEpoch !== state.authEpoch) return;
+    text($("location-status"), "Posisjon er ikke tilgjengelig i denne nettleseren.");
+    setStatus("Posisjon er ikke tilgjengelig i denne nettleseren.");
     return;
   }
-  text($("location-status"), "Requesting current location...");
+  text($("location-status"), "Ber om nåværende posisjon ...");
   navigator.geolocation.getCurrentPosition((position) => {
+    if (requestEpoch !== state.authEpoch) return;
     const point = { lat: position.coords.latitude, lon: position.coords.longitude };
-    updateRouteStart(point, "current location"); map.setView([point.lat, point.lon], 15);
-    text($("location-status"), `Current location set as route start (accuracy ${Math.round(position.coords.accuracy)} m).`);
-    setStatus("Current location set as route start.");
+    updateRouteStart(point, "nåværende posisjon"); map.setView([point.lat, point.lon], 15);
+    text($("location-status"), `Nåværende posisjon er satt som rutestart (nøyaktighet ${Math.round(position.coords.accuracy)} m).`);
+    setStatus("Nåværende posisjon er satt som rutestart.");
   }, () => {
-    text($("location-status"), "Could not read current location.");
-    setStatus("Could not read current location.");
+    if (requestEpoch !== state.authEpoch) return;
+    text($("location-status"), "Kunne ikke lese nåværende posisjon.");
+    setStatus("Kunne ikke lese nåværende posisjon.");
   }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
 });
 $("create-route").addEventListener("click", createRoute);
@@ -1015,7 +1029,7 @@ map.on("click", (event) => {
   if (!state.pickingStart) return;
   state.pickingStart = false;
   updateRouteStart({ lat: event.latlng.lat, lon: event.latlng.lng });
-  setStatus("Route start set.");
+  setStatus("Rutestart satt.");
   renderRouteStops();
 });
 

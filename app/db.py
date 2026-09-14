@@ -161,10 +161,11 @@ V4_REQUIRED_SCHEMA["sites"].update({
     "approach_latitude", "approach_longitude", "approach_access", "approach_note", "approach_reviewed_at",
 })
 V4_REQUIRED_SCHEMA["route_plans"].add("stops_json")
-CURRENT_SCHEMA_VERSION = 5
-REQUIRED_SCHEMA = {table: set(columns) for table, columns in V4_REQUIRED_SCHEMA.items()}
-REQUIRED_SCHEMA["sites"].add("location_review_required")
-REQUIRED_SCHEMA["route_plans"].add("route_warnings_json")
+V5_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V4_REQUIRED_SCHEMA.items()}
+V5_REQUIRED_SCHEMA["sites"].add("location_review_required")
+V5_REQUIRED_SCHEMA["route_plans"].add("route_warnings_json")
+CURRENT_SCHEMA_VERSION = 6
+REQUIRED_SCHEMA = V5_REQUIRED_SCHEMA
 
 
 def now_iso() -> str:
@@ -202,6 +203,7 @@ class Database:
                     _run_migration(connection, _migrate_v3)
                     _run_migration(connection, _migrate_v4)
                     _run_migration(connection, _migrate_v5)
+                    _run_migration(connection, _migrate_v6)
             except sqlite3.DatabaseError as exc:
                 raise RuntimeError("database initialization failed") from exc
             return
@@ -217,6 +219,7 @@ class Database:
                     else V2_REQUIRED_SCHEMA if version == 2
                     else V3_REQUIRED_SCHEMA if version == 3
                     else V4_REQUIRED_SCHEMA if version == 4
+                    else V5_REQUIRED_SCHEMA if version == 5
                     else REQUIRED_SCHEMA
                 )
                 errors = required_schema_errors(
@@ -228,7 +231,8 @@ class Database:
                     raise RuntimeError("database is missing required schema")
                 while version < CURRENT_SCHEMA_VERSION:
                     migration = {
-                        1: _migrate_v1, 2: _migrate_v2, 3: _migrate_v3, 4: _migrate_v4, 5: _migrate_v5
+                        1: _migrate_v1, 2: _migrate_v2, 3: _migrate_v3, 4: _migrate_v4,
+                        5: _migrate_v5, 6: _migrate_v6,
                     }.get(version + 1)
                     if migration is None:
                         raise RuntimeError("database migration is not available")
@@ -454,6 +458,13 @@ def _migrate_v5(connection: sqlite3.Connection) -> None:
     if "route_warnings_json" not in route_columns:
         connection.execute("ALTER TABLE route_plans ADD COLUMN route_warnings_json TEXT")
     connection.execute("PRAGMA user_version = 5")
+
+
+def _migrate_v6(connection: sqlite3.Connection) -> None:
+    """Repair databases that already recorded schema version 5."""
+    _repair_evidence_item_fk(connection)
+    _repair_v2_history(connection)
+    connection.execute("PRAGMA user_version = 6")
 
 
 def _repair_evidence_item_fk(connection: sqlite3.Connection) -> None:
