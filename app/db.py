@@ -117,6 +117,36 @@ CREATE TABLE IF NOT EXISTS route_plans (
 );
 """
 
+CURRENT_SCHEMA_VERSION = 1
+REQUIRED_SCHEMA = {
+    "sites": {
+        "id", "external_key", "name", "site_kind", "latitude", "longitude",
+        "precision", "uncertainty_m", "location_basis", "status", "access",
+        "confidence", "condition", "warnings_json", "short_rationale", "observed_location_text",
+        "merged_into_id", "created_at", "updated_at",
+    },
+    "sources": {
+        "id", "url", "title", "source_type", "excerpt", "published_at",
+        "accessed_at", "created_at", "updated_at",
+    },
+    "evidence": {"id", "site_id", "source_id", "role", "created_at"},
+    "import_batches": {
+        "id", "batch_id", "schema_version", "generated_at", "created_at", "committed_at",
+    },
+    "import_records": {
+        "id", "batch_id", "external_key", "site_id", "action", "payload_json", "created_at",
+    },
+    "site_events": {"id", "site_id", "event_type", "payload_json", "created_at"},
+    "field_observations": {
+        "id", "site_id", "observed_at", "outcome", "note", "latitude", "longitude",
+        "observed_location_text", "access_notes", "photo_urls_json", "created_at",
+    },
+    "route_plans": {
+        "id", "name", "start_json", "waypoints_json", "distance_m", "duration_s",
+        "geometry_json", "gpx_text", "created_at",
+    },
+}
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -135,39 +165,81 @@ class Database:
         return connection
 
     def initialize(self) -> None:
-        with self.connect() as connection:
-            connection.executescript(SCHEMA)
-            columns = {
-                row[1]
-                for row in connection.execute("PRAGMA table_info(sites)").fetchall()
-            }
-            if "confidence" not in columns:
-                connection.execute("ALTER TABLE sites ADD COLUMN confidence TEXT")
-            connection.execute(
-                """
-                UPDATE sites
-                SET confidence = (
-                    SELECT json_extract(import_records.payload_json, '$.confidence')
-                    FROM import_records
-                    WHERE import_records.site_id = sites.id
-                      AND json_valid(import_records.payload_json) = 1
-                      AND json_extract(import_records.payload_json, '$.confidence')
-                          IN ('high', 'medium', 'low', 'unknown')
-                    ORDER BY import_records.id DESC
-                    LIMIT 1
-                )
-                WHERE sites.confidence IS NULL
-                  AND EXISTS (
-                    SELECT 1
-                    FROM import_records
-                    WHERE import_records.site_id = sites.id
-                      AND json_valid(import_records.payload_json) = 1
-                      AND json_extract(import_records.payload_json, '$.confidence')
-                          IN ('high', 'medium', 'low', 'unknown')
-                  )
-                """
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            try:
+                with self.connect() as connection:
+                    connection.executescript(SCHEMA)
+                    connection.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION}")
+            except sqlite3.DatabaseError as exc:
+                raise RuntimeError("database initialization failed") from exc
+            return
+
+        try:
+            with sqlite3.connect(self.path, timeout=10) as connection:
+                version = connection.execute("PRAGMA user_version").fetchone()[0]
+                if version > CURRENT_SCHEMA_VERSION:
+                    raise RuntimeError("future schema version is not supported")
+                errors = required_schema_errors(connection, allow_legacy_confidence=version == 0)
+                if errors:
+                    raise RuntimeError("database is missing required schema")
+                if version == 0:
+                    _migrate_v1(connection)
+        except RuntimeError:
+            raise
+        except sqlite3.DatabaseError as exc:
+            raise RuntimeError("database is not a readable SQLite database") from exc
+
+
+def required_schema_errors(
+    connection: sqlite3.Connection, *, allow_legacy_confidence: bool = False
+) -> list[str]:
+    errors: list[str] = []
+    for table, required_columns in REQUIRED_SCHEMA.items():
+        object_type = connection.execute(
+            "SELECT type FROM sqlite_master WHERE name = ?", (table,)
+        ).fetchone()
+        if object_type is None or object_type[0] != "table":
+            errors.append(table)
+            continue
+        columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+        missing = required_columns - columns
+        if table == "sites" and allow_legacy_confidence:
+            missing.discard("confidence")
+        if missing:
+            errors.append(table)
+    return errors
+
+
+def _migrate_v1(connection: sqlite3.Connection) -> None:
+    with connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(sites)")}
+        if "confidence" not in columns:
+            connection.execute("ALTER TABLE sites ADD COLUMN confidence TEXT")
+        connection.execute(
+            """
+            UPDATE sites
+            SET confidence = (
+                SELECT json_extract(import_records.payload_json, '$.confidence')
+                FROM import_records
+                WHERE import_records.site_id = sites.id
+                  AND json_valid(import_records.payload_json) = 1
+                  AND json_extract(import_records.payload_json, '$.confidence')
+                      IN ('high', 'medium', 'low', 'unknown')
+                ORDER BY import_records.id DESC
+                LIMIT 1
             )
-            connection.execute("PRAGMA user_version = 1")
+            WHERE sites.confidence IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM import_records
+                WHERE import_records.site_id = sites.id
+                  AND json_valid(import_records.payload_json) = 1
+                  AND json_extract(import_records.payload_json, '$.confidence')
+                      IN ('high', 'medium', 'low', 'unknown')
+              )
+            """
+        )
+        connection.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION}")
 
 
 def dump_json(value: object) -> str:

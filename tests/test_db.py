@@ -1,6 +1,8 @@
 import json
 import sqlite3
 
+import pytest
+
 from app.db import SCHEMA, Database
 
 
@@ -94,3 +96,48 @@ def test_database_migrates_confidence_column_for_existing_sites(tmp_path):
 
     assert "confidence" in columns
     assert confidence == "high"
+
+
+def test_database_initialization_is_idempotent_and_sets_v1(tmp_path):
+    path = tmp_path / "bunkerkartet.sqlite3"
+    database = Database(path)
+
+    database.initialize()
+    database.initialize()
+
+    with database.connect() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM sites").fetchone()[0] == 0
+
+
+def test_database_rejects_incomplete_existing_schema_without_creating_tables(tmp_path):
+    path = tmp_path / "incomplete.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute("CREATE TABLE sites (id INTEGER PRIMARY KEY)")
+        connection.execute("PRAGMA user_version = 1")
+
+    with pytest.raises(RuntimeError, match="required schema"):
+        Database(path).initialize()
+
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sources'"
+        ).fetchone()[0] == 0
+
+
+def test_database_rejects_unknown_future_schema_without_changes(tmp_path):
+    path = tmp_path / "future.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version = 99")
+
+    with pytest.raises(RuntimeError, match="future schema"):
+        Database(path).initialize()
+
+
+def test_database_rejects_non_sqlite_bytes(tmp_path):
+    path = tmp_path / "not-sqlite.sqlite3"
+    path.write_bytes(b"not a sqlite database")
+
+    with pytest.raises(RuntimeError, match="database"):
+        Database(path).initialize()

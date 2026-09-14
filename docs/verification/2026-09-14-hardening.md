@@ -57,3 +57,27 @@ Status: implemented locally; commit follows fresh verification.
 Verification: targeted URL/API/CLI tests passed (`8 passed` across the new L03 cases); the full suite and Node 22 syntax check were run with the L01–L02 follow-up and passed (`84 passed, 1 warning`; `node --check` exit 0). No production source was edited or sanitized.
 
 Non-claims: this does not determine whether any legacy URL parameter is an actual private key. Source/catalogue 139 still requires a separate owner decision and private remediation review.
+
+## L04 — Schema and restore boundary
+
+Status: implemented locally; no production database or backup was opened.
+
+- New databases receive numbered schema version 1 and repeated initialization is idempotent.
+- Existing databases are inspected before mutation. Incomplete schemas, future versions, and non-SQLite bytes fail closed; an existing legacy v0 schema is migrated additively with the confidence backfill and version marker in one transaction.
+- `scripts/verify_database.py` opens SQLite with `mode=ro`, checks integrity, foreign keys, expected version, required tables/columns, and prints only version and row counts.
+- Deployment guidance now requires a separate staging area, consistent SQLite/WAL/SHM handling, archive member rejection for traversal/symlink/hardlink/unexpected files, read-only verification before replacement, and a retained rollback archive.
+
+Verification:
+
+```text
+.venv/bin/python -m pytest -q
+90 passed, 1 warning in 14.95s
+
+synthetic archive -> staged extraction -> scripts/verify_database.py
+version=1 integrity_check=ok foreign_key_check=empty sites=0 ... route_plans=0
+synthetic_restore=passed
+
+git diff --check -> 0
+```
+
+Non-claims: the restore exercise used a newly generated empty synthetic database. It does not prove production backup completeness, recovery-point coverage, live-volume behavior, or deploy success. The verifier is intentionally read-only; it does not repair or upgrade a database.
