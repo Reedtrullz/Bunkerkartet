@@ -55,6 +55,38 @@ const statusLabel = (status) => STATUS_LABELS[status] || status;
 const accessLabel = (access) => ACCESS_LABELS[access] || access;
 const outcomeLabel = (outcome) => outcome.replaceAll("_", " ");
 
+function locationCategory(siteKind) {
+  const kind = String(siteKind || "").toLowerCase();
+  if (kind.includes("pow") || kind.includes("fangeleir") || kind.includes("prisoner")) {
+    return { key: "pow", label: "POW camp", glyph: "P" };
+  }
+  if (kind.includes("war grave") || kind.includes("grave")) {
+    return { key: "grave", label: "War grave", glyph: "G" };
+  }
+  if (kind.includes("war memorial") || kind.includes("memorial") || kind.includes("monument")) {
+    return { key: "memorial", label: "War memorial", glyph: "M" };
+  }
+  if (kind.includes("cave") || kind.includes("tunnel")) {
+    return { key: "cave", label: "Cave / tunnel", glyph: "C" };
+  }
+  if (["bunker", "fort", "battery", "searchlight", "observation", "communications"].some((term) => kind.includes(term))) {
+    return { key: "bunker", label: "Bunker / military position", glyph: "B" };
+  }
+  return { key: "other", label: "Other wartime site", glyph: "O" };
+}
+
+function statusClass(status) {
+  return {
+    candidate: "candidate",
+    approximate: "approximate",
+    likely: "likely",
+    trusted: "trusted",
+    "field-verified": "field-verified",
+    "destroyed-or-filled": "destroyed-or-filled",
+    rejected: "rejected",
+  }[status] || "candidate";
+}
+
 function labeledControl(label, control, className = "") {
   const wrapper = document.createElement("label");
   if (className) wrapper.className = className;
@@ -149,12 +181,17 @@ function renderMap(fit = false) {
     if (site.latitude == null || site.longitude == null) return;
     const point = [site.latitude, site.longitude];
     bounds.push(point);
-    const marker = L.circleMarker(point, {
-      color: statusColor(site.status),
-      fillColor: statusColor(site.status),
-      fillOpacity: .88,
-      radius: 7,
-      weight: 2,
+    const category = locationCategory(site.site_kind);
+    const marker = L.marker(point, {
+      alt: `${category.label}: ${site.name}`,
+      icon: L.divIcon({
+        className: "site-marker-icon",
+        html: `<span class="site-marker site-marker-${category.key} status-${statusClass(site.status)}" aria-label="${category.label}">${category.glyph}</span>`,
+        iconAnchor: [14, 14],
+        iconSize: [28, 28],
+        popupAnchor: [0, -14],
+      }),
+      title: `${category.label}: ${site.name}`,
     }).addTo(markerLayer);
     if (site.uncertainty_m > 0) {
       L.circle(point, {

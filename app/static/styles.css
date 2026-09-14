@@ -118,7 +118,7 @@ textarea { min-height: 58px; resize: vertical; }
   border-radius: 4px;
   display: grid;
   gap: 5px;
-  max-width: 250px;
+  max-width: 270px;
   padding: 8px 10px;
   position: absolute;
   left: 60px;
@@ -128,10 +128,53 @@ textarea { min-height: 58px; resize: vertical; }
 .map-key strong { font-size: 12px; }
 .map-key span { align-items: center; display: flex; font-size: 11px; gap: 6px; }
 .map-key small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.map-key-marker {
+  align-items: center;
+  border: 2px solid rgba(255,255,255,.95);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(23,33,43,.35);
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 18px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  width: 18px;
+}
+.marker-bunker, .site-marker-bunker { background: #3d6547; }
+.marker-cave, .site-marker-cave { background: #6b5848; }
+.marker-pow, .site-marker-pow { background: #9e3d3d; }
+.marker-grave, .site-marker-grave { background: #356a8a; }
+.marker-memorial, .site-marker-memorial { background: #2f7456; }
+.marker-other, .site-marker-other { background: #536273; }
+.site-marker-icon { background: transparent; border: 0; }
+.site-marker {
+  align-items: center;
+  border: 3px solid var(--amber);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(23,33,43,.45);
+  color: #fff;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  width: 28px;
+}
+.site-marker.status-approximate { border-color: var(--accent); }
+.site-marker.status-likely { border-color: var(--green); }
+.site-marker.status-trusted, .site-marker.status-field-verified { border-color: var(--navy); }
+.site-marker.status-destroyed-or-filled { border-color: var(--muted); }
+.site-marker.status-rejected { border-color: var(--red); }
 .key-dot { border-radius: 50%; display: inline-block; height: 9px; width: 9px; }
 .key-candidate { background: var(--amber); }
 .key-researched { background: var(--green); }
 .key-confirmed { background: var(--navy); }
+.key-observation { background: #fff; border: 2px solid var(--green); }
 .map-status { background: rgba(255,255,255,.95); border: 1px solid var(--line); border-radius: 4px; bottom: 12px; left: 12px; padding: 7px 9px; position: absolute; z-index: 500; }
 
 @media (max-width: 800px) {

@@ -29,3 +29,7 @@ def test_frontend_exposes_operational_controls_without_duplicate_auth_binding():
     assert "Copy coordinates" in javascript
     assert "startMarker = L.circleMarker" in javascript
     assert "External key" in javascript
+    assert "function locationCategory(siteKind)" in javascript
+    assert "L.divIcon" in javascript
+    assert "site-marker-${category.key}" in javascript
+    assert "map-key-marker" in html
