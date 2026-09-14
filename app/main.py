@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from html import escape as escape_html
 import hmac
 import json
 import math
@@ -15,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, mod
 from urllib.error import HTTPError, URLError
 
 from app.config import Settings
-from app.db import Database, dump_json, now_iso, observation_from_row, site_from_row
+from app.db import Database, dump_json, load_json, now_iso, observation_from_row, site_from_row
 from app.imports import ImportPackage, ImportRecord, validate_import_package
 from app.routes import RouteResult, build_gpx, fetch_openrouteservice
 
@@ -47,7 +48,8 @@ LOCATION_BASES = (
     "llm_inference",
 )
 SECURITY_HEADERS = {
-    "Content-Security-Policy": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: blob: https://cache.kartverket.no; font-src 'self' data:; connect-src 'self'",
+    "Content-Security-Policy": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: blob: https://cache.kartverket.no https://server.arcgisonline.com https://unpkg.com; font-src 'self' data:; connect-src 'self'",
+    "X-Robots-Tag": "noindex, nofollow, noarchive",
     "Permissions-Policy": "geolocation=(self)",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
@@ -154,6 +156,16 @@ class RouteRequest(BaseModel):
     name: str = Field(default="Trondheim field route", min_length=1, max_length=200)
     start: RoutePoint
     waypoints: list[RoutePoint] = Field(min_length=1, max_length=20)
+    waypoint_names: list[str] | None = Field(default=None, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_waypoint_names(self) -> "RouteRequest":
+        if self.waypoint_names is not None:
+            if len(self.waypoint_names) != len(self.waypoints):
+                raise ValueError("waypoint_names must match waypoints")
+            if any(not name.strip() for name in self.waypoint_names):
+                raise ValueError("waypoint names cannot be empty")
+        return self
 
 
 def _validation_detail(error: ValidationError) -> list[dict[str, object]]:
@@ -167,6 +179,18 @@ def _distance_m(first: tuple[float, float], second: tuple[float, float]) -> floa
     dlon = lon2 - lon1
     a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
     return 6_371_000 * 2 * math.asin(math.sqrt(a))
+
+
+def _route_warnings(
+    requested_coordinates: list[tuple[float, float]],
+    routed_coordinates: list[tuple[float, float]],
+) -> list[str]:
+    warnings = ["A route does not grant permission to enter land or structures."]
+    if _distance_m(requested_coordinates[0], routed_coordinates[0]) > 50 or _distance_m(
+        requested_coordinates[-1], routed_coordinates[-1]
+    ) > 50:
+        warnings.append("The provider snapped a route endpoint; verify the approach on site.")
+    return warnings
 
 
 def _source_rows(connection: sqlite3.Connection, site_id: int) -> list[dict[str, object]]:
@@ -285,6 +309,13 @@ def _preview_package(
             action = "update_candidate"
         else:
             action = "preserve_trusted"
+        if (
+            existing is not None
+            and existing["status"] == "candidate"
+            and record.geometry is None
+            and existing["latitude"] is not None
+        ):
+            warnings.append("incoming record has no geometry; existing candidate coordinate will be preserved")
         counts[action] += 1
         counts["warnings"] += len(warnings)
         preview_records.append(
@@ -420,6 +451,15 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                 action = "created"
                 created += 1
             elif existing["status"] == "candidate":
+                preserve_candidate_point = (
+                    record.geometry is None
+                    and existing["latitude"] is not None
+                    and existing["longitude"] is not None
+                )
+                existing_warnings = load_json(existing["warnings_json"], [])
+                if not isinstance(existing_warnings, list):
+                    existing_warnings = []
+                warnings = list(dict.fromkeys([*existing_warnings, *warnings]))
                 connection.execute(
                     """
                     UPDATE sites SET name = ?, site_kind = ?, latitude = ?, longitude = ?,
@@ -431,18 +471,18 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                     (
                         record.name,
                         record.site_kind,
-                        record.geometry.latitude if record.geometry else None,
-                        record.geometry.longitude if record.geometry else None,
-                        record.precision,
-                        record.uncertainty_m,
-                        record.location_basis,
+                        existing["latitude"] if preserve_candidate_point else record.geometry.latitude if record.geometry else None,
+                        existing["longitude"] if preserve_candidate_point else record.geometry.longitude if record.geometry else None,
+                        existing["precision"] if preserve_candidate_point else record.precision,
+                        existing["uncertainty_m"] if preserve_candidate_point else record.uncertainty_m,
+                        existing["location_basis"] if preserve_candidate_point else record.location_basis,
                         "candidate",
-                        record.access,
-                        record.confidence,
-                        record.condition,
+                        existing["access"] if record.access == "unknown" and existing["access"] != "unknown" else record.access,
+                        record.confidence if record.confidence is not None else existing["confidence"],
+                        record.condition if record.condition is not None else existing["condition"],
                         dump_json(warnings),
-                        record.short_rationale,
-                        record.observed_location_text,
+                        record.short_rationale if record.short_rationale is not None else existing["short_rationale"],
+                        record.observed_location_text if record.observed_location_text is not None else existing["observed_location_text"],
                         timestamp,
                         existing["id"],
                     ),
@@ -547,7 +587,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/", include_in_schema=False)
     def index() -> HTMLResponse:
         html = (static_dir / "index.html").read_text()
-        html = html.replace('/static/app.js"', f'/static/app.js?v={settings.app_version}"')
+        html = html.replace(
+            '/static/app.js"',
+            f'/static/app.js?v={escape_html(settings.app_version, quote=True)}"',
+        )
         return HTMLResponse(html)
 
     @app.get("/api/health")
@@ -589,6 +632,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         status: str | None = Query(default=None),
         site_kind: str | None = Query(default=None, max_length=100),
         q: str | None = Query(default=None, max_length=200),
+        access: str | None = Query(default=None),
+        confidence: str | None = Query(default=None),
         include_rejected: bool = Query(default=False),
     ) -> list[dict[str, object]]:
         conditions = ["merged_into_id IS NULL"]
@@ -603,6 +648,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if site_kind and site_kind.strip():
             conditions.append("lower(site_kind) LIKE lower(?)")
             values.append(f"%{site_kind.strip()}%")
+        if access:
+            if access not in SITE_ACCESSES:
+                raise HTTPException(400, "invalid site access")
+            conditions.append("access = ?")
+            values.append(access)
+        if confidence:
+            if confidence not in CONFIDENCE_LEVELS:
+                raise HTTPException(400, "invalid site confidence")
+            conditions.append("COALESCE(confidence, 'unknown') = ?")
+            values.append(confidence)
         if q and q.strip():
             term = f"%{q.strip()}%"
             searchable_fields = ("name", "site_kind", "short_rationale", "observed_location_text", "condition")
@@ -733,7 +788,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             values.append(source_type.strip())
         with database.connect() as connection:
             rows = connection.execute(
-                f"SELECT * FROM sites WHERE {' AND '.join(conditions)} ORDER BY id",
+                f"SELECT * FROM sites WHERE {' AND '.join(conditions)} ORDER BY "
+                "CASE COALESCE(sites.confidence, 'unknown') WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 ELSE 3 END, "
+                "CASE WHEN sites.uncertainty_m IS NULL THEN 1 ELSE 0 END, sites.uncertainty_m, sites.id",
                 values,
             ).fetchall()
             return [_site_detail(connection, row) for row in rows]
@@ -759,6 +816,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            new_latitude = values.get("latitude", row["latitude"])
+            new_longitude = values.get("longitude", row["longitude"])
+            if (new_latitude is None) != (new_longitude is None):
+                raise HTTPException(422, "latitude and longitude must be edited together")
+            new_precision = values.get("precision", row["precision"])
+            new_uncertainty = values.get("uncertainty_m", row["uncertainty_m"])
+            if new_latitude is None:
+                if new_precision != "unknown":
+                    raise HTTPException(422, "a site without coordinates must use unknown precision")
+                if new_uncertainty is not None:
+                    if values.get("uncertainty_m") is not None:
+                        raise HTTPException(422, "a site without coordinates cannot have uncertainty")
+                    values["uncertainty_m"] = None
+            elif new_uncertainty is None:
+                raise HTTPException(422, "a site with coordinates requires uncertainty")
             if "status" in values and values["status"] != row["status"]:
                 raise HTTPException(409, "status changes must use the review workflow")
             values.pop("status", None)
@@ -790,6 +862,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if row["merged_into_id"] is not None:
+                raise HTTPException(409, "merged site cannot receive observations")
+            if row["status"] == "rejected":
+                raise HTTPException(409, "rejected site cannot receive observations")
             cursor = connection.execute(
                 """
                 INSERT INTO field_observations
@@ -832,6 +908,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if row["merged_into_id"] is not None:
+                raise HTTPException(409, "merged site cannot adopt an observation coordinate")
+            if row["status"] == "rejected":
+                raise HTTPException(409, "rejected site cannot adopt an observation coordinate")
             observation = connection.execute(
                 "SELECT * FROM field_observations WHERE id = ? AND site_id = ?",
                 (observation_id, site_id),
@@ -916,6 +996,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     (request.target_site_id, site_id),
                 )
                 connection.execute("DELETE FROM evidence WHERE site_id = ?", (site_id,))
+                connection.execute(
+                    "UPDATE field_observations SET site_id = ? WHERE site_id = ?",
+                    (request.target_site_id, site_id),
+                )
                 status = "merged"
             else:
                 status = {
@@ -976,12 +1060,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             route: RouteResult = fetch_openrouteservice(settings.ors_api_key, coordinates)
         except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as error:
             raise HTTPException(502, f"routing provider error: {error}")
-        warnings = ["A route does not grant permission to enter land or structures."]
-        if _distance_m(coordinates[0], route.coordinates[0]) > 50 or _distance_m(
-            coordinates[-1], route.coordinates[-1]
-        ) > 50:
-            warnings.append("The provider snapped a route endpoint; verify the approach on site.")
-        gpx = build_gpx(request.name, route.coordinates)
+        warnings = _route_warnings(coordinates, route.coordinates)
+        waypoint_names = request.waypoint_names or [f"Stop {index}" for index in range(1, len(request.waypoints) + 1)]
+        named_waypoints = [(request.start.lon, request.start.lat, "Route start")]
+        named_waypoints.extend(
+            (point.lon, point.lat, name)
+            for point, name in zip(request.waypoints, waypoint_names)
+        )
+        gpx = build_gpx(request.name, route.coordinates, named_waypoints)
         timestamp = now_iso()
         with database.connect() as connection:
             cursor = connection.execute(
@@ -1031,9 +1117,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if row is None:
                 raise HTTPException(404, "route not found")
             route = _route_summary(row)
-            route["geometry"] = {"type": "LineString", "coordinates": json.loads(row["geometry_json"])}
+            route_coordinates = json.loads(row["geometry_json"])
+            route["geometry"] = {"type": "LineString", "coordinates": route_coordinates}
             route["gpx"] = row["gpx_text"]
-            route["warnings"] = ["A route does not grant permission to enter land or structures."]
+            requested_coordinates = [(route["start"]["lon"], route["start"]["lat"])] + [
+                (point["lon"], point["lat"]) for point in route["waypoints"]
+            ]
+            route["warnings"] = _route_warnings(requested_coordinates, route_coordinates)
             return route
 
     return app

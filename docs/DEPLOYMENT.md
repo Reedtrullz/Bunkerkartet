@@ -1,8 +1,10 @@
 # Deployment
 
-This repository prepares deployment but does not deploy anything. The intended
-runtime is a Docker Compose service on the VPS, with Caddy terminating public
-TLS and proxying to the app on `127.0.0.1:8000`.
+The live service is deployed from a published `main` image through the
+authorized Ansible deployment path. CI builds and publishes the immutable
+image; the intended runtime is a Docker Compose service on the VPS, with Caddy
+terminating public TLS and proxying to the app on `127.0.0.1:8000`. The
+repository also contains the Ansible path for manual or recovery deployment.
 
 ## Build and publish
 

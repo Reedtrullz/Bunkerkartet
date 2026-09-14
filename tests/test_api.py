@@ -50,6 +50,7 @@ def test_responses_include_security_headers_and_api_is_not_cached(tmp_path):
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["x-robots-tag"] == "noindex, nofollow, noarchive"
     assert response.headers["permissions-policy"] == "geolocation=(self)"
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
@@ -64,3 +65,21 @@ def test_root_serves_map_frontend(tmp_path):
     assert "/static/app.js?v=" in response.text
     assert response.headers["cache-control"] == "no-store"
     assert client.get("/static/app.js").headers["cache-control"] == "no-store"
+
+
+def test_root_escapes_app_version_in_asset_query(tmp_path):
+    client = TestClient(
+        create_app(
+            Settings(
+                data_dir=tmp_path,
+                admin_token="admin",
+                app_version='sha" onerror="alert(1)',
+            )
+        )
+    )
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert '/static/app.js?v=sha&quot; onerror=&quot;alert(1)"' in response.text
+    assert '/static/app.js?v=sha" onerror="alert(1)"' not in response.text

@@ -167,6 +167,44 @@ def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
     assert len(site["sources"]) == 2
 
 
+def test_import_does_not_erase_candidate_location_or_cautions_when_new_source_has_no_point(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    first["records"][0].update(
+        warnings=["Do not enter"],
+        condition="Current condition unknown",
+        confidence="medium",
+    )
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+
+    second = package("batch-2")
+    second["records"][0].update(
+        geometry=None,
+        precision="unknown",
+        uncertainty_m=None,
+        location_basis="landmark_description",
+        confidence=None,
+        condition=None,
+        short_rationale=None,
+        warnings=[],
+        access="unknown",
+    )
+    second["records"][0]["sources"][0]["url"] = "https://example.com/forum/no-point"
+
+    response = api.post("/api/admin/imports/commit", headers=auth(), json=second)
+
+    assert response.status_code == 200
+    site = api.get("/api/sites/1", headers=auth()).json()
+    assert site["latitude"] == 63.4
+    assert site["longitude"] == 10.4
+    assert site["precision"] == "approximate"
+    assert site["uncertainty_m"] == 80
+    assert site["confidence"] == "medium"
+    assert site["condition"] == "Current condition unknown"
+    assert "Do not enter" in site["warnings"]
+    assert len(site["sources"]) == 2
+
+
 def test_site_status_changes_use_review_workflow(tmp_path):
     api = client(tmp_path)
     assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
@@ -339,6 +377,57 @@ def test_field_verification_requires_a_found_observation(tmp_path):
 
     assert response.status_code == 409
     assert "found field observation" in response.json()["detail"]
+
+
+def test_observations_are_rejected_for_rejected_or_merged_sites(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    second = package("batch-2", external_key="forum:2", name="Second bunker")
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    sites = api.get("/api/sites", headers=auth()).json()
+    first_id = next(site["id"] for site in sites if site["external_key"] == "forum:1")
+    second_id = next(site["id"] for site in sites if site["external_key"] == "forum:2")
+
+    assert api.post(
+        f"/api/sites/{first_id}/review", headers=auth(), json={"action": "reject"}
+    ).status_code == 200
+    observation = {"observed_at": "2026-09-14", "outcome": "found", "note": "A feature was seen."}
+    assert api.post(f"/api/sites/{first_id}/observations", headers=auth(), json=observation).status_code == 409
+
+    assert api.post(
+        f"/api/sites/{first_id}/review", headers=auth(), json={"action": "restore"}
+    ).status_code == 200
+    assert api.post(
+        f"/api/sites/{second_id}/review", headers=auth(), json={"action": "merge", "target_site_id": first_id}
+    ).status_code == 200
+    assert api.post(f"/api/sites/{second_id}/observations", headers=auth(), json=observation).status_code == 409
+
+
+def test_site_edit_requires_consistent_coordinates_and_precision(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+
+    clear_without_precision = api.patch(
+        "/api/sites/1", headers=auth(), json={"latitude": None, "longitude": None}
+    )
+    assert clear_without_precision.status_code == 422
+
+    missing_uncertainty = api.patch(
+        "/api/sites/1",
+        headers=auth(),
+        json={"latitude": 63.4, "longitude": 10.4, "uncertainty_m": None},
+    )
+    assert missing_uncertainty.status_code == 422
+
+    cleared = api.patch(
+        "/api/sites/1",
+        headers=auth(),
+        json={"latitude": None, "longitude": None, "precision": "unknown"},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["latitude"] is None
+    assert cleared.json()["uncertainty_m"] is None
 
 
 def test_site_list_exposes_observation_points(tmp_path):
@@ -519,6 +608,25 @@ def test_site_kind_filter_matches_case_insensitive_substrings(tmp_path):
     assert [site["site_kind"] for site in response.json()] == ["bunker"]
 
 
+def test_site_list_filters_access_and_confidence(tmp_path):
+    api = client(tmp_path)
+    public = package("batch-public", name="Public lead", external_key="site:public")
+    public["records"][0]["sources"][0]["url"] = "https://example.com/site/public"
+    public["records"][0].update(access="public", confidence="high")
+    unknown = package("batch-unknown", name="Unknown lead", external_key="site:unknown")
+    unknown["records"][0]["sources"][0]["url"] = "https://example.com/site/unknown"
+    unknown["records"][0].update(access="unknown", confidence="low")
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=public).status_code == 200
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=unknown).status_code == 200
+
+    response = api.get("/api/sites?access=public&confidence=high", headers=auth())
+
+    assert response.status_code == 200
+    assert [site["external_key"] for site in response.json()] == ["site:public"]
+    assert api.get("/api/sites?access=not-an-access", headers=auth()).status_code == 400
+    assert api.get("/api/sites?confidence=not-confidence", headers=auth()).status_code == 400
+
+
 def test_site_search_matches_name_and_rationale(tmp_path):
     api = client(tmp_path)
     first = package(name="Kuhaugen command bunker")
@@ -598,6 +706,16 @@ def test_merge_transfers_evidence_without_duplicate_failure(tmp_path):
     assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
     assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
     sites = api.get("/api/sites", headers=auth()).json()
+    observation = api.post(
+        f"/api/sites/{sites[0]['id']}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Observed from the public path.",
+        },
+    )
+    assert observation.status_code == 201
 
     response = api.post(
         f"/api/sites/{sites[0]['id']}/review",
@@ -609,6 +727,7 @@ def test_merge_transfers_evidence_without_duplicate_failure(tmp_path):
     assert response.json()["status"] == "merged"
     target = api.get(f"/api/sites/{sites[1]['id']}", headers=auth()).json()
     assert len(target["sources"]) == 1
+    assert len(target["field_observations"]) == 1
 
 
 def test_merged_sites_cannot_be_reviewed_or_used_as_merge_targets(tmp_path):

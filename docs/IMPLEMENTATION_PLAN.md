@@ -1,5 +1,9 @@
 # Bunkerkartet core v1 implementation plan
 
+Core v1 is implemented and deployed; this document remains the source plan and
+acceptance record. The deployment task below describes the original build
+boundary, while the live release path is documented in `docs/DEPLOYMENT.md`.
+
 ## Objective
 
 Build the smallest private, usable war-history map for Trondheim: import external LLM/research JSON packages, review candidate sites, display uncertainty and evidence on a Leaflet/Kartverket map, and plan walking routes with GPX export.
@@ -38,11 +42,11 @@ Build the Leaflet/Kartverket map, status/type filters, uncertainty circles, site
 
 Add a server-side openrouteservice `foot-hiking` proxy with clear provider errors, explicit waypoint order, off-network warnings, route geometry, distance/duration, and GPX output.
 
-### Task 6 - deployment (delegated)
+### Task 6 - deployment (delegated, completed)
 
 Add Docker, Compose, GitHub CI, immutable GHCR image publication, Ansible deployment scaffolding, loopback-only binding, health/version verification, persistent SQLite volume, backup/restore commands, and Caddy instructions. Do not deploy or push from this task.
 
-### Task 7 - verification (controller/reviewer)
+### Task 7 - verification (controller/reviewer, completed)
 
 Run unit/API tests, browser smoke checks, Docker runtime checks, import fixture checks, GPX validation, security checks, and a fresh-clone run. Review the full diff for scope and non-claims.
 
@@ -52,4 +56,4 @@ Run unit/API tests, browser smoke checks, Docker runtime checks, import fixture 
 - An external JSON batch can be uploaded, previewed, committed without duplicates, and reviewed.
 - Approved sites display on the map with source trail and uncertainty.
 - A route can be created through selected sites and exported as GPX.
-- CI and Docker checks pass; deployment is prepared but not externally published.
+- CI and Docker checks pass; the authorized deployment path publishes and runs an immutable image.

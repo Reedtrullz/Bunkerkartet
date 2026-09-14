@@ -6,16 +6,23 @@ const state = {
   importRequestInFlight: false,
   routeSiteIds: [],
   prioritySites: [],
+  siteCache: new Map(),
   start: null,
   pickingStart: false,
   routeRequestInFlight: false,
 };
 
 const map = L.map("map").setView([63.4305, 10.3951], 12);
-L.tileLayer(
+const topoLayer = L.tileLayer(
   "https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png",
   { maxZoom: 18, attribution: "&copy; Kartverket" }
 ).addTo(map);
+const imageryLayer = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 19, attribution: "Tiles &copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community" }
+);
+L.control.layers({ "Topo (Kartverket)": topoLayer, "Aerial imagery": imageryLayer }).addTo(map);
+L.control.scale({ imperial: false }).addTo(map);
 const markerLayer = L.layerGroup().addTo(map);
 const uncertaintyLayer = L.layerGroup().addTo(map);
 const observationLayer = L.layerGroup().addTo(map);
@@ -83,13 +90,39 @@ function textareaControl(value = "") {
 
 function setStatus(message) { text($("map-status"), message); }
 
+function cacheSites(sites) { sites.forEach((site) => state.siteCache.set(site.id, site)); }
+
+function clearAuthenticatedData() {
+  state.sites = [];
+  state.routes = [];
+  state.prioritySites = [];
+  state.routeSiteIds = [];
+  state.siteCache.clear();
+  markerLayer.clearLayers();
+  uncertaintyLayer.clearLayers();
+  observationLayer.clearLayers();
+  if (routeLayer) { routeLayer.remove(); routeLayer = null; }
+  $("download-geojson").disabled = true;
+  renderSiteList();
+  renderMap();
+  renderFieldPriority();
+  renderRouteHistory();
+  renderRouteStops();
+  $("candidate-list").replaceChildren();
+  text($("candidate-summary"), "");
+}
+
 async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   if (state.token) headers.set("Authorization", `Bearer ${state.token}`);
   if (options.body) headers.set("Content-Type", "application/json");
   const response = await fetch(path, { ...options, headers });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(body.detail || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 
@@ -104,10 +137,10 @@ function statusColor(status) {
 }
 
 function siteById(id) {
-  return state.sites.find((site) => site.id === id) || state.prioritySites.find((site) => site.id === id);
+  return state.siteCache.get(id) || state.sites.find((site) => site.id === id) || state.prioritySites.find((site) => site.id === id);
 }
 
-function renderMap() {
+function renderMap(fit = false) {
   markerLayer.clearLayers();
   uncertaintyLayer.clearLayers();
   observationLayer.clearLayers();
@@ -138,7 +171,8 @@ function renderMap() {
     popup.append(heading);
     const meta = document.createElement("div");
     meta.className = "site-meta";
-    text(meta, `${site.site_kind} | ${statusLabel(site.status)}`);
+    const uncertainty = site.uncertainty_m == null ? "uncertainty unknown" : `${Math.round(site.uncertainty_m)} m`;
+    text(meta, `${site.site_kind} | ${statusLabel(site.status)} | ${site.confidence || "unknown"} | ${uncertainty} | ${accessLabel(site.access)}`);
     popup.append(meta);
     const actions = document.createElement("div");
     actions.className = "site-actions";
@@ -177,7 +211,7 @@ function renderMap() {
       observationMarker.bindPopup(popup);
     });
   });
-  if (bounds.length) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
+  if (fit && bounds.length) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
 }
 
 function renderSiteList() {
@@ -225,38 +259,54 @@ function renderSiteList() {
 }
 
 async function loadSites() {
-  state.token = $("admin-token").value.trim();
+  const token = $("admin-token").value.trim();
+  if (token !== state.token) clearAuthenticatedData();
+  state.token = token;
   if (!state.token) { setStatus("Enter the admin token to load sites."); return; }
+  const loadButton = $("load-sites"); loadButton.disabled = true; text(loadButton, "Loading...");
   const params = new URLSearchParams();
   const status = $("status-filter").value;
   const kind = $("kind-filter").value.trim();
   const query = $("site-search").value.trim();
+  const access = $("access-filter").value;
+  const confidence = $("confidence-filter").value;
+  const hasFilters = [status, kind, query, access, confidence].some(Boolean);
   if (status) params.set("status", status);
   if (kind) params.set("site_kind", kind);
   if (query) params.set("q", query);
+  if (access) params.set("access", access);
+  if (confidence) params.set("confidence", confidence);
   try {
     state.sites = await api(`/api/sites?${params}`);
+    cacheSites(state.sites);
     $("download-geojson").disabled = false;
     renderSiteList();
-    renderMap();
+    renderMap(true);
     setStatus(state.sites.length
       ? `${state.sites.length} site${state.sites.length === 1 ? "" : "s"} loaded.`
-      : status || kind
+      : hasFilters
         ? "No sites match the current filters."
         : "Authenticated. No site records imported yet.");
     await loadCandidates();
     await loadFieldPriority();
     await loadRoutes();
-  } catch (error) { setStatus(error.message); }
+  } catch (error) {
+    if (error.status === 401 || error.status === 503) clearAuthenticatedData();
+    setStatus(error.message);
+  } finally { loadButton.disabled = false; text(loadButton, "Load map"); }
 }
 
-async function runReviewAction(id, action) {
+async function runReviewAction(id, action, targetSiteId = null) {
   if (action === "reject" && !window.confirm("Reject this candidate?")) return;
   if (action === "mark_destroyed" && !window.confirm("Mark this site as destroyed or filled?")) return;
+  if (action === "merge" && !window.confirm("Merge this record into the selected surviving site?")) return;
   try {
-    await api(`/api/sites/${id}/review`, { method: "POST", body: JSON.stringify({ action }) });
+    const payload = { action };
+    if (targetSiteId) payload.target_site_id = targetSiteId;
+    const result = await api(`/api/sites/${id}/review`, { method: "POST", body: JSON.stringify(payload) });
+    if (result.site) state.siteCache.set(result.site.id, result.site);
     await loadSites();
-    await loadDetail(id);
+    await loadDetail(targetSiteId || id);
   } catch (error) { setStatus(error.message); }
 }
 
@@ -284,6 +334,20 @@ function renderLifecycleActions(site, root) {
     restore.addEventListener("click", () => runReviewAction(site.id, "restore")); actions.append(restore);
   }
   section.append(actions); root.append(section);
+  if (site.status === "candidate") {
+    const targets = [...state.siteCache.values()]
+      .filter((candidate) => candidate.id !== site.id && candidate.status === "candidate" && candidate.merged_into_id == null)
+      .sort((first, second) => first.name.localeCompare(second.name));
+    if (targets.length) {
+      const target = document.createElement("select");
+      const placeholder = document.createElement("option"); placeholder.value = ""; text(placeholder, "Choose surviving site"); target.append(placeholder);
+      targets.forEach((candidate) => { const option = document.createElement("option"); option.value = candidate.id; text(option, `${candidate.name} (#${candidate.id})`); target.append(option); });
+      const merge = document.createElement("button"); merge.className = "small danger"; merge.type = "button"; merge.disabled = true; text(merge, "Merge into selected");
+      target.addEventListener("change", () => { merge.disabled = !target.value; });
+      merge.addEventListener("click", () => runReviewAction(site.id, "merge", Number(target.value)));
+      section.append(labeledControl("Merge duplicate into", target), merge);
+    }
+  }
 }
 
 function renderSiteEditor(site, root) {
@@ -414,20 +478,32 @@ async function adoptObservationLocation(siteId, observationId) {
 async function loadDetail(id) {
   try {
     const site = await api(`/api/sites/${id}`);
+    state.siteCache.set(site.id, site);
     const root = $("site-detail");
     root.replaceChildren();
+    const coordinates = site.latitude == null ? "Unknown" : `${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}`;
     const copy = document.createElement("dl"); copy.className = "detail-copy";
-    [["Name", site.name], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
+    [["Name", site.name], ["External key", site.external_key], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
       ["Confidence", site.confidence || "Unknown"],
+      ["Coordinates", coordinates],
       ["Precision", `${site.precision}${site.uncertainty_m == null ? "" : ` (${site.uncertainty_m} m)`}`],
-      ["Access", accessLabel(site.access)], ["Basis", site.location_basis], ["Condition", site.condition || "Unknown"]]
+      ["Access", accessLabel(site.access)], ["Basis", site.location_basis], ["Condition", site.condition || "Unknown"],
+      ["Observed location", site.observed_location_text || "Unknown"]]
       .forEach(([label, value]) => { const dt = document.createElement("dt"); text(dt, label); const dd = document.createElement("dd"); text(dd, value); copy.append(dt, dd); });
     if (site.short_rationale) { const rationale = document.createElement("p"); text(rationale, site.short_rationale); copy.append(rationale); }
     if (site.warnings?.length) { const warning = document.createElement("p"); warning.className = "warning"; text(warning, site.warnings.join(" | ")); copy.append(warning); }
     const sourcesTitle = document.createElement("dt"); text(sourcesTitle, "Sources"); copy.append(sourcesTitle);
     const sources = document.createElement("dd"); const sourceList = document.createElement("ul"); sourceList.className = "source-list";
-    (site.sources || []).forEach((source) => { const li = document.createElement("li"); const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
+    (site.sources || []).forEach((source) => { const li = document.createElement("li"); const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "source", source.published_at && `published ${source.published_at}`, source.accessed_at && `accessed ${source.accessed_at}`].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
     sources.append(sourceList); copy.append(sources); root.append(copy);
+    if (site.latitude != null && site.longitude != null) {
+      const copyCoordinates = document.createElement("button"); copyCoordinates.className = "small"; copyCoordinates.type = "button"; text(copyCoordinates, "Copy coordinates");
+      copyCoordinates.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(`${site.latitude}, ${site.longitude}`); setStatus("Coordinates copied."); }
+        catch { setStatus("Clipboard is unavailable; use the coordinates shown above."); }
+      });
+      root.append(copyCoordinates);
+    }
     renderLifecycleActions(site, root);
     renderSiteEditor(site, root);
     renderObservations(site, root);
@@ -442,6 +518,8 @@ async function readImport(file) {
     text($("import-result"), "JSON loaded. Preview before commit.");
   } catch (error) {
     state.pendingImport = null;
+    $("preview-import").disabled = true;
+    $("commit-import").disabled = true;
     text($("import-result"), `Invalid JSON: ${error.message}`);
   }
 }
@@ -467,7 +545,6 @@ async function commitImport() {
     text($("import-result"), JSON.stringify(result, null, 2));
     state.pendingImport = null;
     await loadSites();
-    await loadCandidates();
   } catch (error) { text($("import-result"), error.message); }
   finally { state.importRequestInFlight = false; text(button, "Commit"); button.disabled = !state.pendingImport; }
 }
@@ -485,6 +562,7 @@ async function loadCandidates() {
     if (uncertaintyBand) params.set("uncertainty_band", uncertaintyBand);
     if (sourceType) params.set("source_type", sourceType);
     const candidates = await api(`/api/review/candidates?${params}`);
+    cacheSites(candidates);
     const list = $("candidate-list"); list.replaceChildren();
     text($("candidate-summary"), `${candidates.length} candidate${candidates.length === 1 ? "" : "s"} in this view.`);
     if (!candidates.length) {
@@ -538,6 +616,7 @@ async function loadFieldPriority() {
   if (!state.token) return;
   try {
     state.prioritySites = await api("/api/field-priority?limit=12");
+    cacheSites(state.prioritySites);
     renderFieldPriority();
   } catch (error) { text($("field-priority-list"), error.message); }
 }
@@ -583,7 +662,7 @@ function renderRouteResult(result) {
     const warning = document.createElement("p"); warning.className = "warning";
     text(warning, `Access is not established for: ${cautionSites.map((site) => site.name).join(", ")}. Use public approaches only.`); root.append(warning);
   }
-  const download = document.createElement("a"); download.href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" })); download.download = "bunkerkartet-route.gpx"; text(download, "Download GPX"); root.append(download);
+  const download = document.createElement("a"); const href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" })); download.href = href; download.download = "bunkerkartet-route.gpx"; text(download, "Download GPX"); root.append(download); setTimeout(() => URL.revokeObjectURL(href), 0);
 }
 
 async function loadRoute(id) {
@@ -593,7 +672,7 @@ async function loadRoute(id) {
     routeLayer = L.geoJSON(result.geometry, { style: { color: "#c65d2e", weight: 4 } }).addTo(map);
     map.fitBounds(routeLayer.getBounds(), { padding: [24, 24] });
     updateRouteStart(result.start, "saved route start");
-    state.routeSiteIds = result.waypoints.map((point) => state.sites.find((site) =>
+    state.routeSiteIds = result.waypoints.map((point) => [...state.siteCache.values()].find((site) =>
       site.latitude != null && Math.abs(site.latitude - point.lat) < 0.000001 &&
       site.longitude != null && Math.abs(site.longitude - point.lon) < 0.000001
     )?.id).filter((siteId) => siteId != null);
@@ -619,13 +698,13 @@ async function downloadGeoJSON() {
 function updateRouteStart(point, label) {
   state.start = point;
   if (startMarker) startMarker.remove();
-  startMarker = L.marker([point.lat, point.lon]).addTo(map).bindTooltip("Route start");
+  startMarker = L.circleMarker([point.lat, point.lon], { color: "#c65d2e", fillColor: "#fff", fillOpacity: 1, radius: 8, weight: 3 }).addTo(map).bindTooltip("Route start");
   text($("route-start"), `Start: ${label || `${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`}`);
 }
 
 function addRouteSite(id) {
   if (!state.routeSiteIds.includes(id)) state.routeSiteIds.push(id);
-  renderRouteStops(); renderSiteList(); renderMap();
+  renderRouteStops(); renderSiteList(); renderMap(false);
 }
 
 function renderRouteStops() {
@@ -648,12 +727,17 @@ function renderRouteStops() {
 
 async function createRoute() {
   if (!state.start || state.routeSiteIds.length === 0 || state.routeRequestInFlight) return;
-  const waypoints = state.routeSiteIds.map(siteById).filter(Boolean).map((site) => ({ lat: site.latitude, lon: site.longitude }));
+  const routeSites = state.routeSiteIds.map(siteById).filter((site) => site && site.latitude != null && site.longitude != null);
+  if (routeSites.length !== state.routeSiteIds.length) {
+    setStatus("Some selected stops are no longer available with coordinates.");
+    return;
+  }
+  const waypoints = routeSites.map((site) => ({ lat: site.latitude, lon: site.longitude }));
   state.routeRequestInFlight = true;
   const button = $("create-route"); button.disabled = true; text(button, "Creating route...");
   try {
     const name = $("route-name").value.trim() || "Trondheim field route";
-    const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name, start: state.start, waypoints }) });
+    const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name, start: state.start, waypoints, waypoint_names: routeSites.map((site) => site.name) }) });
     if (routeLayer) routeLayer.remove();
     routeLayer = L.geoJSON(result.geometry, { style: { color: "#c65d2e", weight: 4 } }).addTo(map);
     map.fitBounds(routeLayer.getBounds(), { padding: [24, 24] });
@@ -668,6 +752,8 @@ $("auth-form").addEventListener("submit", (event) => { event.preventDefault(); l
 $("refresh-sites").addEventListener("click", loadSites);
 $("status-filter").addEventListener("change", loadSites);
 $("kind-filter").addEventListener("change", loadSites);
+$("access-filter").addEventListener("change", loadSites);
+$("confidence-filter").addEventListener("change", loadSites);
 $("site-search").addEventListener("change", loadSites);
 $("download-geojson").addEventListener("click", downloadGeoJSON);
 $("import-file").addEventListener("change", (event) => { if (event.target.files[0]) readImport(event.target.files[0]); });

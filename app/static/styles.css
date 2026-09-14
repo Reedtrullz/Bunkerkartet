@@ -112,6 +112,26 @@ textarea { min-height: 58px; resize: vertical; }
 .route-item { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 4px; display: grid; gap: 5px; padding: 8px; }
 .route-result { display: grid; gap: 5px; margin-top: 9px; }
 .route-result a { color: #235d85; }
+.map-key {
+  background: rgba(255,255,255,.96);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: grid;
+  gap: 5px;
+  max-width: 250px;
+  padding: 8px 10px;
+  position: absolute;
+  left: 60px;
+  top: 12px;
+  z-index: 500;
+}
+.map-key strong { font-size: 12px; }
+.map-key span { align-items: center; display: flex; font-size: 11px; gap: 6px; }
+.map-key small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.key-dot { border-radius: 50%; display: inline-block; height: 9px; width: 9px; }
+.key-candidate { background: var(--amber); }
+.key-researched { background: var(--green); }
+.key-confirmed { background: var(--navy); }
 .map-status { background: rgba(255,255,255,.95); border: 1px solid var(--line); border-radius: 4px; bottom: 12px; left: 12px; padding: 7px 9px; position: absolute; z-index: 500; }
 
 @media (max-width: 800px) {

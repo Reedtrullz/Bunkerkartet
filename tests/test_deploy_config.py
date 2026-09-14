@@ -13,6 +13,8 @@ def test_container_and_compose_configs_keep_the_runtime_restricted():
         assert "cap_drop:" in compose
         assert "- ALL" in compose
         assert "tmpfs:" in compose
+        assert "healthcheck:" in compose
+        assert "/api/health" in compose
     assert "FROM python:3.12-slim@sha256:" in dockerfile
 
 
@@ -33,3 +35,11 @@ def test_ci_actions_are_commit_pinned():
         "docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a",
     ):
         assert action in workflow
+
+
+def test_dependabot_tracks_runtime_container_and_actions():
+    config = (ROOT / ".github/dependabot.yml").read_text()
+
+    assert "package-ecosystem: pip" in config
+    assert "package-ecosystem: docker" in config
+    assert "package-ecosystem: github-actions" in config

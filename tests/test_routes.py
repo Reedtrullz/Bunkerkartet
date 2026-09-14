@@ -6,11 +6,14 @@ def test_build_gpx_contains_trackpoints_and_escapes_route_name():
     gpx = build_gpx(
         "Leira & Lade",
         [(10.4, 63.4), (10.5, 63.5)],
+        [(10.4, 63.4, "Start"), (10.5, 63.5, "Bunker & cave")],
     )
 
     assert "<gpx" in gpx
     assert "Leira &amp; Lade" in gpx
     assert gpx.count("<trkpt") == 2
+    assert gpx.count("<wpt") == 2
+    assert "Bunker &amp; cave" in gpx
     assert 'lat="63.4000000" lon="10.4000000"' in gpx
 
 

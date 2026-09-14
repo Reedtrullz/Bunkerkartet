@@ -83,9 +83,17 @@ def fetch_openrouteservice(
     return normalize_ors_response(json.loads(raw))
 
 
-def build_gpx(name: str, coordinates: list[tuple[float, float]]) -> str:
+def build_gpx(
+    name: str,
+    coordinates: list[tuple[float, float]],
+    waypoints: list[tuple[float, float, str]] | None = None,
+) -> str:
     if len(coordinates) < 2:
         raise ValueError("a GPX track requires at least two points")
+    waypoint_xml = "".join(
+        f'<wpt lat="{lat:.7f}" lon="{lon:.7f}"><name>{escape(label)}</name></wpt>'
+        for lon, lat, label in waypoints or []
+    )
     trackpoints = "".join(
         f'<trkpt lat="{lat:.7f}" lon="{lon:.7f}" />' for lon, lat in coordinates
     )
@@ -93,6 +101,6 @@ def build_gpx(name: str, coordinates: list[tuple[float, float]]) -> str:
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<gpx version="1.1" creator="Bunkerkartet" '
         'xmlns="http://www.topografix.com/GPX/1/1">'
-        f"<trk><name>{escape(name)}</name><trkseg>{trackpoints}</trkseg></trk>"
+        f"{waypoint_xml}<trk><name>{escape(name)}</name><trkseg>{trackpoints}</trkseg></trk>"
         "</gpx>\n"
     )

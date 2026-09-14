@@ -43,7 +43,7 @@ uncertainty. Unknown access is intentionally excluded.
 
 The site search covers names, location clues, and source excerpts. Saved routes
 can be reloaded after refreshing the page, and the authenticated map can export
-the visible catalogue plus coordinate-bearing observations as GeoJSON.
+the current non-rejected catalogue plus coordinate-bearing observations as GeoJSON.
 
 For external forum/newspaper research, use the small [research import
 kit](research/README.md): give an LLM the extraction prompt, save its JSON

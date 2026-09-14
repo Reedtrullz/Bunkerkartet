@@ -14,6 +14,25 @@ The intended pipeline is:
 4. In Bunkerkartet, choose the file, preview it, inspect the evidence and
    warnings, then commit it. Imported records remain `candidate` until review.
 
+For an external LLM or a scripted batch, the same two-step import can use the
+authenticated API directly:
+
+```sh
+export BUNKERKARTET_URL=https://bunker.reidar.tech
+export ADMIN_TOKEN='use-a-local-token'
+curl --fail-with-body -sS "$BUNKERKARTET_URL/api/admin/imports/preview" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  --data-binary @package.json
+curl --fail-with-body -sS "$BUNKERKARTET_URL/api/admin/imports/commit" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  --data-binary @package.json
+```
+
+Preview is the review gate. Keep the token in the shell environment or a
+secret manager, never in the package or repository. The API schema is
+available at `$BUNKERKARTET_URL/api/imports/schema` with the same bearer
+header.
+
 The validator uses the same strict Pydantic contract as the API. The example
 package is a schema fixture only; researched batches should remain local or be
 uploaded through the authenticated import endpoint rather than committed to

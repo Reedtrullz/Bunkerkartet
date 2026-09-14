@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bunkerkartet</title>
   <link rel="icon" href="data:,">
-  <link rel="icon" href="data:,">
-  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="/static/styles.css">
@@ -48,6 +46,27 @@
           </label>
           <label>Search
             <input id="site-search" type="search" placeholder="Name or location clue">
+          </label>
+          <label>Access
+            <select id="access-filter">
+              <option value="">All access</option>
+              <option value="public">Public approach</option>
+              <option value="private">Private</option>
+              <option value="restricted">Restricted</option>
+              <option value="permission_required">Permission required</option>
+              <option value="dangerous">Dangerous</option>
+              <option value="unsafe">Unsafe</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </label>
+          <label>Confidence
+            <select id="confidence-filter">
+              <option value="">All confidence</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="unknown">Unknown</option>
+            </select>
           </label>
         </div>
         <div class="button-row">
@@ -150,6 +169,13 @@
     </aside>
     <section class="map-shell">
       <div id="map" aria-label="Map of Trondheim sites"></div>
+      <div class="map-key" aria-label="Map key">
+        <strong>Map key</strong>
+        <span><i class="key-dot key-candidate"></i>Candidate</span>
+        <span><i class="key-dot key-researched"></i>Researched</span>
+        <span><i class="key-dot key-confirmed"></i>Confirmed</span>
+        <small>Research leads are approximate. Access is not established; stay on public paths and do not enter structures.</small>
+      </div>
       <div id="map-status" class="map-status" aria-live="polite">Enter the admin token to load sites.</div>
     </section>
   </main>
