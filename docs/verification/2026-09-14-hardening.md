@@ -13,26 +13,28 @@
 
 ## Leveranse I — L01–L02
 
-Commit: recorded in Git after verification.
+Initial commit: `7ac17f6`. Review follow-up: recorded in Git after fresh verification.
 
 ### Changes
 
-- GPX Blob URLs are created on the user click and retained briefly after the browser starts the download; they are revoked when replaced or the private workspace is cleared.
+- GPX Blob URLs are retained on a normal keyboard-focusable download link until the route result is replaced or the private workspace is cleared, so repeated downloads remain possible.
 - Added a small Playwright server with synthetic data and a stubbed ORS response. No production token, GPS position, ORS call, or production database is used.
 - Added browser regression for delayed saved-route GPX download.
 - Added `authEpoch` stale-response protection for private API calls.
 - Added a visible Lock control and one cleanup path for private DOM, lists, route state, import state, markers, start marker, and object URLs.
 - Auth failures and stale async responses no longer repopulate cleared private DOM.
+- 401 responses from detail/private API calls share the same cleanup path as map loading; cleanup re-enables load and resets import/route busy controls.
+- GeoJSON body reads, delayed file reads, and import/commit/route finalizers are guarded after their last await and by auth epoch/import generation.
 - Added `playwright==1.55.0` as a dev-only dependency.
 
 ### Verification
 
 ```text
 .venv/bin/python -m pytest -q tests/test_browser_smoke.py
-3 passed in 8.69s
+6 passed (including repeated/tastatur GPX, 401 detail cleanup, retry/busy reset, delayed response and delayed file read)
 
 .venv/bin/python -m pytest -q
-73 passed, 1 warning in 7.72s
+84 passed, 1 warning in 13.80s
 
 Node v22.22.3: node --check app/static/app.js -> 0
 git diff --check -> 0

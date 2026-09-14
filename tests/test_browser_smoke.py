@@ -84,6 +84,11 @@ def test_saved_route_download_survives_normal_user_delay(page: Page, base_url: s
     root = ET.parse(download.value.path()).getroot()
     assert root.tag == "{http://www.topografix.com/GPX/1/1}gpx"
     assert root.findall(".//{http://www.topografix.com/GPX/1/1}trkpt")
+    page.wait_for_timeout(1100)
+    with page.expect_download() as second_download:
+        page.get_by_text("Download GPX", exact=True).focus()
+        page.keyboard.press("Enter")
+    assert ET.parse(second_download.value.path()).getroot().tag == root.tag
 
 
 def test_lock_clears_private_site_and_route_dom(page: Page, base_url: str):
@@ -117,3 +122,65 @@ def test_delayed_detail_response_cannot_restore_private_dom(page: Page, base_url
 
     assert "Synthetic excerpt" not in page.locator("body").inner_text()
     assert "Synthetic site" not in page.locator("#site-detail").inner_text()
+
+
+def test_auth_failure_outside_load_sites_clears_private_workspace(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Admin token", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_text("Synthetic site", exact=True).first.click()
+    page.wait_for_timeout(150)
+
+    page.route(
+        "**/api/sites/1",
+        lambda route: route.fulfill(status=401, content_type="application/json", body='{"detail":"expired"}'),
+    )
+    page.locator("#site-list button", has_text="Details").click()
+    page.wait_for_timeout(250)
+
+    assert "Synthetic excerpt" not in page.locator("body").inner_text()
+    assert page.locator("#site-detail").inner_text() == "Select a marker or site."
+    assert not page.get_by_role("button", name="Load map", exact=True).is_disabled()
+
+
+def test_auth_failure_allows_retry_and_lock_resets_busy_controls(page: Page, base_url: str):
+    page.goto(base_url)
+    token = page.get_by_label("Admin token", exact=True)
+    token.fill("wrong")
+    page.get_by_role("button", name="Load map", exact=True).click()
+    page.wait_for_timeout(250)
+    assert not page.get_by_role("button", name="Load map", exact=True).is_disabled()
+
+    token.fill("audit-only")
+    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_text("Synthetic site", exact=True).first.wait_for()
+
+    page.route("**/api/sites?*", lambda route: (time.sleep(0.5), route.continue_()))
+    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_role("button", name="Lock", exact=True).click()
+    page.wait_for_timeout(700)
+
+    assert not page.get_by_role("button", name="Load map", exact=True).is_disabled()
+    assert page.get_by_role("button", name="Preview", exact=True).is_disabled()
+    assert page.get_by_role("button", name="Commit", exact=True).is_disabled()
+
+
+def test_lock_discards_delayed_import_file_read(page: Page, base_url: str):
+    page.goto(base_url)
+    page.evaluate(
+        """() => {
+            const file = new File(['{"batch_id":"stale"}'], 'stale.json', {type: 'application/json'});
+            Object.defineProperty(file, 'text', {value: () => new Promise(resolve =>
+                setTimeout(() => resolve('{"batch_id":"stale"}'), 500))});
+            const transfer = new DataTransfer();
+            transfer.items.add(file);
+            const input = document.getElementById('import-file');
+            input.files = transfer.files;
+            input.dispatchEvent(new Event('change', {bubbles: true}));
+        }"""
+    )
+    page.get_by_role("button", name="Lock", exact=True).click()
+    page.wait_for_timeout(700)
+
+    assert page.locator("#import-result").inner_text() == ""
+    assert page.get_by_role("button", name="Preview", exact=True).is_disabled()

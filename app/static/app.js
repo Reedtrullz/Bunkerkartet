@@ -4,6 +4,7 @@ const state = {
   sites: [],
   routes: [],
   pendingImport: null,
+  importGeneration: 0,
   importRequestInFlight: false,
   routeSiteIds: [],
   prioritySites: [],
@@ -141,6 +142,7 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
   state.routeSiteIds = [];
   state.siteCache.clear();
   state.pendingImport = null;
+  state.importGeneration += 1;
   state.importRequestInFlight = false;
   state.start = null;
   state.pickingStart = false;
@@ -167,7 +169,12 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
   $("import-file").value = "";
   $("preview-import").disabled = true;
   $("commit-import").disabled = true;
+  text($("preview-import"), "Preview");
+  text($("commit-import"), "Commit");
   text($("import-result"), "");
+  $("load-sites").disabled = false;
+  text($("load-sites"), "Load map");
+  text($("create-route"), "Create route");
   if (resetToken) {
     state.token = "";
     $("admin-token").value = "";
@@ -183,6 +190,11 @@ async function api(path, options = {}) {
   const body = await response.json().catch(() => ({}));
   if (requestEpoch !== state.authEpoch) throw new DOMException("Utdatert forespørsel", "AbortError");
   if (!response.ok) {
+    if (response.status === 401) {
+      clearAuthenticatedData();
+      setStatus("Authentication failed; private workspace cleared.");
+      throw new DOMException("Utdatert forespørsel", "AbortError");
+    }
     const error = new Error(body.detail || `Request failed (${response.status})`);
     error.status = response.status;
     throw error;
@@ -592,12 +604,17 @@ async function loadDetail(id) {
 }
 
 async function readImport(file) {
+  const requestEpoch = state.authEpoch;
+  const generation = state.importGeneration;
   try {
-    state.pendingImport = JSON.parse(await file.text());
+    const content = await file.text();
+    if (requestEpoch !== state.authEpoch || generation !== state.importGeneration) return;
+    state.pendingImport = JSON.parse(content);
     $("preview-import").disabled = false;
     $("commit-import").disabled = true;
     text($("import-result"), "JSON loaded. Preview before commit.");
   } catch (error) {
+    if (requestEpoch !== state.authEpoch || generation !== state.importGeneration) return;
     state.pendingImport = null;
     $("preview-import").disabled = true;
     $("commit-import").disabled = true;
@@ -619,8 +636,11 @@ async function previewImport() {
     if (!isStaleRequest(error)) { text($("import-result"), error.message); $("commit-import").disabled = true; }
   }
   finally {
-    state.importRequestInFlight = false;
-    if (requestEpoch === state.authEpoch) { text(button, "Preview"); button.disabled = !state.pendingImport; }
+    if (requestEpoch === state.authEpoch) {
+      state.importRequestInFlight = false;
+      text(button, "Preview");
+      button.disabled = !state.pendingImport;
+    }
   }
 }
 
@@ -637,8 +657,11 @@ async function commitImport() {
     await loadSites();
   } catch (error) { if (!isStaleRequest(error)) text($("import-result"), error.message); }
   finally {
-    state.importRequestInFlight = false;
-    if (requestEpoch === state.authEpoch) { text(button, "Commit"); button.disabled = !state.pendingImport; }
+    if (requestEpoch === state.authEpoch) {
+      state.importRequestInFlight = false;
+      text(button, "Commit");
+      button.disabled = !state.pendingImport;
+    }
   }
 }
 
@@ -762,18 +785,11 @@ function renderRouteResult(result) {
     const warning = document.createElement("p"); warning.className = "warning";
     text(warning, `Access is not established for: ${cautionSites.map((site) => site.name).join(", ")}. Use public approaches only.`); root.append(warning);
   }
+  const href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" }));
+  state.gpxObjectUrls.add(href);
   const download = document.createElement("a");
+  download.href = href;
   download.download = "bunkerkartet-route.gpx";
-  download.addEventListener("click", () => {
-    const href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" }));
-    download.href = href;
-    state.gpxObjectUrls.add(href);
-    setTimeout(() => {
-      URL.revokeObjectURL(href);
-      state.gpxObjectUrls.delete(href);
-      download.removeAttribute("href");
-    }, 1000);
-  }, { once: true });
   text(download, "Download GPX"); root.append(download);
 }
 
@@ -801,12 +817,18 @@ async function downloadGeoJSON() {
   try {
     const response = await fetch("/api/sites.geojson", { headers: { Authorization: `Bearer ${state.token}` } });
     if (!response.ok) {
+      if (response.status === 401) {
+        clearAuthenticatedData();
+        setStatus("Authentication failed; private workspace cleared.");
+        return;
+      }
       const body = await response.json().catch(() => ({}));
       throw new Error(body.detail || `Request failed (${response.status})`);
     }
+    const blob = await response.blob();
     if (requestEpoch !== state.authEpoch) throw new DOMException("Utdatert forespørsel", "AbortError");
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(await response.blob());
+    link.href = URL.createObjectURL(blob);
     state.gpxObjectUrls.add(link.href);
     link.download = "bunkerkartet-sites.geojson";
     link.click();
@@ -868,8 +890,11 @@ async function createRoute() {
     setStatus(`Created ${result.name}.`);
   } catch (error) { if (!isStaleRequest(error)) text($("route-result"), error.message); }
   finally {
-    state.routeRequestInFlight = false;
-    if (requestEpoch === state.authEpoch) { text(button, "Create route"); renderRouteStops(); }
+    if (requestEpoch === state.authEpoch) {
+      state.routeRequestInFlight = false;
+      text(button, "Create route");
+      renderRouteStops();
+    }
   }
 }
 
@@ -882,7 +907,10 @@ $("access-filter").addEventListener("change", loadSites);
 $("confidence-filter").addEventListener("change", loadSites);
 $("site-search").addEventListener("change", loadSites);
 $("download-geojson").addEventListener("click", downloadGeoJSON);
-$("import-file").addEventListener("change", (event) => { if (event.target.files[0]) readImport(event.target.files[0]); });
+$("import-file").addEventListener("change", (event) => {
+  state.importGeneration += 1;
+  if (event.target.files[0]) readImport(event.target.files[0]);
+});
 $("preview-import").addEventListener("click", previewImport);
 $("commit-import").addEventListener("click", commitImport);
 $("refresh-candidates").addEventListener("click", loadCandidates);
