@@ -96,18 +96,53 @@ def test_import_preview_and_idempotent_commit(tmp_path):
     assert sites.json()[0]["status"] == "candidate"
 
 
+def test_import_rejects_duplicate_external_keys_before_commit(tmp_path):
+    api = client(tmp_path)
+    payload = package()
+    payload["records"].append({**payload["records"][0], "name": "Second bunker"})
+
+    for endpoint in ("preview", "commit"):
+        response = api.post(
+            f"/api/admin/imports/{endpoint}", headers=auth(), json=payload
+        )
+        assert response.status_code == 422
+        assert "duplicate external_key" in str(response.json()["detail"])
+
+    assert api.get("/api/sites", headers=auth()).json() == []
+
+
 def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
     api = client(tmp_path)
     first = package()
     assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
 
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    assert api.post(
+        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "research"}
+    ).status_code == 200
+    assert api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Feature observed from the public path.",
+        },
+    ).status_code == 201
+    assert api.post(
+        f"/api/sites/{site_id}/review",
+        headers=auth(),
+        json={"action": "field_verify"},
+    ).status_code == 200
+    assert api.post(
+        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "confirm"}
+    ).status_code == 200
+
     edited = api.patch(
         f"/api/sites/{site_id}",
         headers=auth(),
         json={
             "name": "Curated bunker",
-            "status": "trusted",
             "latitude": 63.401,
             "longitude": 10.401,
             "precision": "exact",
@@ -130,6 +165,19 @@ def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
     assert site["status"] == "trusted"
     assert site["latitude"] == 63.401
     assert len(site["sources"]) == 2
+
+
+def test_site_status_changes_use_review_workflow(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+
+    response = api.patch(
+        f"/api/sites/{site_id}", headers=auth(), json={"status": "trusted"}
+    )
+
+    assert response.status_code == 409
+    assert api.get(f"/api/sites/{site_id}", headers=auth()).json()["status"] == "candidate"
 
 
 def test_import_rejects_excluded_snublestein_record(tmp_path):
@@ -215,6 +263,24 @@ def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
     )
     assert confirmed.status_code == 200
     assert confirmed.json()["site"]["status"] == "trusted"
+
+
+def test_field_verification_requires_an_observation(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+
+    assert api.post(
+        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "research"}
+    ).status_code == 200
+    response = api.post(
+        f"/api/sites/{site_id}/review",
+        headers=auth(),
+        json={"action": "field_verify"},
+    )
+
+    assert response.status_code == 409
+    assert "field observation" in response.json()["detail"]
 
 
 def test_site_list_exposes_observation_points(tmp_path):
@@ -379,6 +445,20 @@ def test_candidate_review_filters_combine_curator_fields(tmp_path):
     assert response.status_code == 200
     assert [site["external_key"] for site in response.json()] == ["forum:broad"]
     assert response.json()[0]["confidence"] == "low"
+
+
+def test_site_kind_filter_matches_case_insensitive_substrings(tmp_path):
+    api = client(tmp_path)
+    bunker = package()
+    cave = package("batch-cave", name="Ridge cave", external_key="forum:cave")
+    cave["records"][0]["site_kind"] = "cave"
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=bunker).status_code == 200
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=cave).status_code == 200
+
+    response = api.get("/api/sites?site_kind=BUNK", headers=auth())
+
+    assert response.status_code == 200
+    assert [site["site_kind"] for site in response.json()] == ["bunker"]
 
 
 def test_editing_warnings_updates_the_json_column(tmp_path):

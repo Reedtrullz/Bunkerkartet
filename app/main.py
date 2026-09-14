@@ -547,7 +547,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/sites", dependencies=[Depends(admin_guard)])
     def list_sites(
         status: str | None = Query(default=None),
-        site_kind: str | None = Query(default=None),
+        site_kind: str | None = Query(default=None, max_length=100),
         include_rejected: bool = Query(default=False),
     ) -> list[dict[str, object]]:
         conditions = ["merged_into_id IS NULL"]
@@ -559,9 +559,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             values.append(status)
         elif not include_rejected:
             conditions.append("status <> 'rejected'")
-        if site_kind:
-            conditions.append("site_kind = ?")
-            values.append(site_kind)
+        if site_kind and site_kind.strip():
+            conditions.append("lower(site_kind) LIKE lower(?)")
+            values.append(f"%{site_kind.strip()}%")
         query = f"SELECT * FROM sites WHERE {' AND '.join(conditions)} ORDER BY name, id"
         with database.connect() as connection:
             return [_site_summary(connection, row) for row in connection.execute(query, values).fetchall()]
@@ -653,17 +653,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(422, "snublestein records are excluded")
         if "site_kind" in values and values["site_kind"] is not None and "snublestein" in values["site_kind"].casefold():
             raise HTTPException(422, "snublestein records are excluded")
-        if not values:
-            raise HTTPException(400, "no site fields supplied")
         if "warnings" in values:
             values["warnings_json"] = dump_json(values.pop("warnings"))
-        assignments = ", ".join(f"{field} = ?" for field in values)
-        values["updated_at"] = now_iso()
-        params = [*values.values(), site_id]
         with database.connect() as connection:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if "status" in values and values["status"] != row["status"]:
+                raise HTTPException(409, "status changes must use the review workflow")
+            values.pop("status", None)
+            if not values:
+                raise HTTPException(400, "no site fields supplied")
+            assignments = ", ".join(f"{field} = ?" for field in values)
+            values["updated_at"] = now_iso()
+            params = [*values.values(), site_id]
             connection.execute(
                 f"UPDATE sites SET {assignments}, updated_at = ? WHERE id = ?",
                 params,
@@ -820,12 +823,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "reject": "rejected",
                     "restore": "candidate",
                 }[request.action]
-                if request.action == "field_verify" and row["status"] not in {
-                    "likely",
-                    "field-verified",
-                    "trusted",
-                }:
-                    raise HTTPException(409, "research the site before field verification")
+                if request.action == "field_verify":
+                    if row["status"] != "likely":
+                        raise HTTPException(409, "field verification requires a researched site")
+                    observation = connection.execute(
+                        "SELECT 1 FROM field_observations WHERE site_id = ? LIMIT 1",
+                        (site_id,),
+                    ).fetchone()
+                    if observation is None:
+                        raise HTTPException(409, "record a field observation before field verification")
                 if request.action == "confirm" and row["status"] not in {
                     "field-verified",
                     "trusted",

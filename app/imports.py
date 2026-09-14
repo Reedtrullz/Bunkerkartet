@@ -49,7 +49,7 @@ class ImportRecord(StrictModel):
         "llm_inference",
     ]
     status: Literal["candidate"]
-    access: Literal["unknown", "public", "restricted", "private", "permission_required", "dangerous"]
+    access: Literal["unknown", "public", "restricted", "private", "permission_required", "dangerous", "unsafe"]
     sources: list[SourceEvidence] = Field(min_length=1)
     confidence: Literal["high", "medium", "low", "unknown"] | None = None
     short_rationale: str | None = Field(default=None, max_length=2000)
@@ -93,6 +93,15 @@ class ImportPackage(StrictModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("generated_at must include a timezone")
         return value
+
+    @model_validator(mode="after")
+    def reject_duplicate_external_keys(self) -> "ImportPackage":
+        seen: set[str] = set()
+        for record in self.records:
+            if record.external_key in seen:
+                raise ValueError(f"duplicate external_key in import package: {record.external_key}")
+            seen.add(record.external_key)
+        return self
 
 
 def validate_import_package(payload: object) -> ImportPackage:

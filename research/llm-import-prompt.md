@@ -30,7 +30,7 @@ Rules:
 - A geometry requires uncertainty_m in metres. Exact means genuinely precise,
   not merely a source that sounds confident.
 - Keep access separate from historical identity. Use unknown unless the source
-  supports public, restricted, private, permission_required, or dangerous.
+  supports public, restricted, private, permission_required, dangerous, or unsafe.
   Never imply that a marker grants access, permission, or safety.
 - Put demolition, burial, private property, unstable structures, missing
   entrances, and conflicting identifications in condition or warnings.

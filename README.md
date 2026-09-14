@@ -26,8 +26,9 @@ versioned contract is in [`app/imports.py`](app/imports.py).
 The candidate queue can be narrowed by confidence, access, uncertainty radius,
 and source type; each row also exposes its evidence count and detail view.
 The review lifecycle is `candidate` -> `researched` -> `field verified` ->
-`confirmed` (or `rejected`). Site details can edit coordinates, uncertainty,
-rationale, access, and warnings. Field observations are dated notes with an
+`confirmed` (or `rejected`). Status changes go through the lifecycle controls;
+site details can edit coordinates, uncertainty, rationale, access, and warnings.
+Field observations are dated notes with an
 outcome, observed coordinates, access notes, and external photo URLs; saving an
 observation does not promote a site automatically.
 

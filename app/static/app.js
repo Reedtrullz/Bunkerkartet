@@ -6,6 +6,7 @@ const state = {
   prioritySites: [],
   start: null,
   pickingStart: false,
+  routeRequestInFlight: false,
 };
 
 const map = L.map("map").setView([63.4305, 10.3951], 12);
@@ -272,7 +273,6 @@ function renderSiteEditor(site, root) {
   const grid = document.createElement("div"); grid.className = "detail-grid";
   const name = inputControl("text", site.name); name.name = "name";
   const kind = inputControl("text", site.site_kind); kind.name = "site_kind";
-  const status = selectControl(["candidate", "approximate", "likely", "field-verified", "trusted", "destroyed-or-filled", "rejected"], site.status); status.name = "status";
   const confidence = selectControl(["unknown", "low", "medium", "high"], site.confidence || "unknown"); confidence.name = "confidence";
   const access = selectControl(["unknown", "public", "private", "restricted", "permission_required", "dangerous", "unsafe"], site.access); access.name = "access";
   const precision = selectControl(["exact", "approximate", "unknown"], site.precision); precision.name = "precision";
@@ -280,7 +280,7 @@ function renderSiteEditor(site, root) {
   const basis = selectControl(["explicit_coordinate", "address", "map_reference", "landmark_description", "llm_inference"], site.location_basis); basis.name = "location_basis";
   const latitude = inputControl("number", site.latitude); latitude.name = "latitude"; latitude.step = "0.000001"; latitude.min = "-90"; latitude.max = "90";
   const longitude = inputControl("number", site.longitude); longitude.name = "longitude"; longitude.step = "0.000001"; longitude.min = "-180"; longitude.max = "180";
-  [["Name", name], ["Type", kind], ["Status", status], ["Confidence", confidence], ["Access", access], ["Precision", precision], ["Uncertainty (m)", uncertainty], ["Location basis", basis], ["Latitude", latitude], ["Longitude", longitude]]
+  [["Name", name], ["Type", kind], ["Confidence", confidence], ["Access", access], ["Precision", precision], ["Uncertainty (m)", uncertainty], ["Location basis", basis], ["Latitude", latitude], ["Longitude", longitude]]
     .forEach(([label, control]) => grid.append(labeledControl(label, control)));
   form.append(grid);
   const condition = inputControl("text", site.condition || ""); condition.name = "condition";
@@ -299,7 +299,7 @@ function renderSiteEditor(site, root) {
       await api(`/api/sites/${site.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          name: name.value.trim(), site_kind: kind.value.trim(), status: status.value,
+          name: name.value.trim(), site_kind: kind.value.trim(),
           confidence: confidence.value, access: access.value, precision: precision.value,
           uncertainty_m: numberOrNull(uncertainty.value), location_basis: basis.value,
           latitude: numberOrNull(latitude.value), longitude: numberOrNull(longitude.value),
@@ -347,7 +347,8 @@ function renderObservations(site, root) {
   else section.append(observations);
 
   const form = document.createElement("form"); form.className = "observation-form";
-  const observedAt = inputControl("date", new Date().toISOString().slice(0, 10)); observedAt.name = "observed_at"; observedAt.required = true;
+  const localToday = new Date(); localToday.setMinutes(localToday.getMinutes() - localToday.getTimezoneOffset());
+  const observedAt = inputControl("date", localToday.toISOString().slice(0, 10)); observedAt.name = "observed_at"; observedAt.required = true;
   const outcome = selectControl(["found", "not_found", "inaccessible", "needs_follow_up"], "found", { found: "Found", not_found: "Not found", inaccessible: "Inaccessible", needs_follow_up: "Needs follow-up" }); outcome.name = "outcome";
   const note = textareaControl(); note.name = "note"; note.required = true; note.placeholder = "What was observed?";
   const latitude = inputControl("number"); latitude.name = "latitude"; latitude.step = "0.000001"; latitude.min = "-90"; latitude.max = "90";
@@ -548,7 +549,10 @@ function renderRouteStops() {
 }
 
 async function createRoute() {
+  if (!state.start || state.routeSiteIds.length === 0 || state.routeRequestInFlight) return;
   const waypoints = state.routeSiteIds.map(siteById).filter(Boolean).map((site) => ({ lat: site.latitude, lon: site.longitude }));
+  state.routeRequestInFlight = true;
+  const button = $("create-route"); button.disabled = true; text(button, "Creating route...");
   try {
     const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name: "Trondheim field route", start: state.start, waypoints }) });
     if (routeLayer) routeLayer.remove();
@@ -559,10 +563,10 @@ async function createRoute() {
     result.warnings.forEach((warning) => { const p = document.createElement("p"); p.className = "warning"; text(p, warning); root.append(p); });
     const download = document.createElement("a"); download.href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" })); download.download = "bunkerkartet-route.gpx"; text(download, "Download GPX"); root.append(download);
   } catch (error) { text($("route-result"), error.message); }
+  finally { state.routeRequestInFlight = false; text(button, "Create route"); renderRouteStops(); }
 }
 
 $("auth-form").addEventListener("submit", (event) => { event.preventDefault(); loadSites(); });
-$("load-sites").addEventListener("click", loadSites);
 $("refresh-sites").addEventListener("click", loadSites);
 $("status-filter").addEventListener("change", loadSites);
 $("kind-filter").addEventListener("change", loadSites);
