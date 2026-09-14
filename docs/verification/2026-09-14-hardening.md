@@ -258,7 +258,9 @@ decisions, coordinates, production data, or GitHub policy changes were added.
 |---|---|---|
 | Auth, import, DB, routes | 136 non-browser tests passed | local synthetic data only |
 | Browser/UI | 12 Chromium smoke tests passed; Node 22.22.3 syntax check passed | not visual acceptance for every device |
+| Synthetic user flow | package → preview/review → observation → reviewed approach → saved/reopened route → GPX is covered by API/browser fixtures | does not prove real source truth, ORS-live, access, safety, or field verification |
 | Schema | fresh and forward migrations reach v8; migration tests pass | no production migration |
 | Drift/limits | body, cardinality, readiness, ORS busy, SHA/digest checks pass | no load test or live ORS quota use |
+| L10 follow-up | mobile 390×844 keyboard surface navigation and `scrollWidth` guard pass; marker/detail labels remain named | broad device visual acceptance, field-error copy, and dense-marker/clustering behavior remain bounded local checks |
 | Curation | policy and queue structure documented | owner must decide identity/access/public selection |
 | Release | runbook and release policy documented | no publish, deploy, merge, push, or GitHub-setting mutation |
