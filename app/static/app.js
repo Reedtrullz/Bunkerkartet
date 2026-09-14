@@ -14,7 +14,13 @@ const state = {
   pickingStart: false,
   routeRequestInFlight: false,
   gpxObjectUrls: new Set(),
+  detailTrigger: null,
+  detailGeneration: 0,
+  navigationGeneration: 0,
+  surface: "map",
 };
+
+const DEFAULT_ROUTE_START = { lat: 63.4305, lon: 10.3951 };
 
 const map = L.map("map").setView([63.4305, 10.3951], 12);
 const topoLayer = L.tileLayer(
@@ -124,6 +130,40 @@ function selectControl(values, selected, labels = {}) {
   return select;
 }
 
+const FIELD_LABELS = {
+  name: "Navn", site_kind: "Type", latitude: "Breddegrad", longitude: "Lengdegrad",
+  precision: "Presisjon", uncertainty_m: "Usikkerhet", location_basis: "Stedsgrunnlag",
+  note: "Observasjonsnotat", reason: "Begrunnelse", access_notes: "Tilgangsnotat",
+};
+
+function validationMessage(detail) {
+  if (!Array.isArray(detail)) return typeof detail === "string" ? detail : "Forespørselen kunne ikke behandles.";
+  return detail.map((item) => {
+    const path = Array.isArray(item.loc) ? item.loc.at(-1) : null;
+    return `${FIELD_LABELS[path] || path || "Felt"}: ${item.msg || "Ugyldig verdi"}`;
+  }).join(" ");
+}
+
+function clearFieldErrors(form) {
+  form.querySelectorAll(".field-error").forEach((node) => node.remove());
+  form.querySelectorAll("[aria-invalid=\"true\"]").forEach((node) => node.removeAttribute("aria-invalid"));
+}
+
+function showFieldErrors(form, error) {
+  clearFieldErrors(form);
+  (error.details || []).forEach((item) => {
+    const field = Array.isArray(item.loc) ? item.loc.at(-1) : null;
+    const control = [...form.elements].find((element) => element.name === field);
+    if (!control) return;
+    control.setAttribute("aria-invalid", "true");
+    const message = document.createElement("div");
+    message.className = "field-error";
+    message.setAttribute("role", "alert");
+    text(message, `${FIELD_LABELS[field] || field || "Felt"}: ${item.msg || "Ugyldig verdi"}`);
+    control.closest("label")?.append(message);
+  });
+}
+
 function inputControl(type, value = "") {
   const input = document.createElement("input");
   input.type = type;
@@ -139,11 +179,21 @@ function textareaControl(value = "") {
 
 function setStatus(message) { text($("map-status"), message); }
 
-document.querySelectorAll(".surface-nav button").forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".surface-nav button").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
-    document.getElementById(button.dataset.target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+function setSurface(surface, { scroll = true } = {}) {
+  state.surface = surface;
+  state.navigationGeneration += 1;
+  document.querySelectorAll(".surface-panel").forEach((panel) => {
+    panel.hidden = panel.dataset.surface !== surface;
   });
+  if (typeof renderOverlapChoices === "function") renderOverlapChoices();
+  document.querySelectorAll(".surface-nav button").forEach((item) => {
+    item.setAttribute("aria-pressed", String(item.dataset.target === ({ map: "map-tools-panel", review: "review-panel", route: "route-panel" }[surface])));
+  });
+  if (scroll) document.getElementById(({ map: "map-tools-panel", review: "review-panel", route: "route-panel" }[surface]))?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+document.querySelectorAll(".surface-nav button").forEach((button) => {
+  button.addEventListener("click", () => setSurface(button.dataset.target === "map-tools-panel" ? "map" : button.dataset.target === "review-panel" ? "review" : "route"));
 });
 
 function revokeGpxObjectUrls() {
@@ -169,6 +219,7 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
   state.start = null;
   state.pickingStart = false;
   state.routeRequestInFlight = false;
+  state.detailTrigger = null;
   revokeGpxObjectUrls();
   markerLayer.clearLayers();
   uncertaintyLayer.clearLayers();
@@ -188,6 +239,7 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
   text($("site-detail"), "Velg en markør eller et sted.");
   $("route-result").replaceChildren();
   text($("route-start"), "Start: ingen start valgt");
+  setSurface("map", { scroll: false });
   text($("location-status"), "Posisjon brukes bare når du velger «Bruk min posisjon».");
   $("import-file").value = "";
   $("import-file").disabled = false;
@@ -239,8 +291,9 @@ async function api(path, options = {}) {
       setStatus("Autentisering mislyktes; privat arbeidsområde er tømt.");
       throw new DOMException("Utdatert forespørsel", "AbortError");
     }
-    const error = new Error(body.detail || `Request failed (${response.status})`);
+    const error = new Error(validationMessage(body.detail || `Forespørselen feilet (${response.status})`));
     error.status = response.status;
+    error.details = Array.isArray(body.detail) ? body.detail : [];
     throw error;
   }
   return body;
@@ -263,6 +316,36 @@ function siteById(id) {
 function hasReviewedPublicApproach(site) {
   return site.approach_latitude != null && site.approach_longitude != null &&
     site.approach_access === "public" && site.approach_reviewed_at != null;
+}
+
+function renderOverlapChoices() {
+  const groups = new Map();
+  state.sites.filter((site) => site.latitude != null && site.longitude != null).forEach((site) => {
+    const key = `${site.latitude.toFixed(6)},${site.longitude.toFixed(6)}`;
+    const group = groups.get(key) || [];
+    group.push(site);
+    groups.set(key, group);
+  });
+  const overlapGroups = [...groups.values()].filter((group) => group.length > 1);
+  const panel = $("overlap-panel");
+  const list = $("overlap-list");
+  list.replaceChildren();
+  panel.hidden = state.surface !== "map" || overlapGroups.length === 0;
+  overlapGroups.forEach((group) => {
+    const groupBox = document.createElement("div");
+    groupBox.className = "overlap-group";
+    group.forEach((site) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      text(button, `${site.name} — ${site.site_kind} — ${statusLabel(site.status)}`);
+      button.addEventListener("click", () => {
+        state.detailTrigger = button;
+        loadDetail(site.id);
+      });
+      groupBox.append(button);
+    });
+    list.append(groupBox);
+  });
 }
 
 function renderMap(fit = false) {
@@ -309,7 +392,7 @@ function renderMap(fit = false) {
     const details = document.createElement("button");
     details.className = "small";
     text(details, "Detaljer");
-    details.addEventListener("click", () => { marker.closePopup(); loadDetail(site.id); });
+    details.addEventListener("click", () => { marker.closePopup(); state.detailTrigger = details; loadDetail(site.id); });
     const add = document.createElement("button");
     add.className = "small";
     const routeReady = hasReviewedPublicApproach(site);
@@ -336,11 +419,12 @@ function renderMap(fit = false) {
       const meta = document.createElement("div"); meta.className = "site-meta";
       text(meta, `${observation.observed_at} | ${outcomeLabel(observation.outcome)}`); popup.append(meta);
       const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Åpne sted");
-      details.addEventListener("click", () => { observationMarker.closePopup(); loadDetail(site.id); });
+      details.addEventListener("click", () => { observationMarker.closePopup(); state.detailTrigger = details; loadDetail(site.id); });
       popup.append(details);
       observationMarker.bindPopup(popup);
     });
   });
+  renderOverlapChoices();
   if (fit && bounds.length) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
 }
 
@@ -375,7 +459,7 @@ function renderSiteList() {
     const details = document.createElement("button");
     details.className = "small";
     text(details, "Detaljer");
-    details.addEventListener("click", () => loadDetail(site.id));
+    details.addEventListener("click", () => { state.detailTrigger = details; loadDetail(site.id); });
     const add = document.createElement("button");
     add.className = "small";
     const routeReady = hasReviewedPublicApproach(site);
@@ -410,12 +494,13 @@ async function loadSites() {
   try {
     state.sites = await api(`/api/sites?${params}`);
     if (requestEpoch !== state.authEpoch) return;
+    if (!state.start) updateRouteStart(DEFAULT_ROUTE_START, "Standardstart i Trondheim");
     cacheSites(state.sites);
     $("download-geojson").disabled = false;
     renderSiteList();
     renderMap(true);
     setStatus(state.sites.length
-      ? `${state.sites.length} site${state.sites.length === 1 ? "" : "s"} loaded.`
+      ? `${state.sites.length} ${state.sites.length === 1 ? "sted" : "steder"} lastet inn.`
       : hasFilters
         ? "Ingen steder passer filtrene."
         : "Innlogget. Ingen steder er importert ennå.");
@@ -431,6 +516,13 @@ async function loadSites() {
   }
 }
 
+async function refreshSitesAndDetail(siteId) {
+  const navigationGeneration = state.navigationGeneration;
+  await loadSites();
+  if (navigationGeneration !== state.navigationGeneration) return;
+  await loadDetail(siteId);
+}
+
 async function runReviewAction(id, action, targetSiteId = null) {
   if (action === "reject" && !window.confirm("Avvise denne kandidaten?")) return;
   if (action === "mark_destroyed" && !window.confirm("Markere stedet som ødelagt eller fylt igjen?")) return;
@@ -442,8 +534,7 @@ async function runReviewAction(id, action, targetSiteId = null) {
     if (currentSite?.revision) payload.expected_revision = currentSite.revision;
     const result = await api(`/api/sites/${id}/review`, { method: "POST", body: JSON.stringify(payload) });
     if (result.site) state.siteCache.set(result.site.id, result.site);
-    await loadSites();
-    await loadDetail(targetSiteId || id);
+    await refreshSitesAndDetail(targetSiteId || id);
   } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
 }
 
@@ -487,9 +578,20 @@ function renderLivssyklusActions(site, root) {
   }
 }
 
+function compactSection(title, className = "") {
+  const section = document.createElement("details");
+  section.className = `detail-section compact-section ${className}`;
+  const summary = document.createElement("summary");
+  text(summary, title);
+  section.append(summary);
+  section.addEventListener("toggle", () => {
+    if (!section.open && state.detailTrigger) state.detailTrigger.focus({ preventScroll: true });
+  });
+  return section;
+}
+
 function renderSiteEditor(site, root) {
-  const section = document.createElement("section"); section.className = "detail-section";
-  const heading = document.createElement("h3"); text(heading, "Kurater sted"); section.append(heading);
+  const section = compactSection("Rediger sted", "site-editor");
   const form = document.createElement("form"); form.className = "detail-form";
   const grid = document.createElement("div"); grid.className = "detail-grid";
   const name = inputControl("text", site.name); name.name = "name";
@@ -515,6 +617,7 @@ function renderSiteEditor(site, root) {
   const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Lagre stedsendringer"); form.append(save);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    clearFieldErrors(form);
     const numberOrNull = (value) => value === "" ? null : Number(value);
     try {
       await api(`/api/sites/${site.id}`, {
@@ -531,9 +634,8 @@ function renderSiteEditor(site, root) {
         }),
       });
       setStatus("Stedsendringer lagret.");
-      await loadSites();
-      await loadDetail(site.id);
-    } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
+      await refreshSitesAndDetail(site.id);
+    } catch (error) { if (!isStaleRequest(error)) { showFieldErrors(form, error); setStatus(error.message); } }
   });
   section.append(form); root.append(section);
   const approachForm = document.createElement("form"); approachForm.className = "observation-form";
@@ -547,6 +649,7 @@ function renderSiteEditor(site, root) {
   const approachSave = document.createElement("button"); approachSave.className = "primary"; approachSave.type = "submit"; text(approachSave, "Lagre vurdering av offentlig tilnærming"); approachForm.append(approachSave);
   approachForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    clearFieldErrors(approachForm);
     const numberOrNull = (value) => value === "" ? null : Number(value);
     try {
       await api(`/api/sites/${site.id}/approach`, {
@@ -554,9 +657,8 @@ function renderSiteEditor(site, root) {
         body: JSON.stringify({ expected_revision: site.revision, latitude: numberOrNull(approachBreddegrad.value), longitude: numberOrNull(approachLengdegrad.value), access: approachTilgang.value, note: approachNote.value.trim() }),
       });
       setStatus("Tilnærmingsvurdering lagret.");
-      await loadSites();
-      await loadDetail(site.id);
-    } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
+      await refreshSitesAndDetail(site.id);
+    } catch (error) { if (!isStaleRequest(error)) { showFieldErrors(approachForm, error); setStatus(error.message); } }
   });
   const approachHeading = document.createElement("h3"); text(approachHeading, "Vurdering av offentlig tilnærming"); section.append(approachHeading, approachForm);
   if (site.location_review_required) {
@@ -566,18 +668,18 @@ function renderSiteEditor(site, root) {
     reviewForm.append(labeledControl("Begrunnelse for lokaliseringsreview", reason), saveReview);
     reviewForm.addEventListener("submit", async (event) => {
       event.preventDefault(); saveReview.disabled = true;
+      clearFieldErrors(reviewForm);
       try {
         await api(`/api/sites/${site.id}/location-review`, { method: "POST", body: JSON.stringify({ reason: reason.value.trim(), expected_revision: site.revision }) });
-        setStatus("Lokaliseringsreview lagret."); await loadSites(); await loadDetail(site.id);
-      } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); saveReview.disabled = false; }
+        setStatus("Lokaliseringsreview lagret."); await refreshSitesAndDetail(site.id);
+      } catch (error) { if (!isStaleRequest(error)) { showFieldErrors(reviewForm, error); setStatus(error.message); } saveReview.disabled = false; }
     });
     section.append(reviewForm);
   }
 }
 
 function renderObservations(site, root) {
-  const section = document.createElement("section"); section.className = "detail-section";
-  const heading = document.createElement("h3"); text(heading, "Feltobservasjoner"); section.append(heading);
+  const section = compactSection("Feltobservasjoner", "observations-editor");
   const observations = document.createElement("ul"); observations.className = "observation-list";
   (site.field_observations || []).forEach((observation) => {
     const item = document.createElement("li");
@@ -589,7 +691,7 @@ function renderObservations(site, root) {
     text(observationMeta, `Punktrolle: ${VALUE_LABELS[observation.point_role] || "Ukjent"}${observation.uncertainty_m == null ? " | radius ukjent" : ` | ${observation.uncertainty_m} m radius`}`); item.append(observationMeta);
     if (observation.latitude != null && observation.longitude != null) {
       const coordinates = document.createElement("div"); coordinates.className = "site-meta";
-      text(coordinates, `Coordinate: ${observation.latitude.toFixed(5)}, ${observation.longitude.toFixed(5)}`); item.append(coordinates);
+      text(coordinates, `Koordinater: ${observation.latitude.toFixed(5)}, ${observation.longitude.toFixed(5)}`); item.append(coordinates);
       if (observation.outcome === "found") {
         const actions = document.createElement("div"); actions.className = "candidate-actions";
         const adopt = document.createElement("button"); adopt.className = "small"; adopt.type = "button"; adopt.disabled = observation.point_role !== "feature" || observation.uncertainty_m == null; adopt.title = "Bare et objektpunkt med eksplisitt radius kan oppdatere stedets markør";
@@ -599,7 +701,7 @@ function renderObservations(site, root) {
     }
     if (observation.photo_urls?.length) {
       const photos = document.createElement("div"); photos.className = "observation-links";
-      observation.photo_urls.forEach((url, index) => { const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noreferrer"; text(link, `Photo ${index + 1}`); photos.append(link); });
+      observation.photo_urls.forEach((url, index) => { const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noreferrer"; text(link, `Bilde ${index + 1}`); photos.append(link); });
       item.append(photos);
     }
     if (observation.photo_urls_status) { const withheld = document.createElement("div"); withheld.className = "site-meta"; text(withheld, observation.photo_urls_status); item.append(withheld); }
@@ -623,10 +725,11 @@ function renderObservations(site, root) {
   const photos = textareaControl(); photos.name = "photo_urls"; photos.placeholder = "Én bilde-URL per linje";
   const grid = document.createElement("div"); grid.className = "detail-grid";
   grid.append(labeledControl("Dato", observedAt), labeledControl("Utfall", outcome), labeledControl("Punktrolle", pointRole), labeledControl("Radius (m)", uncertainty), labeledControl("Observert breddegrad", latitude), labeledControl("Observert lengdegrad", longitude));
-  form.append(grid, labeledControl("Observasjonsnotat", note), labeledControl("Observert sted", location), labeledControl("Tilgang notes", access), labeledControl("Bilde-URL-er", photos));
+  form.append(grid, labeledControl("Observasjonsnotat", note), labeledControl("Observert sted", location), labeledControl("Tilgangsnotat", access), labeledControl("Bilde-URL-er", photos));
   const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Lagre observasjon"); form.append(save);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    clearFieldErrors(form);
     const numberOrUndefined = (value) => value === "" ? undefined : Number(value);
     try {
       await api(`/api/sites/${site.id}/observations`, {
@@ -641,9 +744,8 @@ function renderObservations(site, root) {
         }),
       });
       setStatus("Feltobservasjon lagret.");
-      await loadSites();
-      await loadDetail(site.id);
-    } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
+      await refreshSitesAndDetail(site.id);
+    } catch (error) { if (!isStaleRequest(error)) { showFieldErrors(form, error); setStatus(error.message); } }
   });
   section.append(form); root.append(section);
 }
@@ -654,13 +756,15 @@ async function adoptObservationLocation(siteId, observationId) {
     const site = state.siteCache.get(siteId);
     await api(`/api/sites/${siteId}/observations/${observationId}/adopt-location`, { method: "POST", body: JSON.stringify({ expected_revision: site?.revision }) });
     setStatus("Observasjonskoordinat tatt i bruk.");
-    await loadSites();
-    await loadDetail(siteId);
+    await refreshSitesAndDetail(siteId);
   } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
 }
 
 async function loadDetail(id) {
   const requestEpoch = state.authEpoch;
+  const detailGeneration = ++state.detailGeneration;
+  setSurface("review", { scroll: false });
+  const navigationGeneration = state.navigationGeneration;
   const panel = $("detail-panel");
   const root = $("site-detail");
   panel.classList.add("is-selected");
@@ -669,6 +773,7 @@ async function loadDetail(id) {
   $("site-detail-heading").focus({ preventScroll: true });
   try {
     const [site, events] = await Promise.all([api(`/api/sites/${id}`), api(`/api/sites/${id}/events?limit=50`)]);
+    if (requestEpoch !== state.authEpoch || detailGeneration !== state.detailGeneration || navigationGeneration !== state.navigationGeneration) return;
     state.siteCache.set(site.id, site);
     text($("site-detail-heading"), `Stedsdetaljer: ${site.name}`);
     root.replaceChildren();
@@ -685,7 +790,7 @@ async function loadDetail(id) {
     if (site.warnings?.length) { const warning = document.createElement("p"); warning.className = "warning"; text(warning, site.warnings.join(" | ")); copy.append(warning); }
     const sourcesTitle = document.createElement("dt"); text(sourcesTitle, "Kilder"); copy.append(sourcesTitle);
     const sources = document.createElement("dd"); const sourceList = document.createElement("ul"); sourceList.className = "source-list";
-    (site.sources || []).forEach((source) => { const li = document.createElement("li"); if (source.url) { const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); } else { const withheld = document.createElement("span"); text(withheld, source.title || "Referanse holdt tilbake"); li.append(withheld); } const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "source", source.published_at && `publisert ${source.published_at}`, source.accessed_at && `lest ${source.accessed_at}`, source.url_status].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
+    (site.sources || []).forEach((source) => { const li = document.createElement("li"); if (source.url) { const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); } else { const withheld = document.createElement("span"); text(withheld, source.title || "Referanse holdt tilbake"); li.append(withheld); } const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "kilde", source.published_at && `publisert ${source.published_at}`, source.accessed_at && `lest ${source.accessed_at}`, source.url_status].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
     sources.append(sourceList); copy.append(sources); root.append(copy);
     if (site.relations?.length) {
       const relationsTitle = document.createElement("h3"); text(relationsTitle, "Relaterte steder"); root.append(relationsTitle);
@@ -716,7 +821,11 @@ async function loadDetail(id) {
     renderLivssyklusActions(site, root);
     renderSiteEditor(site, root);
     renderObservations(site, root);
-  } catch (error) { if (!isStaleRequest(error)) text($("site-detail"), error.message); }
+  } catch (error) {
+    if (!isStaleRequest(error) && requestEpoch === state.authEpoch && detailGeneration === state.detailGeneration && navigationGeneration === state.navigationGeneration) {
+      text($("site-detail"), error.message);
+    }
+  }
 }
 
 async function readImport(file) {
@@ -735,7 +844,7 @@ async function readImport(file) {
     state.pendingImport = null;
     $("preview-import").disabled = true;
     $("commit-import").disabled = true;
-    text($("import-result"), `Invalid JSON: ${error.message}`);
+    text($("import-result"), `Ugyldig JSON: ${error.message}`);
   }
 }
 
@@ -826,7 +935,7 @@ async function loadCandidates() {
       }
       const actions = document.createElement("div"); actions.className = "candidate-actions";
       const details = document.createElement("button"); details.className = "small"; text(details, "Detaljer");
-      details.addEventListener("click", () => loadDetail(site.id)); actions.append(details);
+      details.addEventListener("click", () => { state.detailTrigger = details; loadDetail(site.id); }); actions.append(details);
       [["Marker som kildegjennomgått", "research", ""], ["Avvis", "reject", "danger"]].forEach(([label, action, style]) => {
         const button = document.createElement("button"); button.className = `small ${style}`; text(button, label);
         button.addEventListener("click", () => runReviewAction(site.id, action)); actions.append(button);
@@ -851,7 +960,7 @@ function renderFieldPriority() {
     const uncertainty = site.uncertainty_m == null ? "usikkerhet ukjent" : `${Math.round(site.uncertainty_m)} m`;
     const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${VALUE_LABELS[site.confidence] || "Ukjent"} | ${uncertainty} | ${accessLabel(site.access)}`); item.append(meta);
     const actions = document.createElement("div"); actions.className = "site-actions";
-    const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Detaljer"); details.addEventListener("click", () => loadDetail(site.id));
+    const details = document.createElement("button"); details.className = "small"; details.type = "button"; text(details, "Detaljer"); details.addEventListener("click", () => { state.detailTrigger = details; loadDetail(site.id); });
     const add = document.createElement("button"); add.className = "small"; add.type = "button"; text(add, state.routeSiteIds.includes(site.id) ? "Lagt til" : "Legg til rute"); add.disabled = state.routeSiteIds.includes(site.id); add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add); item.append(actions); list.append(item);
   });
@@ -948,7 +1057,7 @@ async function downloadGeoJSON() {
         return;
       }
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.detail || `Request failed (${response.status})`);
+      throw new Error(body.detail || `Forespørselen feilet (${response.status})`);
     }
     const blob = await response.blob();
     if (requestEpoch !== state.authEpoch) throw new DOMException("Utdatert forespørsel", "AbortError");
@@ -965,7 +1074,7 @@ async function downloadGeoJSON() {
 function updateRouteStart(point, label) {
   state.start = point;
   if (startMarker) startMarker.remove();
-  startMarker = L.circleMarker([point.lat, point.lon], { color: "#c65d2e", fillColor: "#fff", fillOpacity: 1, radius: 8, weight: 3 }).addTo(map).bindTooltip("Route start");
+  startMarker = L.circleMarker([point.lat, point.lon], { color: "#c65d2e", fillColor: "#fff", fillOpacity: 1, radius: 8, weight: 3 }).addTo(map).bindTooltip("Rutestart");
   text($("route-start"), `Start: ${label || `${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`}`);
 }
 
@@ -1011,7 +1120,7 @@ async function createRoute() {
     map.fitBounds(routeLayer.getBounds(), { padding: [24, 24] });
     renderRouteResult(result);
     await loadRoutes();
-    setStatus(`Created ${result.name}.`);
+    setStatus(`Opprettet ${result.name}.`);
   } catch (error) { if (!isStaleRequest(error)) text($("route-result"), error.message); }
   finally {
     if (requestEpoch === state.authEpoch) {
@@ -1082,4 +1191,5 @@ map.on("click", (event) => {
   renderRouteStops();
 });
 
-updateRouteStart({ lat: 63.4305, lon: 10.3951 }, "Standardstart i Trondheim");
+updateRouteStart(DEFAULT_ROUTE_START, "Standardstart i Trondheim");
+setSurface("map", { scroll: false });

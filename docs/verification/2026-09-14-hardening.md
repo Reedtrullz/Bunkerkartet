@@ -252,15 +252,30 @@ decisions, coordinates, production data, or GitHub policy changes were added.
   required CI, blocked force-push/deletion, and auditable owner bypass without
   changing GitHub settings.
 
+## L10 follow-up — controlled surfaces and complete operator flow
+
+Status: implemented locally; no production UI, catalog, or deployment state was changed.
+
+- `Kart`, `Vurdering`, and `Tur` now expose controlled panels. Site editing and field observations are compact disclosure sections with focus return; overlapping coordinates produce named choices without clustering.
+- API validation arrays render Norwegian field-level errors instead of `[object Object]`. The browser contract covers 390×844 and 1280×720, 200% zoom, focus, width bounds, contrast, long titles, and the `Eksporter hele katalogen` label.
+- A synthetic Chromium flow now covers package import → candidate review → observation → field verification/confirmation → reviewed public approach → route creation → GPX download and reload.
+- Detail loads and mutation refreshes use navigation/detail generations. A delayed detail response cannot overwrite a newer surface selection or private DOM. The regression test intentionally navigates during the delayed response.
+
+Verification: full suite `153 passed, 1 warning`; browser smoke `17 passed`; Node 22.22.3 syntax check and `git diff --check` passed.
+
+The earlier `13 browser tests` wording was stale documentation: the actual preserved baseline before this follow-up was 12; the five new L10 acceptance/race tests bring the current suite to 17. No coverage was removed.
+
+Non-claims: this remains bounded local Chromium acceptance, not real-device visual sign-off, live catalog/source truth, live ORS availability, legal access, field verification, or deployment proof.
+
 ## Final local matrix
 
 | Area | Evidence | Boundary |
 |---|---|---|
 | Auth, import, DB, routes | 136 non-browser tests passed | local synthetic data only |
-| Browser/UI | 12 Chromium smoke tests passed; Node 22.22.3 syntax check passed | not visual acceptance for every device |
+| Browser/UI | 17 Chromium smoke tests passed; Node 22.22.3 syntax check passed | not visual acceptance for every device |
 | Synthetic user flow | package → preview/review → observation → reviewed approach → saved/reopened route → GPX is covered by API/browser fixtures | does not prove real source truth, ORS-live, access, safety, or field verification |
 | Schema | fresh and forward migrations reach v8; migration tests pass | no production migration |
 | Drift/limits | body, cardinality, readiness, ORS busy, SHA/digest checks pass | no load test or live ORS quota use |
-| L10 follow-up | mobile 390×844 keyboard surface navigation and `scrollWidth` guard pass; marker/detail labels remain named | broad device visual acceptance, field-error copy, and dense-marker/clustering behavior remain bounded local checks |
+| L10 follow-up | controlled panels, focus-return disclosures, field-level errors, named overlap choices, 200% zoom/contrast, 390×844 + 1280×720 bounds, complete E2E, and delayed-navigation race pass | not real-device visual acceptance or live catalog/source/ORS/access proof |
 | Curation | policy and queue structure documented | owner must decide identity/access/public selection |
 | Release | runbook and release policy documented | no publish, deploy, merge, push, or GitHub-setting mutation |

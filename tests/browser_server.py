@@ -82,6 +82,31 @@ with app.state.database.connect() as connection:
     )
     connection.execute(
         """
+        INSERT INTO sites
+            (external_key, name, site_kind, latitude, longitude, precision,
+             uncertainty_m, location_basis, status, access, confidence,
+             warnings_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "browser:duplicate",
+            "Synthetic duplicate",
+            "bunker",
+            63.435,
+            10.4,
+            "approximate",
+            120,
+            "map_reference",
+            "candidate",
+            "unknown",
+            "low",
+            dump_json([]),
+            timestamp,
+            timestamp,
+        ),
+    )
+    connection.execute(
+        """
         INSERT INTO route_plans
             (name, start_json, waypoints_json, distance_m, duration_s,
              geometry_json, gpx_text, created_at)

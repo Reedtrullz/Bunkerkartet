@@ -31,7 +31,7 @@
 
   <main class="layout">
     <aside class="sidebar">
-      <section id="map-tools-panel" class="panel map-tools-panel" aria-labelledby="map-tools-heading">
+      <section id="map-tools-panel" class="panel map-tools-panel surface-panel" data-surface="map" aria-labelledby="map-tools-heading">
         <div class="panel-heading">
           <h2 id="map-tools-heading">Kartverktøy</h2>
         </div>
@@ -42,12 +42,12 @@
         <div id="location-status" class="site-meta" aria-live="polite">Posisjon brukes bare når du velger «Bruk min posisjon».</div>
       </section>
 
-      <section id="detail-panel" class="panel detail-panel" aria-labelledby="site-detail-heading">
+      <section id="detail-panel" class="panel detail-panel surface-panel" data-surface="review" aria-labelledby="site-detail-heading">
         <div class="panel-heading"><h2 id="site-detail-heading" tabindex="-1">Stedsdetaljer</h2></div>
         <div id="site-detail" class="empty-state" aria-live="polite">Velg en markør eller et sted.</div>
       </section>
 
-      <section class="panel controls-panel">
+      <section class="panel controls-panel surface-panel" data-surface="map">
         <div class="panel-heading">
           <h1>Steder</h1>
           <button id="refresh-sites" class="icon-button" title="Oppdater steder" aria-label="Oppdater steder">Oppdater</button>
@@ -98,7 +98,13 @@
         <div id="site-list" class="site-list" aria-live="polite"></div>
       </section>
 
-      <section class="panel import-panel">
+      <section id="overlap-panel" class="panel overlap-panel surface-panel" data-surface="map" hidden aria-labelledby="overlap-heading">
+        <div class="panel-heading"><h2 id="overlap-heading">Sammenfallende punkter</h2></div>
+        <p class="site-meta">Velg et navngitt sted når flere poster deler samme punkt.</p>
+        <div id="overlap-list" class="overlap-list"></div>
+      </section>
+
+      <section class="panel import-panel surface-panel" data-surface="map">
         <div class="panel-heading"><h2>Importer JSON</h2></div>
         <label for="import-file">JSON-fil</label>
         <input id="import-file" type="file" accept="application/json,.json">
@@ -109,13 +115,13 @@
         <pre id="import-result" class="result-box" aria-live="polite"></pre>
       </section>
 
-      <section class="panel review-panel">
+      <section class="panel review-panel surface-panel" data-surface="review">
         <div class="panel-heading">
           <h2>Kandidater</h2>
           <button id="refresh-candidates">Oppdater</button>
         </div>
         <div class="filter-grid">
-          <label>Confidence
+          <label>Sikkerhet
             <select id="review-confidence-filter">
             <option value="">All sikkerhet</option>
             <option value="high">Høy</option>
@@ -136,7 +142,7 @@
               <option value="unsafe">Utrygt</option>
             </select>
           </label>
-          <label>Uncertainty
+          <label>Usikkerhet
             <select id="review-uncertainty-filter">
               <option value="">Alle radier</option>
               <option value="under-100">Opptil 100 m</option>
@@ -153,7 +159,7 @@
         <div id="candidate-list" class="candidate-list"></div>
       </section>
 
-      <section class="panel field-priority-panel">
+      <section class="panel field-priority-panel surface-panel" data-surface="review">
         <div class="panel-heading">
           <h2>Feltliste</h2>
           <button id="refresh-field-priority">Oppdater</button>
@@ -162,10 +168,10 @@
         <div id="field-priority-list" class="site-list"></div>
       </section>
 
-      <section class="panel route-panel">
+      <section class="panel route-panel surface-panel" data-surface="route">
         <div class="panel-heading"><h2>Gå-rute</h2></div>
         <label>Rutenavn
-          <input id="route-name" type="text" value="Trondheim field route" maxlength="200">
+          <input id="route-name" type="text" value="Feltur i Trondheim" maxlength="200">
         </label>
         <div id="route-start" class="route-start">Start: Standardstart i Trondheim</div>
         <p class="site-meta">Når du beregner ruten, sendes start og stopp til OpenRouteService. Startpunkt og rute lagres i din private rutehistorikk. Du kan velge start manuelt.</p>
@@ -174,7 +180,7 @@
         <div id="route-result" class="route-result" aria-live="polite"></div>
       </section>
 
-      <section class="panel saved-routes-panel">
+      <section class="panel saved-routes-panel surface-panel" data-surface="route">
         <div class="panel-heading">
           <h2>Lagrede ruter</h2>
           <button id="refresh-routes" type="button">Oppdater</button>

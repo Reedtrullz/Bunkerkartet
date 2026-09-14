@@ -78,6 +78,7 @@ def test_saved_route_download_survives_normal_user_delay(page: Page, base_url: s
     page.goto(base_url)
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
+    page.get_by_role("button", name="Tur", exact=True).click()
     page.get_by_role("button", name="Last inn rute", exact=True).click()
     page.wait_for_timeout(150)
     with page.expect_download() as download:
@@ -131,6 +132,7 @@ def test_lock_clears_private_site_and_route_dom(page: Page, base_url: str):
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
     page.get_by_text("Synthetic site", exact=True).first.click()
+    page.get_by_role("button", name="Tur", exact=True).click()
     page.get_by_role("button", name="Last inn rute", exact=True).click()
     page.get_by_role("button", name="Lås", exact=True).click(timeout=1000)
 
@@ -151,12 +153,32 @@ def test_delayed_detail_response_cannot_restore_private_dom(page: Page, base_url
         route.continue_()
 
     page.route("**/api/sites/1", delay_detail)
-    page.locator("#site-list button", has_text="Detaljer").click()
+    page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True).click()
     page.get_by_role("button", name="Lås", exact=True).click(timeout=1000)
     page.wait_for_timeout(700)
 
     assert "Synthetic excerpt" not in page.locator("body").inner_text()
     assert "Synthetic site" not in page.locator("#site-detail").inner_text()
+
+
+def test_delayed_detail_response_cannot_override_newer_surface(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    page.get_by_text("Synthetic site", exact=True).first.wait_for()
+
+    def delay_detail(route):
+        time.sleep(0.5)
+        route.continue_()
+
+    page.route("**/api/sites/1", delay_detail)
+    page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True).click()
+    page.get_by_role("button", name="Kart", exact=True).click()
+    page.wait_for_timeout(700)
+
+    assert page.get_by_role("button", name="Kart", exact=True).get_attribute("aria-pressed") == "true"
+    assert page.locator("#detail-panel").is_hidden()
+    assert "Stedsdetaljer: Synthetic site" not in page.locator("#site-detail").inner_text()
 
 
 def test_auth_failure_outside_load_sites_clears_private_workspace(page: Page, base_url: str):
@@ -170,7 +192,7 @@ def test_auth_failure_outside_load_sites_clears_private_workspace(page: Page, ba
         "**/api/sites/1",
         lambda route: route.fulfill(status=401, content_type="application/json", body='{"detail":"expired"}'),
     )
-    page.locator("#site-list button", has_text="Detaljer").click()
+    page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True).click()
     page.wait_for_timeout(250)
 
     assert "Synthetic excerpt" not in page.locator("body").inner_text()
@@ -330,3 +352,141 @@ def test_mobile_surface_navigation_is_keyboard_usable_without_overflow(page: Pag
     map_button.focus()
     page.keyboard.press("Enter")
     assert map_button.get_attribute("aria-pressed") == "true"
+
+
+def test_validation_errors_are_shown_next_to_the_field(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True).click()
+    page.wait_for_timeout(200)
+
+    def reject_patch(route):
+        if route.request.method == "PATCH":
+            route.fulfill(
+                status=422,
+                content_type="application/json",
+                body='{"detail":[{"loc":["body","name"],"msg":"Navn må fylles ut"}]}',
+            )
+        else:
+            route.continue_()
+
+    page.route("**/api/sites/1", reject_patch)
+    page.get_by_text("Rediger sted", exact=True).wait_for()
+    page.get_by_text("Rediger sted", exact=True).click()
+    page.get_by_label("Navn", exact=True).fill("")
+    page.get_by_role("button", name="Lagre stedsendringer", exact=True).click()
+
+    page.locator(".field-error").filter(has_text="Navn må fylles ut").wait_for(state="visible")
+    assert "[object Object]" not in page.locator("body").inner_text()
+
+
+def test_identical_points_offer_a_named_choice_without_clustering(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    overlap = page.get_by_text("Sammenfallende punkter", exact=True)
+    overlap.wait_for(state="visible")
+    choices = page.locator("#overlap-panel button")
+    assert choices.count() >= 2
+    choices.filter(has_text="Synthetic site").click()
+    page.get_by_role("heading", name="Stedsdetaljer: Synthetic site", exact=True).wait_for(state="visible", timeout=3000)
+
+
+def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url: str):
+    payload = {
+        "schema_version": "1.0",
+        "batch_id": "browser-e2e-1",
+        "generated_at": "2026-09-14T12:00:00Z",
+        "records": [{
+            "external_key": "browser:e2e",
+            "name": "E2E testbunker med svært langt navn som skal brytes trygt",
+            "site_kind": "bunker",
+            "geometry": {"latitude": 63.436, "longitude": 10.401},
+            "precision": "approximate",
+            "uncertainty_m": 50,
+            "location_basis": "map_reference",
+            "status": "candidate",
+            "access": "unknown",
+            "sources": [{
+                "url": "https://example.com/browser-e2e",
+                "title": "E2E-kilde",
+                "source_type": "test",
+                "excerpt": "Syntetisk testkilde.",
+            }],
+            "confidence": "medium",
+        }],
+    }
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(base_url)
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    page.locator("#import-file").set_input_files({
+        "name": "e2e.json", "mimeType": "application/json", "buffer": json.dumps(payload).encode()
+    })
+    page.get_by_role("button", name="Forhåndsvis", exact=True).click()
+    page.get_by_role("button", name="Importer", exact=True).click()
+    page.locator("#site-list").get_by_text("E2E testbunker med svært langt navn som skal brytes trygt", exact=True).wait_for()
+
+    page.get_by_role("button", name="Vurdering", exact=True).press("Enter")
+    candidate = page.locator(".candidate-item", has_text="E2E testbunker")
+    candidate.get_by_role("button", name="Detaljer", exact=True).click()
+    page.locator("#detail-panel").get_by_role("button", name="Marker som kildegjennomgått", exact=True).click()
+    page.locator("#detail-panel").get_by_role("button", name="Marker som feltverifisert", exact=True).wait_for()
+    page.get_by_text("Feltobservasjoner", exact=True).click()
+    observation = page.locator("details.observations-editor form.observation-form")
+    observation.get_by_label("Observasjonsnotat", exact=True).fill("Syntetisk observasjon")
+    observation.locator("select[name=point_role]").select_option("feature")
+    observation.locator("input[name=uncertainty_m]").fill("20")
+    observation.locator("input[name=latitude]").fill("63.436")
+    observation.locator("input[name=longitude]").fill("10.401")
+    observation.get_by_role("button", name="Lagre observasjon", exact=True).click()
+    page.locator("#detail-panel").get_by_role("button", name="Marker som feltverifisert", exact=True).wait_for()
+    page.get_by_role("button", name="Marker som feltverifisert", exact=True).click()
+    page.locator("#detail-panel").get_by_role("button", name="Bekreft", exact=True).wait_for()
+    page.get_by_role("button", name="Bekreft", exact=True).click()
+    page.get_by_text("Rediger sted", exact=True).wait_for()
+    page.get_by_text("Rediger sted", exact=True).click()
+    editor = page.locator("details", has_text="Rediger sted")
+    approach = editor.locator("form.observation-form")
+    approach.locator("input[type=number]").nth(0).fill("63.4355")
+    approach.locator("input[type=number]").nth(1).fill("10.4005")
+    editor.locator("form.observation-form select").select_option("public")
+    approach.locator("textarea").fill("Syntetisk offentlig vei")
+    with page.expect_response(lambda response: response.request.method == "POST" and response.url.endswith("/approach")):
+        approach.get_by_role("button", name="Lagre vurdering av offentlig tilnærming", exact=True).click()
+    page.wait_for_function("""() => [...document.querySelectorAll('#site-list .site-item')].some(item => item.textContent.includes('E2E testbunker') && item.textContent.includes('Legg til rute'))""")
+
+    page.get_by_role("button", name="Kart", exact=True).press("Enter")
+    item = page.locator("#site-list .site-item", has_text="E2E testbunker")
+    item.get_by_role("button", name="Legg til rute", exact=True).wait_for(state="visible")
+    item.get_by_role("button", name="Legg til rute", exact=True).click()
+    page.get_by_role("button", name="Tur", exact=True).press("Enter")
+    page.locator("#route-stops").get_by_text("E2E testbunker med svært langt navn som skal brytes trygt", exact=True).wait_for()
+    assert not page.get_by_role("button", name="Beregn rute", exact=True).is_disabled()
+    page.get_by_role("button", name="Beregn rute", exact=True).click()
+    page.get_by_text("Last ned GPX", exact=True).wait_for()
+    with page.expect_download() as download:
+        page.get_by_text("Last ned GPX", exact=True).click()
+    assert ET.parse(download.value.path()).getroot().tag == "{http://www.topografix.com/GPX/1/1}gpx"
+    page.get_by_role("button", name="Last inn rute", exact=True).last.click()
+    assert page.get_by_text("Last ned GPX", exact=True).is_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+
+
+def test_two_hundred_percent_zoom_keeps_focus_and_width_bounded(page: Page, base_url: str):
+    page.set_viewport_size({"width": 1280, "height": 720})
+    page.goto(base_url)
+    page.evaluate("document.body.style.zoom = '2'")
+    nav = page.get_by_role("button", name="Vurdering", exact=True)
+    nav.focus()
+    assert page.evaluate("document.activeElement === document.getElementById('surface-review')")
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    assert page.evaluate("""() => {
+        const parse = (value) => value.match(/\\d+/g).slice(0, 3).map(Number).map((channel) => channel / 255);
+        const luminance = (rgb) => rgb.map((channel) => channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+        const button = document.getElementById('surface-review');
+        const foreground = luminance(parse(getComputedStyle(button).color));
+        const background = luminance(parse(getComputedStyle(button).backgroundColor));
+        return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05) >= 4.5;
+    }""")

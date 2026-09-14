@@ -14,7 +14,7 @@
 
 * { box-sizing: border-box; }
 
-html, body { height: 100%; margin: 0; }
+html, body { height: 100%; margin: 0; max-width: 100%; overflow-x: clip; }
 
 body {
   color: var(--ink);
@@ -62,12 +62,13 @@ button.small { padding: 4px 7px; font-size: 12px; }
 .surface-nav button { background: #fff; border-color: #8297a5; color: var(--navy); min-width: 82px; }
 .surface-nav button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-.layout { display: grid; grid-template-columns: minmax(320px, 390px) 1fr; height: calc(100% - 104px); }
-.sidebar { overflow-y: auto; padding: 12px; }
-.map-shell { min-height: 420px; position: relative; }
+.layout { display: grid; grid-template-columns: minmax(320px, 390px) minmax(0, 1fr); height: calc(100% - 104px); min-width: 0; }
+.sidebar { min-width: 0; overflow-y: auto; padding: 12px; }
+.map-shell { min-height: 420px; min-width: 0; position: relative; }
 #map { height: 100%; min-height: 420px; width: 100%; }
 
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; margin-bottom: 12px; padding: 12px; }
+.surface-panel[hidden] { display: none; }
 .map-tools-panel { position: sticky; top: 12px; z-index: 3; }
 .map-tools-panel .button-row { margin-top: 0; }
 .detail-panel { scroll-margin-top: 180px; }
@@ -122,6 +123,10 @@ textarea { min-height: 58px; resize: vertical; }
 .route-item { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 4px; display: grid; gap: 5px; padding: 8px; }
 .route-result { display: grid; gap: 5px; margin-top: 9px; }
 .route-result a { color: #235d85; }
+.overlap-list { display: grid; gap: 5px; }
+.overlap-list button { text-align: left; }
+.field-error { color: var(--red); font-size: 12px; margin-top: 3px; }
+[aria-invalid="true"] { border-color: var(--red); outline: 2px solid rgba(158,61,61,.18); }
 .map-key {
   background: rgba(255,255,255,.96);
   border: 1px solid var(--line);
