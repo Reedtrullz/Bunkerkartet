@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+import json
 import subprocess
 import sys
 import time
@@ -206,3 +207,41 @@ def test_lock_discards_delayed_import_file_read(page: Page, base_url: str):
 
     assert page.locator("#import-result").inner_text() == ""
     assert page.get_by_role("button", name="Preview", exact=True).is_disabled()
+
+
+def test_stale_preview_cannot_enable_commit_for_new_file(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Admin token", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Load map", exact=True).click()
+    payload = {
+        "schema_version": "1.0",
+        "batch_id": "browser-preview",
+        "generated_at": "2026-09-14T12:00:00Z",
+        "records": [{
+            "external_key": "browser:preview",
+            "name": "Synthetic preview site",
+            "site_kind": "bunker",
+            "geometry": {"latitude": 63.435, "longitude": 10.4},
+            "precision": "approximate",
+            "uncertainty_m": 100,
+            "location_basis": "map_reference",
+            "status": "candidate",
+            "access": "unknown",
+            "sources": [{
+                "url": "https://example.com/browser-preview",
+                "title": "Synthetic preview source",
+                "source_type": "test",
+                "excerpt": "Synthetic preview excerpt",
+            }],
+        }],
+    }
+    page.route("**/api/admin/imports/preview", lambda route: (time.sleep(0.5), route.continue_()))
+    page.locator("#import-file").set_input_files({"name": "a.json", "mimeType": "application/json", "buffer": json.dumps(payload).encode()})
+    page.get_by_role("button", name="Preview", exact=True).click()
+    page.locator("#import-file").set_input_files({"name": "b.json", "mimeType": "application/json", "buffer": json.dumps({**payload, "batch_id": "browser-preview-b"}).encode()})
+    page.wait_for_timeout(700)
+
+    assert page.get_by_role("button", name="Commit", exact=True).is_disabled()
+    page.get_by_role("button", name="Preview", exact=True).click()
+    page.wait_for_timeout(700)
+    assert not page.get_by_role("button", name="Commit", exact=True).is_disabled()

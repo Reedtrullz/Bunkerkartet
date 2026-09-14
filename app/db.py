@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -160,6 +161,15 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def canonical_payload_hash(payload: dict[str, object]) -> str:
+    canonical_payload = dict(payload)
+    canonical_payload["records"] = sorted(
+        payload.get("records", []), key=lambda record: record["external_key"]
+    )
+    canonical = json.dumps(canonical_payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 class Database:
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -185,6 +195,7 @@ class Database:
 
         try:
             with sqlite3.connect(self.path, timeout=10) as connection:
+                connection.row_factory = sqlite3.Row
                 version = connection.execute("PRAGMA user_version").fetchone()[0]
                 if version > CURRENT_SCHEMA_VERSION:
                     raise RuntimeError("future schema version is not supported")
@@ -273,7 +284,7 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
             source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
             import_record_id INTEGER REFERENCES import_records(id),
             source_index INTEGER,
-            legacy_evidence_id INTEGER UNIQUE REFERENCES evidence(id),
+            legacy_evidence_id INTEGER UNIQUE REFERENCES evidence(id) ON DELETE SET NULL,
             excerpt TEXT NOT NULL,
             content_kind TEXT NOT NULL DEFAULT 'unknown'
                 CHECK(content_kind IN ('quote', 'summary', 'unknown')),
@@ -288,18 +299,105 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
         )
         """
     )
-    connection.execute(
+    evidence_rows = connection.execute(
         """
-        INSERT INTO evidence_items
-            (site_id, source_id, legacy_evidence_id, excerpt, content_kind, role,
-             published_at, accessed_at, provenance_status, created_at)
-        SELECT evidence.site_id, evidence.source_id, evidence.id,
-               COALESCE(sources.excerpt, ''), 'unknown', 'context',
-               sources.published_at, sources.accessed_at, 'legacy_unresolved', evidence.created_at
+        SELECT evidence.id, evidence.site_id, evidence.source_id, evidence.created_at,
+               sources.url, sources.excerpt, sources.published_at, sources.accessed_at
         FROM evidence
         JOIN sources ON sources.id = evidence.source_id
         """
-    )
+    ).fetchall()
+    for evidence in evidence_rows:
+        reconstructed = None
+        records = connection.execute(
+            "SELECT id, payload_json FROM import_records WHERE site_id = ? ORDER BY id",
+            (evidence["site_id"],),
+        ).fetchall()
+        for record in records:
+            try:
+                payload = json.loads(record["payload_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            for source_index, source in enumerate(payload.get("sources", [])):
+                if (
+                    isinstance(source, dict)
+                    and source.get("url") == evidence["url"]
+                    and isinstance(source.get("excerpt"), str)
+                ):
+                    reconstructed = (record["id"], source_index, source)
+                    break
+            if reconstructed:
+                break
+        if reconstructed and connection.execute(
+            "SELECT 1 FROM evidence_items WHERE import_record_id = ? AND source_index = ?",
+            reconstructed[:2],
+        ).fetchone():
+            reconstructed = None
+        if reconstructed:
+            import_record_id, source_index, source = reconstructed
+            connection.execute(
+                """
+                INSERT INTO evidence_items
+                    (site_id, source_id, import_record_id, source_index, excerpt,
+                     content_kind, role, published_at, accessed_at, provenance_status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'unknown', 'context', ?, ?, 'import_record', ?)
+                """,
+                (
+                    evidence["site_id"], evidence["source_id"], import_record_id, source_index,
+                    source["excerpt"], source.get("publication_date"), source.get("access_date"),
+                    evidence["created_at"],
+                ),
+            )
+        else:
+            connection.execute(
+                """
+                INSERT INTO evidence_items
+                    (site_id, source_id, legacy_evidence_id, excerpt, content_kind, role,
+                     published_at, accessed_at, provenance_status, created_at)
+                VALUES (?, ?, ?, ?, 'unknown', 'context', ?, ?, 'legacy_unresolved', ?)
+                """,
+                (
+                    evidence["site_id"], evidence["source_id"], evidence["id"],
+                    evidence["excerpt"] or "", evidence["published_at"], evidence["accessed_at"],
+                    evidence["created_at"],
+                ),
+            )
+    for batch in connection.execute(
+        "SELECT id, batch_id, schema_version, generated_at FROM import_batches WHERE payload_hash IS NULL"
+    ).fetchall():
+        records = []
+        reconstructable = True
+        for record in connection.execute(
+            "SELECT payload_json FROM import_records WHERE batch_id = ? ORDER BY external_key, id",
+            (batch["batch_id"],),
+        ).fetchall():
+            try:
+                payload = json.loads(record["payload_json"])
+            except (TypeError, json.JSONDecodeError):
+                reconstructable = False
+                break
+            if not isinstance(payload, dict) or not payload.get("external_key"):
+                reconstructable = False
+                break
+            records.append(payload)
+        if not records:
+            reconstructable = False
+        generated_at = batch["generated_at"]
+        if generated_at.endswith("+00:00"):
+            generated_at = generated_at[:-6] + "Z"
+        if reconstructable:
+            payload = {
+                "schema_version": batch["schema_version"],
+                "batch_id": batch["batch_id"],
+                "generated_at": generated_at,
+                "records": records,
+            }
+            connection.execute(
+                "UPDATE import_batches SET payload_hash = ? WHERE id = ?",
+                (canonical_payload_hash(payload), batch["id"]),
+            )
     connection.execute("PRAGMA user_version = 2")
 
 

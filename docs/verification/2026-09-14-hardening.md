@@ -92,14 +92,28 @@ L04 review remediation:
 
 Status: implemented locally; no historical production values were rewritten.
 
-- Schema v2 adds immutable `evidence_items` and `import_batches.payload_hash`; v1 evidence is preserved as `legacy_unresolved` rows and v2 migrations are retryable.
+- Schema v2 adds immutable `evidence_items` and `import_batches.payload_hash`; v1 evidence is reconstructed from matching `import_records.payload_json` when possible and otherwise preserved as `legacy_unresolved`. v2 migrations are retryable.
 - Same-URL imports retain each site-specific excerpt/provenance item; source identity metadata fills only missing fields rather than overwriting known values.
 - Preview exposes a deterministic SHA-256 payload hash. Commits use `BEGIN IMMEDIATE`; an identical committed retry is idempotent, while a changed payload with the same batch ID returns 409.
 - Legacy credential-bearing source URLs and observation photo URLs are withheld in read responses with a safe status; raw values are not returned or made clickable. Historical values are not auto-sanitized.
+- Migrated evidence dates use the evidence item's nullable values directly; source-level dates are used only when no evidence item exists. Merge uses `ON DELETE SET NULL` for unresolved legacy links so historical evidence is not deleted.
 
 Verification: focused L05/API/DB tests `46 passed, 1 warning`; full suite including 7 browser smoke tests `102 passed, 1 warning`; Node 22 syntax and `git diff --check` passed.
 
 Non-claims: this does not approve or classify any legacy source, prove source ownership, or validate field observations. L06 preview freshness and later schema versions remain outstanding.
+
+## L06 — Fresh, deterministic import preview
+
+Status: implemented locally; no import was committed to production.
+
+- Preview now returns deterministic `payload_hash` and `preview_hash`, sorted effect records, before/after changes, preserved fields, evidence excerpts, and warnings without generated database IDs.
+- New commits require `X-Import-Preview`; the server recomputes the preview under the same `BEGIN IMMEDIATE` transaction. Identical committed retries remain idempotent; missing or stale previews return 409 without writes.
+- The browser renders a text-based review with technical JSON as a secondary disclosure, captures import generation and preview hash, rejects stale preview responses after file changes, and disables file changes during commit.
+- Documentation and research examples now pass the preview hash explicitly.
+
+Verification: full suite `111 passed, 1 warning`; Node 22 syntax and `git diff --check` passed. The browser preview race is covered with synthetic delayed Chromium responses.
+
+Non-claims: preview hash is a consistency check, not proof of human review, approval, source permission, field validation, or production import.
 
 ## Review follow-up — stale GeoJSON auth and observation input
 

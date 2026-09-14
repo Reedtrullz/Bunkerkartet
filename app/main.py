@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from html import escape as escape_html
-import hashlib
 import hmac
 import json
 import math
@@ -18,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, fie
 from urllib.error import HTTPError, URLError
 
 from app.config import Settings
-from app.db import Database, dump_json, load_json, now_iso, observation_from_row, site_from_row
+from app.db import Database, canonical_payload_hash, dump_json, load_json, now_iso, observation_from_row, site_from_row
 from app.imports import (
     ImportPackage,
     ImportRecord,
@@ -215,8 +214,8 @@ def _source_rows(connection: sqlite3.Connection, site_id: int) -> list[dict[str,
         """
         SELECT sources.url, sources.title, sources.source_type,
                COALESCE(evidence_items.excerpt, sources.excerpt) AS excerpt,
-               COALESCE(evidence_items.published_at, sources.published_at) AS published_at,
-               COALESCE(evidence_items.accessed_at, sources.accessed_at) AS accessed_at,
+               CASE WHEN evidence_items.id IS NULL THEN sources.published_at ELSE evidence_items.published_at END AS published_at,
+               CASE WHEN evidence_items.id IS NULL THEN sources.accessed_at ELSE evidence_items.accessed_at END AS accessed_at,
                COALESCE(evidence_items.role, evidence.role) AS role,
                evidence_items.id AS evidence_id,
                evidence_items.content_kind, evidence_items.provenance_status
@@ -347,45 +346,160 @@ def _duplicate_warnings(
     return list(dict.fromkeys(warnings))
 
 
+_PREVIEW_FIELDS = (
+    "name", "site_kind", "latitude", "longitude", "precision", "uncertainty_m",
+    "location_basis", "access", "confidence", "condition", "short_rationale",
+    "observed_location_text",
+)
+
+
+def _record_values(record: ImportRecord) -> dict[str, object]:
+    return {
+        "name": record.name,
+        "site_kind": record.site_kind,
+        "latitude": record.geometry.latitude if record.geometry else None,
+        "longitude": record.geometry.longitude if record.geometry else None,
+        "precision": record.precision,
+        "uncertainty_m": record.uncertainty_m,
+        "location_basis": record.location_basis,
+        "access": record.access,
+        "confidence": record.confidence,
+        "condition": record.condition,
+        "short_rationale": record.short_rationale,
+        "observed_location_text": record.observed_location_text,
+    }
+
+
+def _peer_duplicate_warnings(record: ImportRecord, records: list[ImportRecord]) -> list[str]:
+    warnings: list[str] = []
+    for other in sorted(records, key=lambda item: item.external_key):
+        if other.external_key == record.external_key:
+            continue
+        if other.name.casefold() != record.name.casefold() or other.site_kind.casefold() != record.site_kind.casefold():
+            continue
+        if record.geometry is None or other.geometry is None:
+            warnings.append(f"possible duplicate of {other.external_key}")
+            continue
+        distance = _distance_m(
+            (record.geometry.longitude, record.geometry.latitude),
+            (other.geometry.longitude, other.geometry.latitude),
+        )
+        if distance <= 100:
+            warnings.append(f"possible duplicate of {other.external_key} ({round(distance)} m away)")
+    return warnings
+
+
+def _warnings_for_record(
+    connection: sqlite3.Connection, record: ImportRecord, records: list[ImportRecord]
+) -> list[str]:
+    return list(dict.fromkeys([
+        *_duplicate_warnings(connection, record),
+        *_peer_duplicate_warnings(record, records),
+    ]))
+
+
+def _preview_record(
+    connection: sqlite3.Connection, record: ImportRecord, records: list[ImportRecord]
+) -> dict[str, object]:
+    existing = _existing_site(connection, record.external_key)
+    warnings = _warnings_for_record(connection, record, records)
+    if (
+        existing is not None
+        and existing["status"] == "candidate"
+        and record.geometry is None
+        and existing["latitude"] is not None
+    ):
+        warnings.append("incoming record has no geometry; existing candidate coordinate will be preserved")
+    warnings = list(dict.fromkeys(warnings))
+    incoming = _record_values(record)
+    changes: list[dict[str, object]] = []
+    preserved_fields: list[str] = []
+    if existing is None:
+        action = "new"
+        changes = [
+            {"field": field, "before": None, "after": incoming[field]}
+            for field in _PREVIEW_FIELDS
+            if incoming[field] is not None
+        ]
+    elif existing["status"] == "candidate":
+        action = "update_candidate"
+        effective = dict(incoming)
+        preserve_candidate_point = (
+            record.geometry is None
+            and existing["latitude"] is not None
+            and existing["longitude"] is not None
+        )
+        if preserve_candidate_point:
+            for field in ("latitude", "longitude", "precision", "uncertainty_m", "location_basis"):
+                effective[field] = existing[field]
+        if effective["access"] == "unknown" and existing["access"] != "unknown":
+            effective["access"] = existing["access"]
+        if effective["confidence"] in (None, "unknown") and existing["confidence"] not in (None, "unknown"):
+            effective["confidence"] = existing["confidence"]
+        for field in ("condition", "short_rationale", "observed_location_text"):
+            if not effective[field] or not str(effective[field]).strip():
+                effective[field] = existing[field]
+        for field in _PREVIEW_FIELDS:
+            before = existing[field]
+            after = effective[field]
+            if before != after:
+                changes.append({"field": field, "before": before, "after": after})
+            elif incoming[field] != after:
+                preserved_fields.append(field)
+    else:
+        action = "preserve_trusted"
+        preserved_fields = list(_PREVIEW_FIELDS)
+    evidence = [
+        {
+            "url": str(source.url),
+            "title": source.title,
+            "source_type": source.source_type,
+            "excerpt": source.excerpt,
+            "publication_date": source.publication_date.isoformat() if source.publication_date else None,
+            "access_date": source.access_date.isoformat() if source.access_date else None,
+        }
+        for source in record.sources
+    ]
+    return {
+        "external_key": record.external_key,
+        "name": record.name,
+        "action": action,
+        "changes": changes,
+        "preserved_fields": preserved_fields,
+        "evidence": evidence,
+        "warnings": warnings,
+    }
+
+
+def _preview_hash(preview: dict[str, object]) -> str:
+    effect = {
+        "payload_hash": preview["payload_hash"],
+        "records": preview["records"],
+        "summary": preview["summary"],
+    }
+    return canonical_payload_hash(effect)
+
+
 def _preview_package(
     connection: sqlite3.Connection, package: ImportPackage
 ) -> dict[str, object]:
     preview_records: list[dict[str, object]] = []
     counts = {"new": 0, "update_candidate": 0, "preserve_trusted": 0, "warnings": 0}
-    for record in package.records:
-        existing = _existing_site(connection, record.external_key)
-        warnings = _duplicate_warnings(connection, record)
-        if existing is None:
-            action = "new"
-        elif existing["status"] == "candidate":
-            action = "update_candidate"
-        else:
-            action = "preserve_trusted"
-        if (
-            existing is not None
-            and existing["status"] == "candidate"
-            and record.geometry is None
-            and existing["latitude"] is not None
-        ):
-            warnings.append("incoming record has no geometry; existing candidate coordinate will be preserved")
-        counts[action] += 1
-        counts["warnings"] += len(warnings)
-        preview_records.append(
-            {
-                "external_key": record.external_key,
-                "name": record.name,
-                "action": action,
-                "existing_site_id": existing["id"] if existing else None,
-                "warnings": warnings,
-            }
-        )
-    return {
+    records = sorted(package.records, key=lambda item: item.external_key)
+    for record in records:
+        preview_record = _preview_record(connection, record, records)
+        counts[preview_record["action"]] += 1
+        counts["warnings"] += len(preview_record["warnings"])
+        preview_records.append(preview_record)
+    preview = {
         "batch_id": package.batch_id,
         "schema_version": package.schema_version,
         "payload_hash": _payload_hash(package),
         "records": preview_records,
         "summary": {"total": len(package.records), **counts},
     }
+    preview["preview_hash"] = _preview_hash(preview)
+    return preview
 
 
 def _site_values(record: ImportRecord, warnings: list[str]) -> tuple[object, ...]:
@@ -443,13 +557,12 @@ def _upsert_source(
 
 
 def _payload_hash(package: ImportPackage) -> str:
-    payload = package.model_dump(mode="json")
-    payload["records"] = sorted(payload["records"], key=lambda record: record["external_key"])
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return canonical_payload_hash(package.model_dump(mode="json"))
 
 
-def _commit_package(database: Database, package: ImportPackage) -> dict[str, object]:
+def _commit_package(
+    database: Database, package: ImportPackage, preview_hash: str | None
+) -> dict[str, object]:
     timestamp = now_iso()
     payload_hash = _payload_hash(package)
     created = updated = preserved = evidence_attached = 0
@@ -460,6 +573,8 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
             (package.batch_id,),
         ).fetchone()
         if existing_batch and existing_batch["committed_at"]:
+            if existing_batch["payload_hash"] is None:
+                raise HTTPException(409, "legacy batch payload cannot be verified")
             if existing_batch["payload_hash"] != payload_hash:
                 raise HTTPException(409, "import batch payload differs")
             return {
@@ -472,6 +587,9 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
             }
         if existing_batch:
             raise HTTPException(409, "import batch is already in progress")
+        preview = _preview_package(connection, package)
+        if preview_hash != preview["preview_hash"]:
+            raise HTTPException(409, "fresh preview required")
 
         batch_insert = connection.execute(
             """
@@ -487,6 +605,8 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
                 (package.batch_id,),
             ).fetchone()
             if existing_batch and existing_batch["committed_at"]:
+                if existing_batch["payload_hash"] is None:
+                    raise HTTPException(409, "legacy batch payload cannot be verified")
                 if existing_batch["payload_hash"] != payload_hash:
                     raise HTTPException(409, "import batch payload differs")
                 return {
@@ -718,12 +838,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return _preview_package(connection, package)
 
     @app.post("/api/admin/imports/commit", dependencies=[Depends(admin_guard)])
-    def commit_import(payload: dict[str, object]) -> dict[str, object]:
+    def commit_import(
+        payload: dict[str, object],
+        x_import_preview: str | None = Header(default=None),
+    ) -> dict[str, object]:
         try:
             package = validate_import_package(payload)
         except ValidationError as error:
             raise HTTPException(422, detail=_validation_detail(error))
-        return _commit_package(database, package)
+        return _commit_package(database, package, x_import_preview)
 
     @app.get("/api/sites", dependencies=[Depends(admin_guard)])
     def list_sites(

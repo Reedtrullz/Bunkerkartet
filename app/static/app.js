@@ -4,6 +4,7 @@ const state = {
   sites: [],
   routes: [],
   pendingImport: null,
+  previewHash: null,
   importGeneration: 0,
   importRequestInFlight: false,
   routeSiteIds: [],
@@ -142,6 +143,7 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
   state.routeSiteIds = [];
   state.siteCache.clear();
   state.pendingImport = null;
+  state.previewHash = null;
   state.importGeneration += 1;
   state.importRequestInFlight = false;
   state.start = null;
@@ -167,6 +169,7 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
   $("route-result").replaceChildren();
   text($("route-start"), "Start: no route start selected");
   $("import-file").value = "";
+  $("import-file").disabled = false;
   $("preview-import").disabled = true;
   $("commit-import").disabled = true;
   text($("preview-import"), "Preview");
@@ -179,6 +182,26 @@ function clearAuthenticatedData({ resetToken = true } = {}) {
     state.token = "";
     $("admin-token").value = "";
   }
+}
+
+function renderImportPreview(result) {
+  const root = $("import-result");
+  root.replaceChildren();
+  const summary = document.createElement("p");
+  text(summary, `${result.summary.total} record${result.summary.total === 1 ? "" : "s"}; ${result.summary.warnings} warning${result.summary.warnings === 1 ? "" : "s"}. Review preview; it is not human approval.`);
+  root.append(summary);
+  result.records.forEach((record) => {
+    const item = document.createElement("article");
+    const heading = document.createElement("strong"); text(heading, `${record.name} — ${record.action}`); item.append(heading);
+    record.changes.forEach((change) => { const line = document.createElement("div"); line.className = "site-meta"; text(line, `${change.field}: ${JSON.stringify(change.before)} → ${JSON.stringify(change.after)}`); item.append(line); });
+    record.preserved_fields.forEach((field) => { const line = document.createElement("div"); line.className = "site-meta"; text(line, `Preserved: ${field}`); item.append(line); });
+    record.evidence.forEach((evidence) => { const line = document.createElement("div"); line.className = "site-meta"; text(line, `Evidence: ${evidence.title} — ${evidence.excerpt}`); item.append(line); });
+    record.warnings.forEach((warning) => { const line = document.createElement("div"); line.className = "warning"; text(line, warning); item.append(line); });
+    root.append(item);
+  });
+  const technical = document.createElement("details");
+  const label = document.createElement("summary"); text(label, "Show technical preview"); technical.append(label);
+  const raw = document.createElement("pre"); text(raw, JSON.stringify(result, null, 2)); technical.append(raw); root.append(technical);
 }
 
 async function api(path, options = {}) {
@@ -611,6 +634,7 @@ async function readImport(file) {
     const content = await file.text();
     if (requestEpoch !== state.authEpoch || generation !== state.importGeneration) return;
     state.pendingImport = JSON.parse(content);
+    state.previewHash = null;
     $("preview-import").disabled = false;
     $("commit-import").disabled = true;
     text($("import-result"), "JSON loaded. Preview before commit.");
@@ -626,18 +650,22 @@ async function readImport(file) {
 async function previewImport() {
   if (!state.pendingImport || state.importRequestInFlight) return;
   const requestEpoch = state.authEpoch;
+  const generation = state.importGeneration;
+  const pendingImport = state.pendingImport;
   state.importRequestInFlight = true;
   const button = $("preview-import"); button.disabled = true; text(button, "Previewing...");
   try {
-    const result = await api("/api/admin/imports/preview", { method: "POST", body: JSON.stringify(state.pendingImport) });
-    if (requestEpoch !== state.authEpoch) return;
-    text($("import-result"), JSON.stringify(result, null, 2));
+    const result = await api("/api/admin/imports/preview", { method: "POST", body: JSON.stringify(pendingImport) });
+    if (requestEpoch !== state.authEpoch || generation !== state.importGeneration || pendingImport !== state.pendingImport) return;
+    state.previewHash = result.preview_hash;
+    renderImportPreview(result);
     $("commit-import").disabled = false;
   } catch (error) {
+    if (requestEpoch !== state.authEpoch || generation !== state.importGeneration || pendingImport !== state.pendingImport) return;
     if (!isStaleRequest(error)) { text($("import-result"), error.message); $("commit-import").disabled = true; }
   }
   finally {
-    if (requestEpoch === state.authEpoch) {
+    if (requestEpoch === state.authEpoch && generation === state.importGeneration) {
       state.importRequestInFlight = false;
       text(button, "Preview");
       button.disabled = !state.pendingImport;
@@ -646,22 +674,28 @@ async function previewImport() {
 }
 
 async function commitImport() {
-  if (!state.pendingImport || state.importRequestInFlight) return;
+  if (!state.pendingImport || !state.previewHash || state.importRequestInFlight) return;
   const requestEpoch = state.authEpoch;
+  const generation = state.importGeneration;
+  const pendingImport = state.pendingImport;
+  const previewHash = state.previewHash;
   state.importRequestInFlight = true;
   const button = $("commit-import"); button.disabled = true; text(button, "Committing...");
+  $("import-file").disabled = true;
   try {
-    const result = await api("/api/admin/imports/commit", { method: "POST", body: JSON.stringify(state.pendingImport) });
-    if (requestEpoch !== state.authEpoch) return;
+    const result = await api("/api/admin/imports/commit", { method: "POST", headers: { "X-Import-Preview": previewHash }, body: JSON.stringify(pendingImport) });
+    if (requestEpoch !== state.authEpoch || generation !== state.importGeneration || pendingImport !== state.pendingImport) return;
     text($("import-result"), JSON.stringify(result, null, 2));
     state.pendingImport = null;
+    state.previewHash = null;
     await loadSites();
-  } catch (error) { if (!isStaleRequest(error)) text($("import-result"), error.message); }
+  } catch (error) { if (requestEpoch === state.authEpoch && generation === state.importGeneration && !isStaleRequest(error)) text($("import-result"), error.message); }
   finally {
-    if (requestEpoch === state.authEpoch) {
+    if (requestEpoch === state.authEpoch && generation === state.importGeneration) {
       state.importRequestInFlight = false;
+      $("import-file").disabled = false;
       text(button, "Commit");
-      button.disabled = !state.pendingImport;
+      button.disabled = !state.pendingImport || !state.previewHash;
     }
   }
 }
@@ -911,6 +945,10 @@ $("site-search").addEventListener("change", loadSites);
 $("download-geojson").addEventListener("click", downloadGeoJSON);
 $("import-file").addEventListener("change", (event) => {
   state.importGeneration += 1;
+  state.previewHash = null;
+  state.importRequestInFlight = false;
+  $("commit-import").disabled = true;
+  text($("preview-import"), "Preview");
   if (event.target.files[0]) readImport(event.target.files[0]);
 });
 $("preview-import").addEventListener("click", previewImport);
