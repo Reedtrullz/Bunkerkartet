@@ -33,3 +33,17 @@ def test_frontend_exposes_operational_controls_without_duplicate_auth_binding():
     assert "L.divIcon" in javascript
     assert "site-marker-${category.key}" in javascript
     assert "map-key-marker" in html
+
+
+def test_sidebar_surfaces_location_and_selected_site_details():
+    html = (ROOT / "app/static/index.html").read_text()
+    javascript = (ROOT / "app/static/app.js").read_text()
+
+    for element_id in ("map-tools-panel", "location-status", "detail-panel", "site-detail-heading"):
+        assert f'id="{element_id}"' in html
+    assert 'id="use-location"' in html
+    assert 'id="pick-start"' in html
+    assert 'scrollIntoView({ behavior: "smooth", block: "start" })' in javascript
+    assert 'focus({ preventScroll: true })' in javascript
+    assert 'text(root, "Loading site details...")' in javascript
+    assert 'classList.add("is-selected")' in javascript

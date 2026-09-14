@@ -142,6 +142,8 @@ function clearAuthenticatedData() {
   renderRouteStops();
   $("candidate-list").replaceChildren();
   text($("candidate-summary"), "");
+  $("detail-panel").classList.remove("is-selected");
+  text($("site-detail-heading"), "Site detail");
 }
 
 async function api(path, options = {}) {
@@ -513,10 +515,16 @@ async function adoptObservationLocation(siteId, observationId) {
 }
 
 async function loadDetail(id) {
+  const panel = $("detail-panel");
+  const root = $("site-detail");
+  panel.classList.add("is-selected");
+  text(root, "Loading site details...");
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  $("site-detail-heading").focus({ preventScroll: true });
   try {
     const site = await api(`/api/sites/${id}`);
     state.siteCache.set(site.id, site);
-    const root = $("site-detail");
+    text($("site-detail-heading"), `Site detail: ${site.name}`);
     root.replaceChildren();
     const coordinates = site.latitude == null ? "Unknown" : `${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}`;
     const copy = document.createElement("dl"); copy.className = "detail-copy";
@@ -805,11 +813,21 @@ $("review-uncertainty-filter").addEventListener("change", loadCandidates);
 $("review-source-filter").addEventListener("change", loadCandidates);
 $("pick-start").addEventListener("click", () => { state.pickingStart = true; setStatus("Click the map to set the route start."); });
 $("use-location").addEventListener("click", () => {
-  if (!navigator.geolocation) { setStatus("Location is not available in this browser."); return; }
+  if (!navigator.geolocation) {
+    text($("location-status"), "Location is not available in this browser.");
+    setStatus("Location is not available in this browser.");
+    return;
+  }
+  text($("location-status"), "Requesting current location...");
   navigator.geolocation.getCurrentPosition((position) => {
     const point = { lat: position.coords.latitude, lon: position.coords.longitude };
     updateRouteStart(point, "current location"); map.setView([point.lat, point.lon], 15);
-  }, () => setStatus("Could not read current location."));
+    text($("location-status"), "Current location set as route start.");
+    setStatus("Current location set as route start.");
+  }, () => {
+    text($("location-status"), "Could not read current location.");
+    setStatus("Could not read current location.");
+  });
 });
 $("create-route").addEventListener("click", createRoute);
 map.on("click", (event) => {
