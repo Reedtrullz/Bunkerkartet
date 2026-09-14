@@ -24,6 +24,8 @@ def test_frontend_exposes_operational_controls_without_duplicate_auth_binding():
     assert "`/api/routes/${id}`" in javascript
     assert "site_ids" in javascript
     assert "hasReviewedPublicApproach" in javascript
+    assert "timeout: 10000" in javascript
+    assert "accuracy" in javascript
     assert "L.control.layers" in javascript
     assert "siteCache" in javascript
     assert "target_site_id" in javascript

@@ -915,6 +915,11 @@ def test_adopting_new_feature_coordinate_on_trusted_site_requires_location_revie
 
     assert adopted.status_code == 200
     assert adopted.json()["site"]["location_review_required"] == 1
+    repeated = api.post(
+        f"/api/sites/{site_id}/observations/{observation_id}/adopt-location", headers=auth()
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["site"]["location_review_required"] == 1
 
 
 def test_only_found_observation_with_coordinates_can_be_adopted(tmp_path):
