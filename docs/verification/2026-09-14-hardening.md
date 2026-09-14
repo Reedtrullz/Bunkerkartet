@@ -136,6 +136,20 @@ Non-claims: this validates application and migration behavior only; it does not 
 
 Verification: full suite `118 passed, 1 warning`; browser smoke `9 passed`; Node 22 syntax and `git diff --check` passed. No production import, database, push, PR, merge, deploy, or catalog mutation was performed.
 
+## L08 — Reviewed public approaches and stable route stops
+
+Status: implemented locally; no live route or production database was used.
+
+- Schema v4 adds explicit site approach coordinates, `approach_access`, review note/timestamp, and nullable route `stops_json`; v5 is a forward repair for v2/v3/v4 databases that had already run earlier migration code, including missing route warning/review columns and idempotent historical evidence repair.
+- New routes accept only `site_ids`; the server resolves current reviewed public approach points and rejects missing, merged, unreviewed, or `location_review_required` sites before ORS. The structure coordinate and site access label do not grant route eligibility.
+- Saved routes retain stable stop IDs, names, role, reviewed timestamp, access note, stop warnings, provider warnings, and a `current_site_changed` signal. Legacy waypoint routes remain readable and are explicitly marked as uncontrolled legacy routes.
+- Provider `way_points` indices are validated when present; missing indices produce an explicit uncontrolled-snapping warning. Named stop deviations over 50 m are retained in route warnings and GPX labels.
+- The UI exposes approach review controls and observation point-role/radius controls; adoption remains disabled unless the observation is a feature with an explicit radius.
+
+Verification: full suite `123 passed, 1 warning`; focused route/DB tests passed; Node 22 syntax and `git diff --check` passed. A pre-existing local v4 database was upgraded by the forward repair migration; no production database was opened.
+
+Non-claims: reviewed public approach is not structure access, ownership, safety, field verification, or proof that an ORS route is walkable. Actual catalogue approach decisions remain curator-owned.
+
 ## Review follow-up — stale GeoJSON auth and observation input
 
 - Direct GeoJSON fetches now check the captured auth epoch immediately after `fetch`, before a delayed old 401 can clear a newer session.

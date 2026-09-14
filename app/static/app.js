@@ -239,6 +239,11 @@ function siteById(id) {
   return state.siteCache.get(id) || state.sites.find((site) => site.id === id) || state.prioritySites.find((site) => site.id === id);
 }
 
+function hasReviewedPublicApproach(site) {
+  return site.approach_latitude != null && site.approach_longitude != null &&
+    site.approach_access === "public" && site.approach_reviewed_at != null;
+}
+
 function renderMap(fit = false) {
   markerLayer.clearLayers();
   uncertaintyLayer.clearLayers();
@@ -286,8 +291,8 @@ function renderMap(fit = false) {
     details.addEventListener("click", () => { marker.closePopup(); loadDetail(site.id); });
     const add = document.createElement("button");
     add.className = "small";
-    const routeReady = site.latitude != null && site.longitude != null;
-    text(add, !routeReady ? "No coordinates" : state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
+    const routeReady = hasReviewedPublicApproach(site);
+    text(add, !routeReady ? "No reviewed approach" : state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
     add.disabled = !routeReady || state.routeSiteIds.includes(site.id);
     add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add);
@@ -352,8 +357,8 @@ function renderSiteList() {
     details.addEventListener("click", () => loadDetail(site.id));
     const add = document.createElement("button");
     add.className = "small";
-    const routeReady = site.latitude != null && site.longitude != null;
-    text(add, !routeReady ? "No coordinates" : state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
+    const routeReady = hasReviewedPublicApproach(site);
+    text(add, !routeReady ? "No reviewed approach" : state.routeSiteIds.includes(site.id) ? "Added" : "Add route");
     add.disabled = !routeReady || state.routeSiteIds.includes(site.id);
     add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add);
@@ -507,6 +512,29 @@ function renderSiteEditor(site, root) {
     } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
   });
   section.append(form); root.append(section);
+  const approachForm = document.createElement("form"); approachForm.className = "observation-form";
+  const approachLatitude = inputControl("number", site.approach_latitude); approachLatitude.step = "0.000001"; approachLatitude.min = "-90"; approachLatitude.max = "90";
+  const approachLongitude = inputControl("number", site.approach_longitude); approachLongitude.step = "0.000001"; approachLongitude.min = "-180"; approachLongitude.max = "180";
+  const approachAccess = selectControl(["unknown", "public"], site.approach_access || "unknown");
+  const approachNote = textareaControl(site.approach_note || ""); approachNote.required = true;
+  const approachGrid = document.createElement("div"); approachGrid.className = "detail-grid";
+  approachGrid.append(labeledControl("Approach latitude", approachLatitude), labeledControl("Approach longitude", approachLongitude), labeledControl("Approach access", approachAccess));
+  approachForm.append(approachGrid, labeledControl("Approach review note", approachNote));
+  const approachSave = document.createElement("button"); approachSave.className = "primary"; approachSave.type = "submit"; text(approachSave, "Save public approach review"); approachForm.append(approachSave);
+  approachForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const numberOrNull = (value) => value === "" ? null : Number(value);
+    try {
+      await api(`/api/sites/${site.id}/approach`, {
+        method: "POST",
+        body: JSON.stringify({ latitude: numberOrNull(approachLatitude.value), longitude: numberOrNull(approachLongitude.value), access: approachAccess.value, note: approachNote.value.trim() }),
+      });
+      setStatus("Approach review saved.");
+      await loadSites();
+      await loadDetail(site.id);
+    } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
+  });
+  const approachHeading = document.createElement("h3"); text(approachHeading, "Public approach review"); section.append(approachHeading, approachForm);
 }
 
 function renderObservations(site, root) {
@@ -519,12 +547,14 @@ function renderObservations(site, root) {
     const note = document.createElement("p"); text(note, observation.note); item.append(note);
     if (observation.observed_location_text) { const location = document.createElement("div"); location.className = "site-meta"; text(location, observation.observed_location_text); item.append(location); }
     if (observation.access_notes) { const access = document.createElement("div"); access.className = "site-meta"; text(access, `Access: ${observation.access_notes}`); item.append(access); }
+    const observationMeta = document.createElement("div"); observationMeta.className = "site-meta";
+    text(observationMeta, `Point role: ${observation.point_role || "unknown"}${observation.uncertainty_m == null ? " | radius unknown" : ` | ${observation.uncertainty_m} m radius`}`); item.append(observationMeta);
     if (observation.latitude != null && observation.longitude != null) {
       const coordinates = document.createElement("div"); coordinates.className = "site-meta";
       text(coordinates, `Coordinate: ${observation.latitude.toFixed(5)}, ${observation.longitude.toFixed(5)}`); item.append(coordinates);
       if (observation.outcome === "found") {
         const actions = document.createElement("div"); actions.className = "candidate-actions";
-        const adopt = document.createElement("button"); adopt.className = "small"; adopt.type = "button"; adopt.title = "Use this observation coordinate as the site marker";
+        const adopt = document.createElement("button"); adopt.className = "small"; adopt.type = "button"; adopt.disabled = observation.point_role !== "feature" || observation.uncertainty_m == null; adopt.title = "Only a feature point with an explicit radius can update the site marker";
         text(adopt, "Adopt coordinate"); adopt.addEventListener("click", () => adoptObservationLocation(site.id, observation.id));
         actions.append(adopt); item.append(actions);
       }
@@ -547,11 +577,13 @@ function renderObservations(site, root) {
   const note = textareaControl(); note.name = "note"; note.required = true; note.placeholder = "What was observed?";
   const latitude = inputControl("number"); latitude.name = "latitude"; latitude.step = "0.000001"; latitude.min = "-90"; latitude.max = "90";
   const longitude = inputControl("number"); longitude.name = "longitude"; longitude.step = "0.000001"; longitude.min = "-180"; longitude.max = "180";
+  const pointRole = selectControl(["feature", "entrance", "viewpoint", "unknown"], "unknown"); pointRole.name = "point_role";
+  const uncertainty = inputControl("number"); uncertainty.name = "uncertainty_m"; uncertainty.min = "0"; uncertainty.step = "1";
   const location = textareaControl(); location.name = "observed_location_text";
   const access = textareaControl(); access.name = "access_notes";
   const photos = textareaControl(); photos.name = "photo_urls"; photos.placeholder = "One photo URL per line";
   const grid = document.createElement("div"); grid.className = "detail-grid";
-  grid.append(labeledControl("Date", observedAt), labeledControl("Outcome", outcome), labeledControl("Observed latitude", latitude), labeledControl("Observed longitude", longitude));
+  grid.append(labeledControl("Date", observedAt), labeledControl("Outcome", outcome), labeledControl("Point role", pointRole), labeledControl("Radius (m)", uncertainty), labeledControl("Observed latitude", latitude), labeledControl("Observed longitude", longitude));
   form.append(grid, labeledControl("Observation note", note), labeledControl("Observed location", location), labeledControl("Access notes", access), labeledControl("Photo URLs", photos));
   const save = document.createElement("button"); save.className = "primary"; save.type = "submit"; text(save, "Save observation"); form.append(save);
   form.addEventListener("submit", async (event) => {
@@ -563,6 +595,7 @@ function renderObservations(site, root) {
         body: JSON.stringify({
           observed_at: observedAt.value, outcome: outcome.value, note: note.value.trim(),
           latitude: numberOrUndefined(latitude.value), longitude: numberOrUndefined(longitude.value),
+          point_role: pointRole.value, uncertainty_m: numberOrUndefined(uncertainty.value),
           observed_location_text: location.value.trim() || undefined, access_notes: access.value.trim() || undefined,
           photo_urls: photos.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
         }),
@@ -837,10 +870,7 @@ async function loadRoute(id) {
     routeLayer = L.geoJSON(result.geometry, { style: { color: "#c65d2e", weight: 4 } }).addTo(map);
     map.fitBounds(routeLayer.getBounds(), { padding: [24, 24] });
     updateRouteStart(result.start, "saved route start");
-    state.routeSiteIds = result.waypoints.map((point) => [...state.siteCache.values()].find((site) =>
-      site.latitude != null && Math.abs(site.latitude - point.lat) < 0.000001 &&
-      site.longitude != null && Math.abs(site.longitude - point.lon) < 0.000001
-    )?.id).filter((siteId) => siteId != null);
+    state.routeSiteIds = (result.stops || []).map((stop) => stop.site_id).filter((siteId) => siteId != null);
     renderRouteStops();
     renderRouteResult(result);
     setStatus(`Loaded ${result.name}.`);
@@ -905,18 +935,17 @@ function renderRouteStops() {
 
 async function createRoute() {
   if (!state.start || state.routeSiteIds.length === 0 || state.routeRequestInFlight) return;
-  const routeSites = state.routeSiteIds.map(siteById).filter((site) => site && site.latitude != null && site.longitude != null);
+  const routeSites = state.routeSiteIds.map(siteById).filter((site) => site && hasReviewedPublicApproach(site));
   if (routeSites.length !== state.routeSiteIds.length) {
     setStatus("Some selected stops are no longer available with coordinates.");
     return;
   }
-  const waypoints = routeSites.map((site) => ({ lat: site.latitude, lon: site.longitude }));
   const requestEpoch = state.authEpoch;
   state.routeRequestInFlight = true;
   const button = $("create-route"); button.disabled = true; text(button, "Creating route...");
   try {
     const name = $("route-name").value.trim() || "Trondheim field route";
-    const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name, start: state.start, waypoints, waypoint_names: routeSites.map((site) => site.name) }) });
+    const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name, start: state.start, site_ids: routeSites.map((site) => site.id) }) });
     if (requestEpoch !== state.authEpoch) return;
     if (routeLayer) routeLayer.remove();
     routeLayer = L.geoJSON(result.geometry, { style: { color: "#c65d2e", weight: 4 } }).addTo(map);

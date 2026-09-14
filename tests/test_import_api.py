@@ -444,6 +444,7 @@ def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
     assert site["name"] == "Curated bunker"
     assert site["status"] == "trusted"
     assert site["latitude"] == 63.401
+    assert site["location_review_required"] == 1
     assert len(site["sources"]) == 2
 
 
@@ -886,6 +887,34 @@ def test_found_observation_coordinate_can_be_adopted_with_audit_event(tmp_path):
         "new_latitude": 63.401,
         "new_longitude": 10.401,
     }
+
+
+def test_adopting_new_feature_coordinate_on_trusted_site_requires_location_review(tmp_path):
+    api = client(tmp_path)
+    assert commit_previewed(api, package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"action": "research"}).status_code == 200
+    baseline = api.post(
+        f"/api/sites/{site_id}/observations", headers=auth(), json={
+            "observed_at": "2026-09-14", "outcome": "found", "note": "Feature confirmed."
+        }
+    )
+    assert baseline.status_code == 201
+    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"action": "field_verify"}).status_code == 200
+    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"action": "confirm"}).status_code == 200
+    observation_id = api.post(
+        f"/api/sites/{site_id}/observations", headers=auth(), json={
+            "observed_at": "2026-09-14", "outcome": "found", "note": "New feature point.",
+            "latitude": 63.401, "longitude": 10.401, "point_role": "feature", "uncertainty_m": 8,
+        }
+    ).json()["observation"]["id"]
+
+    adopted = api.post(
+        f"/api/sites/{site_id}/observations/{observation_id}/adopt-location", headers=auth()
+    )
+
+    assert adopted.status_code == 200
+    assert adopted.json()["site"]["location_review_required"] == 1
 
 
 def test_only_found_observation_with_coordinates_can_be_adopted(tmp_path):

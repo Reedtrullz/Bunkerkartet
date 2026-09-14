@@ -176,6 +176,13 @@ def test_v2_migration_rolls_back_ddl_and_retries_cleanly(tmp_path, monkeypatch):
         assert {row[1] for row in connection.execute("PRAGMA table_info(field_observations)")} >= {
             "point_role", "uncertainty_m"
         }
+        assert {row[1] for row in connection.execute("PRAGMA table_info(sites)")} >= {
+            "approach_latitude", "approach_longitude", "approach_access", "approach_note",
+            "approach_reviewed_at", "location_review_required",
+        }
+        assert {row[1] for row in connection.execute("PRAGMA table_info(route_plans)")} >= {
+            "stops_json", "route_warnings_json"
+        }
 
 
 def test_v2_migration_reconstructs_site_specific_legacy_evidence(tmp_path):
@@ -294,3 +301,49 @@ def test_v2_migration_reconstructs_all_historical_same_site_source_items(tmp_pat
         ("first historical excerpt", "2026-09-01", "2026-09-02", "import_record"),
         ("second historical excerpt", "2026-09-03", "2026-09-04", "import_record"),
     ]
+
+
+def test_v4_repair_migrates_existing_v2_history_forward(tmp_path):
+    path = tmp_path / "existing-v2.sqlite3"
+    payload = {
+        "external_key": "legacy:site",
+        "sources": [{"url": "https://example.com/shared", "excerpt": "first"}],
+    }
+    with sqlite3.connect(path) as connection:
+        connection.row_factory = sqlite3.Row
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version = 1")
+        connection.execute(
+            "INSERT INTO sites (external_key, name, site_kind, precision, location_basis, created_at, updated_at) VALUES ('legacy:site', 'Legacy site', 'bunker', 'unknown', 'landmark_description', '2026-09-14', '2026-09-14')"
+        )
+        source_id = connection.execute(
+            "INSERT INTO sources (url, title, source_type, excerpt, created_at, updated_at) VALUES ('https://example.com/shared', 'Shared', 'test', 'first', '2026-09-14', '2026-09-14')"
+        ).lastrowid
+        connection.execute(
+            "INSERT INTO evidence (site_id, source_id, role, created_at) VALUES (1, ?, 'source', '2026-09-14')",
+            (source_id,),
+        )
+        connection.execute(
+            "INSERT INTO import_batches (batch_id, schema_version, generated_at, created_at, committed_at) VALUES ('batch-1', '1.0', '2026-09-14T00:00:00Z', '2026-09-14', '2026-09-14')"
+        )
+        connection.execute(
+            "INSERT INTO import_records (batch_id, external_key, site_id, action, payload_json, created_at) VALUES ('batch-1', 'legacy:site', 1, 'created', ?, '2026-09-14')",
+            (json.dumps(payload),),
+        )
+        db_module._migrate_v2(connection)
+        connection.execute(
+            "INSERT INTO import_batches (batch_id, schema_version, generated_at, created_at, committed_at) VALUES ('batch-2', '1.0', '2026-09-14T00:00:00Z', '2026-09-14', '2026-09-14')"
+        )
+        connection.execute(
+            "INSERT INTO import_records (batch_id, external_key, site_id, action, payload_json, created_at) VALUES ('batch-2', 'legacy:site', 1, 'updated', ?, '2026-09-14')",
+            (json.dumps({**payload, "sources": [{"url": "https://example.com/shared", "excerpt": "second"}]}),),
+        )
+        connection.execute("PRAGMA user_version = 2")
+
+    Database(path).initialize()
+
+    with Database(path).connect() as connection:
+        rows = connection.execute(
+            "SELECT excerpt FROM evidence_items WHERE provenance_status = 'import_record' ORDER BY id"
+        ).fetchall()
+    assert [row[0] for row in rows] == ["first", "second"]

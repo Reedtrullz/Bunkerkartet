@@ -22,7 +22,8 @@ def test_frontend_exposes_operational_controls_without_duplicate_auth_binding():
     assert javascript.count('$("auth-form").addEventListener("submit"') == 1
     assert '"/api/routes"' in javascript
     assert "`/api/routes/${id}`" in javascript
-    assert "waypoint_names" in javascript
+    assert "site_ids" in javascript
+    assert "hasReviewedPublicApproach" in javascript
     assert "L.control.layers" in javascript
     assert "siteCache" in javascript
     assert "target_site_id" in javascript

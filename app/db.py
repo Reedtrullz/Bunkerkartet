@@ -154,9 +154,17 @@ V2_REQUIRED_SCHEMA["evidence_items"] = {
     "excerpt", "content_kind", "role", "published_at", "accessed_at", "provenance_status",
     "created_at",
 }
-CURRENT_SCHEMA_VERSION = 3
-REQUIRED_SCHEMA = {table: set(columns) for table, columns in V2_REQUIRED_SCHEMA.items()}
-REQUIRED_SCHEMA["field_observations"].update({"point_role", "uncertainty_m"})
+V3_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V2_REQUIRED_SCHEMA.items()}
+V3_REQUIRED_SCHEMA["field_observations"].update({"point_role", "uncertainty_m"})
+V4_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V3_REQUIRED_SCHEMA.items()}
+V4_REQUIRED_SCHEMA["sites"].update({
+    "approach_latitude", "approach_longitude", "approach_access", "approach_note", "approach_reviewed_at",
+})
+V4_REQUIRED_SCHEMA["route_plans"].add("stops_json")
+CURRENT_SCHEMA_VERSION = 5
+REQUIRED_SCHEMA = {table: set(columns) for table, columns in V4_REQUIRED_SCHEMA.items()}
+REQUIRED_SCHEMA["sites"].add("location_review_required")
+REQUIRED_SCHEMA["route_plans"].add("route_warnings_json")
 
 
 def now_iso() -> str:
@@ -192,6 +200,8 @@ class Database:
                     connection.execute("PRAGMA user_version = 1")
                     _run_migration(connection, _migrate_v2)
                     _run_migration(connection, _migrate_v3)
+                    _run_migration(connection, _migrate_v4)
+                    _run_migration(connection, _migrate_v5)
             except sqlite3.DatabaseError as exc:
                 raise RuntimeError("database initialization failed") from exc
             return
@@ -205,6 +215,8 @@ class Database:
                 required = (
                     BASE_REQUIRED_SCHEMA if version < 2
                     else V2_REQUIRED_SCHEMA if version == 2
+                    else V3_REQUIRED_SCHEMA if version == 3
+                    else V4_REQUIRED_SCHEMA if version == 4
                     else REQUIRED_SCHEMA
                 )
                 errors = required_schema_errors(
@@ -215,7 +227,9 @@ class Database:
                 if errors:
                     raise RuntimeError("database is missing required schema")
                 while version < CURRENT_SCHEMA_VERSION:
-                    migration = {1: _migrate_v1, 2: _migrate_v2, 3: _migrate_v3}.get(version + 1)
+                    migration = {
+                        1: _migrate_v1, 2: _migrate_v2, 3: _migrate_v3, 4: _migrate_v4, 5: _migrate_v5
+                    }.get(version + 1)
                     if migration is None:
                         raise RuntimeError("database migration is not available")
                     _run_migration(connection, migration)
@@ -306,6 +320,11 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
         )
         """
     )
+    _repair_v2_history(connection)
+    connection.execute("PRAGMA user_version = 2")
+
+
+def _repair_v2_history(connection: sqlite3.Connection) -> None:
     evidence_rows = connection.execute(
         """
         SELECT evidence.id, evidence.site_id, evidence.source_id, evidence.created_at,
@@ -402,13 +421,34 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
                 "UPDATE import_batches SET payload_hash = ? WHERE id = ?",
                 (canonical_payload_hash(payload), batch["id"]),
             )
-    connection.execute("PRAGMA user_version = 2")
-
-
 def _migrate_v3(connection: sqlite3.Connection) -> None:
     connection.execute("ALTER TABLE field_observations ADD COLUMN point_role TEXT NOT NULL DEFAULT 'unknown'")
     connection.execute("ALTER TABLE field_observations ADD COLUMN uncertainty_m REAL")
     connection.execute("PRAGMA user_version = 3")
+
+
+def _migrate_v4(connection: sqlite3.Connection) -> None:
+    _repair_v2_history(connection)
+    connection.execute("ALTER TABLE sites ADD COLUMN approach_latitude REAL")
+    connection.execute("ALTER TABLE sites ADD COLUMN approach_longitude REAL")
+    connection.execute("ALTER TABLE sites ADD COLUMN approach_access TEXT NOT NULL DEFAULT 'unknown'")
+    connection.execute("ALTER TABLE sites ADD COLUMN approach_note TEXT")
+    connection.execute("ALTER TABLE sites ADD COLUMN approach_reviewed_at TEXT")
+    connection.execute("ALTER TABLE sites ADD COLUMN location_review_required INTEGER NOT NULL DEFAULT 0")
+    connection.execute("ALTER TABLE route_plans ADD COLUMN stops_json TEXT")
+    connection.execute("ALTER TABLE route_plans ADD COLUMN route_warnings_json TEXT")
+    connection.execute("PRAGMA user_version = 4")
+
+
+def _migrate_v5(connection: sqlite3.Connection) -> None:
+    _repair_v2_history(connection)
+    site_columns = {row[1] for row in connection.execute("PRAGMA table_info(sites)")}
+    if "location_review_required" not in site_columns:
+        connection.execute("ALTER TABLE sites ADD COLUMN location_review_required INTEGER NOT NULL DEFAULT 0")
+    route_columns = {row[1] for row in connection.execute("PRAGMA table_info(route_plans)")}
+    if "route_warnings_json" not in route_columns:
+        connection.execute("ALTER TABLE route_plans ADD COLUMN route_warnings_json TEXT")
+    connection.execute("PRAGMA user_version = 5")
 
 
 def _run_migration(connection: sqlite3.Connection, migration: Callable[[sqlite3.Connection], None]) -> None:

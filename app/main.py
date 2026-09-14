@@ -177,21 +177,35 @@ class RoutePoint(BaseModel):
     lon: float = Field(ge=-180, le=180)
 
 
+class ApproachRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    access: Literal["unknown", "public"]
+    note: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def require_nonblank_note(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("approach note cannot be blank")
+        return value
+
+
 class RouteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(default="Trondheim field route", min_length=1, max_length=200)
     start: RoutePoint
-    waypoints: list[RoutePoint] = Field(min_length=1, max_length=20)
-    waypoint_names: list[str] | None = Field(default=None, max_length=20)
+    site_ids: list[int] = Field(min_length=1, max_length=20)
 
     @model_validator(mode="after")
-    def validate_waypoint_names(self) -> "RouteRequest":
-        if self.waypoint_names is not None:
-            if len(self.waypoint_names) != len(self.waypoints):
-                raise ValueError("waypoint_names must match waypoints")
-            if any(not name.strip() for name in self.waypoint_names):
-                raise ValueError("waypoint names cannot be empty")
+    def validate_site_ids(self) -> "RouteRequest":
+        if any(site_id <= 0 for site_id in self.site_ids):
+            raise ValueError("site_ids must be positive")
+        if len(set(self.site_ids)) != len(self.site_ids):
+            raise ValueError("site_ids must be unique")
         return self
 
 
@@ -210,13 +224,23 @@ def _distance_m(first: tuple[float, float], second: tuple[float, float]) -> floa
 
 def _route_warnings(
     requested_coordinates: list[tuple[float, float]],
-    routed_coordinates: list[tuple[float, float]],
+    route: RouteResult,
+    labels: list[str],
 ) -> list[str]:
     warnings = ["A route does not grant permission to enter land or structures."]
-    if _distance_m(requested_coordinates[0], routed_coordinates[0]) > 50 or _distance_m(
-        requested_coordinates[-1], routed_coordinates[-1]
-    ) > 50:
-        warnings.append("The provider snapped a route endpoint; verify the approach on site.")
+    if route.waypoint_indices is None:
+        warnings.append("Provider waypoint snapping was not returned; intermediate stop snapping was not controlled.")
+        if _distance_m(requested_coordinates[0], route.coordinates[0]) > 50 or _distance_m(
+            requested_coordinates[-1], route.coordinates[-1]
+        ) > 50:
+            warnings.append("The provider snapped a route endpoint; verify the approach on site.")
+        return warnings
+    if len(route.waypoint_indices) != len(requested_coordinates):
+        raise ValueError("routing provider returned an unexpected waypoint count")
+    for requested, index, label in zip(requested_coordinates, route.waypoint_indices, labels):
+        distance = _distance_m(requested, route.coordinates[index])
+        if distance > 50:
+            warnings.append(f"{label}: provider snapped this stop by {round(distance)} m; verify the approach.")
     return warnings
 
 
@@ -780,7 +804,7 @@ def _require_admin(settings: Settings, authorization: str | None) -> None:
 
 
 def _route_summary(row: sqlite3.Row) -> dict[str, object]:
-    return {
+    route = {
         "id": row["id"],
         "name": row["name"],
         "start": json.loads(row["start_json"]),
@@ -789,6 +813,17 @@ def _route_summary(row: sqlite3.Row) -> dict[str, object]:
         "duration_s": row["duration_s"],
         "created_at": row["created_at"],
     }
+    stops = load_json(row["stops_json"], None) if "stops_json" in row.keys() else None
+    stored_warnings = load_json(row["route_warnings_json"], None) if "route_warnings_json" in row.keys() else None
+    route["warnings"] = stored_warnings if isinstance(stored_warnings, list) else []
+    if isinstance(stops, list):
+        route["stops"] = stops
+        route["waypoints"] = [{"lat": stop["lat"], "lon": stop["lon"]} for stop in stops]
+        route["legacy_route"] = False
+    else:
+        route["stops"] = []
+        route["legacy_route"] = True
+    return route
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -1079,6 +1114,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if "status" in values and values["status"] != row["status"]:
                 raise HTTPException(409, "status changes must use the review workflow")
             values.pop("status", None)
+            if row["status"] in {"trusted", "field-verified"} and (
+                new_latitude != row["latitude"] or new_longitude != row["longitude"]
+            ):
+                values["location_review_required"] = 1
             if not values:
                 raise HTTPException(400, "no site fields supplied")
             assignments = ", ".join(f"{field} = ?" for field in values)
@@ -1091,6 +1130,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             connection.execute(
                 "INSERT INTO site_events (site_id, event_type, payload_json, created_at) VALUES (?, 'edit', ?, ?)",
                 (site_id, dump_json(values), now_iso()),
+            )
+            updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
+            return _site_detail(connection, updated)
+
+    @app.post("/api/sites/{site_id}/approach", dependencies=[Depends(admin_guard)])
+    def set_site_approach(site_id: int, request: ApproachRequest) -> dict[str, object]:
+        timestamp = now_iso()
+        reviewed_at = timestamp if request.access == "public" else None
+        with database.connect() as connection:
+            row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
+            if row is None:
+                raise HTTPException(404, "site not found")
+            if row["merged_into_id"] is not None:
+                raise HTTPException(409, "merged site cannot set an approach")
+            connection.execute(
+                """
+                UPDATE sites
+                SET approach_latitude = ?, approach_longitude = ?, approach_access = ?,
+                    approach_note = ?, approach_reviewed_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    request.latitude, request.longitude, request.access, request.note.strip(),
+                    reviewed_at, timestamp, site_id,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO site_events (site_id, event_type, payload_json, created_at) VALUES (?, 'approach_review', ?, ?)",
+                (site_id, dump_json({**request.model_dump(), "reviewed_at": reviewed_at}), timestamp),
             )
             updated = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             return _site_detail(connection, updated)
@@ -1192,7 +1260,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 """
                 UPDATE sites
                 SET latitude = ?, longitude = ?, precision = 'approximate', uncertainty_m = ?,
-                    location_basis = ?, short_rationale = ?, updated_at = ?
+                    location_basis = ?, location_review_required = ?, short_rationale = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -1200,6 +1268,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     observation["longitude"],
                     observation["uncertainty_m"],
                     "explicit_coordinate",
+                    int(
+                        row["status"] in {"trusted", "field-verified"}
+                        and (
+                            observation["latitude"] != row["latitude"]
+                            or observation["longitude"] != row["longitude"]
+                        )
+                    ),
                     rationale,
                     timestamp,
                     site_id,
@@ -1318,34 +1393,92 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def create_route(request: RouteRequest) -> dict[str, object]:
         if not settings.ors_api_key:
             raise HTTPException(503, "routing is not configured")
+        with database.connect() as connection:
+            placeholders = ",".join("?" for _ in request.site_ids)
+            rows = connection.execute(
+                f"SELECT * FROM sites WHERE id IN ({placeholders})",
+                request.site_ids,
+            ).fetchall()
+            sites = {int(row["id"]): row for row in rows}
+            if len(sites) != len(request.site_ids):
+                raise HTTPException(404, "one or more route sites were not found")
+            approach_rows = []
+            for site_id in request.site_ids:
+                row = sites[site_id]
+                if row["merged_into_id"] is not None:
+                    raise HTTPException(409, f"site {site_id} is merged")
+                if (
+                    row["approach_latitude"] is None
+                    or row["approach_longitude"] is None
+                    or row["approach_access"] != "public"
+                    or row["approach_reviewed_at"] is None
+                ):
+                    raise HTTPException(409, f"site {site_id} has no reviewed public approach")
+                if row["location_review_required"]:
+                    raise HTTPException(409, f"site {site_id} requires a location review before routing")
+                approach_rows.append(row)
         coordinates = [(request.start.lon, request.start.lat)] + [
-            (point.lon, point.lat) for point in request.waypoints
+            (row["approach_longitude"], row["approach_latitude"]) for row in approach_rows
         ]
+        labels = ["Route start"] + [f"{row['name']} approach" for row in approach_rows]
         try:
             route: RouteResult = fetch_openrouteservice(settings.ors_api_key, coordinates)
+            warnings = _route_warnings(coordinates, route, labels)
         except (HTTPError, URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as error:
             raise HTTPException(502, f"routing provider error: {error}")
-        warnings = _route_warnings(coordinates, route.coordinates)
-        waypoint_names = request.waypoint_names or [f"Stop {index}" for index in range(1, len(request.waypoints) + 1)]
+        stop_warnings: list[list[str]] = [[] for _ in approach_rows]
+        if route.waypoint_indices is None:
+            stop_warnings = [["Provider waypoint snapping was not returned; stop snapping was not controlled."] for _ in approach_rows]
+        else:
+            for index, (row, waypoint_index) in enumerate(zip(approach_rows, route.waypoint_indices[1:]), start=1):
+                distance = _distance_m(coordinates[index], route.coordinates[waypoint_index])
+                if distance > 50:
+                    stop_warnings[index - 1].append(
+                        f"Provider snapped this stop by {round(distance)} m; verify the approach."
+                    )
+        stops = [
+            {
+                "site_id": int(row["id"]),
+                "name": row["name"],
+                "lat": row["approach_latitude"],
+                "lon": row["approach_longitude"],
+                "point_role": "approach",
+                "approach_reviewed_at": row["approach_reviewed_at"],
+                "access_note": row["approach_note"],
+                "warnings": stop_warnings[index],
+            }
+            for index, row in enumerate(approach_rows)
+        ]
         named_waypoints = [(request.start.lon, request.start.lat, "Route start")]
         named_waypoints.extend(
-            (point.lon, point.lat, name)
-            for point, name in zip(request.waypoints, waypoint_names)
+            (stop["lon"], stop["lat"], f"{stop['name']} — approach; public. {stop['access_note']}")
+            for stop in stops
         )
         gpx = build_gpx(request.name, route.coordinates, named_waypoints)
         timestamp = now_iso()
         with database.connect() as connection:
+            for row in approach_rows:
+                current = connection.execute(
+                    "SELECT approach_latitude, approach_longitude, approach_access, approach_note, approach_reviewed_at FROM sites WHERE id = ?",
+                    (row["id"],),
+                ).fetchone()
+                if current is None or any(current[key] != row[key] for key in (
+                    "approach_latitude", "approach_longitude", "approach_access", "approach_note", "approach_reviewed_at"
+                )):
+                    raise HTTPException(409, "a route approach changed; calculate the route again")
             cursor = connection.execute(
                 """
                 INSERT INTO route_plans
-                    (name, start_json, waypoints_json, distance_m, duration_s,
+                    (name, start_json, waypoints_json, stops_json, route_warnings_json, distance_m, duration_s,
                      geometry_json, gpx_text, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     request.name,
                     dump_json(request.start.model_dump()),
-                    dump_json([point.model_dump() for point in request.waypoints]),
+                    dump_json([{"lat": stop["lat"], "lon": stop["lon"]} for stop in stops]),
+                    dump_json(stops),
+                    dump_json(warnings),
                     route.distance_m,
                     route.duration_s,
                     dump_json(route.coordinates),
@@ -1361,6 +1494,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "duration_s": route.duration_s,
             "geometry": {"type": "LineString", "coordinates": route.coordinates},
             "gpx": gpx,
+            "stops": stops,
+            "waypoints": [{"lat": stop["lat"], "lon": stop["lon"]} for stop in stops],
+            "legacy_route": False,
             "warnings": warnings,
             "created_at": timestamp,
         }
@@ -1369,7 +1505,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def list_routes(limit: int = Query(default=20, ge=1, le=100)) -> list[dict[str, object]]:
         with database.connect() as connection:
             rows = connection.execute(
-                "SELECT id, name, start_json, waypoints_json, distance_m, duration_s, created_at "
+                "SELECT id, name, start_json, waypoints_json, stops_json, route_warnings_json, distance_m, duration_s, created_at "
                 "FROM route_plans ORDER BY id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
@@ -1385,10 +1521,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             route_coordinates = json.loads(row["geometry_json"])
             route["geometry"] = {"type": "LineString", "coordinates": route_coordinates}
             route["gpx"] = row["gpx_text"]
-            requested_coordinates = [(route["start"]["lon"], route["start"]["lat"])] + [
-                (point["lon"], point["lat"]) for point in route["waypoints"]
-            ]
-            route["warnings"] = _route_warnings(requested_coordinates, route_coordinates)
+            if route["legacy_route"]:
+                requested_coordinates = [(route["start"]["lon"], route["start"]["lat"])] + [
+                    (point["lon"], point["lat"]) for point in route["waypoints"]
+                ]
+                route["warnings"] = [
+                    "A route does not grant permission to enter land or structures.",
+                    "Legacy route stops were not reviewed as public approaches.",
+                ]
+                if _distance_m(requested_coordinates[0], route_coordinates[0]) > 50 or _distance_m(
+                    requested_coordinates[-1], route_coordinates[-1]
+                ) > 50:
+                    route["warnings"].append("The provider snapped a route endpoint; verify the approach on site.")
+            else:
+                route["warnings"] = list(dict.fromkeys(route["warnings"] or [
+                    "A route does not grant permission to enter land or structures.",
+                    *(warning for stop in route["stops"] for warning in stop.get("warnings", [])),
+                ]))
+                placeholders = ",".join("?" for _ in route["stops"])
+                current = connection.execute(
+                    f"SELECT id, approach_latitude, approach_longitude, approach_access, approach_note, approach_reviewed_at FROM sites WHERE id IN ({placeholders})",
+                    [stop["site_id"] for stop in route["stops"]],
+                ).fetchall() if route["stops"] else []
+                current_by_id = {int(item["id"]): item for item in current}
+                route["current_site_changed"] = False
+                for stop in route["stops"]:
+                    current = current_by_id.get(int(stop["site_id"]))
+                    if current is None or any(
+                        current[current_key] != stop[stop_key]
+                        for current_key, stop_key in (
+                            ("approach_latitude", "lat"), ("approach_longitude", "lon"),
+                            ("approach_note", "access_note"), ("approach_reviewed_at", "approach_reviewed_at"),
+                        )
+                    ) or current["approach_access"] != "public":
+                        route["current_site_changed"] = True
+                        break
+                if route["current_site_changed"]:
+                    route["warnings"].append("A saved route stop's reviewed approach has changed; calculate the route again.")
             return route
 
     return app
