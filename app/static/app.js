@@ -945,10 +945,13 @@ $("site-search").addEventListener("change", loadSites);
 $("download-geojson").addEventListener("click", downloadGeoJSON);
 $("import-file").addEventListener("change", (event) => {
   state.importGeneration += 1;
+  state.pendingImport = null;
   state.previewHash = null;
   state.importRequestInFlight = false;
+  $("preview-import").disabled = true;
   $("commit-import").disabled = true;
   text($("preview-import"), "Preview");
+  text($("import-result"), "");
   if (event.target.files[0]) readImport(event.target.files[0]);
 });
 $("preview-import").addEventListener("click", previewImport);

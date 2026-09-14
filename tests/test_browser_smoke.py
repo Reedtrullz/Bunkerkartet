@@ -245,3 +245,37 @@ def test_stale_preview_cannot_enable_commit_for_new_file(page: Page, base_url: s
     page.get_by_role("button", name="Preview", exact=True).click()
     page.wait_for_timeout(700)
     assert not page.get_by_role("button", name="Commit", exact=True).is_disabled()
+
+
+def test_new_file_read_clears_old_import_before_preview(page: Page, base_url: str):
+    page.goto(base_url)
+    payload = {
+        "schema_version": "1.0",
+        "batch_id": "browser-file-a",
+        "generated_at": "2026-09-14T12:00:00Z",
+        "records": [],
+    }
+    page.locator("#import-file").set_input_files({
+        "name": "a.json", "mimeType": "application/json", "buffer": json.dumps(payload).encode()
+    })
+    page.wait_for_function("!document.getElementById('preview-import').disabled")
+
+    page.evaluate(
+        """() => {
+            const file = new File(['{"schema_version":"1.0","batch_id":"browser-file-b","generated_at":"2026-09-14T12:00:00Z","records":[]}'], 'b.json', {type: 'application/json'});
+            Object.defineProperty(file, 'text', {value: () => new Promise(resolve =>
+                setTimeout(() => resolve('{"schema_version":"1.0","batch_id":"browser-file-b","generated_at":"2026-09-14T12:00:00Z","records":[]}'), 500))});
+            const transfer = new DataTransfer();
+            transfer.items.add(file);
+            const input = document.getElementById('import-file');
+            input.files = transfer.files;
+            input.dispatchEvent(new Event('change', {bubbles: true}));
+        }"""
+    )
+
+    assert page.get_by_role("button", name="Preview", exact=True).is_disabled()
+    assert page.get_by_role("button", name="Commit", exact=True).is_disabled()
+    page.locator("#preview-import").evaluate("button => button.click()")
+    assert page.locator("#import-result").inner_text() == ""
+    page.wait_for_timeout(700)
+    assert page.locator("#import-result").inner_text() == "JSON loaded. Preview before commit."

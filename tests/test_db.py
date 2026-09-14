@@ -248,3 +248,49 @@ def test_v2_migration_reconstructs_site_specific_legacy_evidence(tmp_path):
         (1, "Site A excerpt", "2026-09-01", None, "import_record", None),
         (2, "Site B excerpt", None, "2026-09-02", "import_record", None),
     ]
+
+
+def test_v2_migration_reconstructs_all_historical_same_site_source_items(tmp_path):
+    path = tmp_path / "legacy-same-source.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version = 1")
+        connection.execute(
+            "INSERT INTO sites (external_key, name, site_kind, precision, location_basis, created_at, updated_at) VALUES ('legacy:site', 'Legacy site', 'bunker', 'unknown', 'landmark_description', '2026-09-14', '2026-09-14')"
+        )
+        source_id = connection.execute(
+            "INSERT INTO sources (url, title, source_type, excerpt, created_at, updated_at) VALUES ('https://example.com/shared', 'Shared', 'test', 'latest', '2026-09-14', '2026-09-14')"
+        ).lastrowid
+        connection.execute(
+            "INSERT INTO evidence (site_id, source_id, role, created_at) VALUES (1, ?, 'source', '2026-09-14')",
+            (source_id,),
+        )
+        for batch_id, excerpt, published_at, accessed_at in (
+            ('legacy-batch-1', 'first historical excerpt', '2026-09-01', '2026-09-02'),
+            ('legacy-batch-2', 'second historical excerpt', '2026-09-03', '2026-09-04'),
+        ):
+            connection.execute(
+                "INSERT INTO import_batches (batch_id, schema_version, generated_at, created_at, committed_at) VALUES (?, '1.0', '2026-09-14T00:00:00+00:00', '2026-09-14', '2026-09-14')",
+                (batch_id,),
+            )
+            payload = {
+                "external_key": "legacy:site", "name": "Legacy site", "site_kind": "bunker",
+                "geometry": None, "precision": "unknown", "uncertainty_m": None,
+                "location_basis": "landmark_description", "status": "candidate", "access": "unknown",
+                "sources": [{"url": "https://example.com/shared", "title": "Shared", "source_type": "test", "excerpt": excerpt, "publication_date": published_at, "access_date": accessed_at}],
+            }
+            connection.execute(
+                "INSERT INTO import_records (batch_id, external_key, site_id, action, payload_json, created_at) VALUES (?, 'legacy:site', 1, 'created', ?, '2026-09-14')",
+                (batch_id, json.dumps(payload)),
+            )
+
+    Database(path).initialize()
+
+    with sqlite3.connect(path) as connection:
+        rows = connection.execute(
+            "SELECT excerpt, published_at, accessed_at, provenance_status FROM evidence_items ORDER BY id"
+        ).fetchall()
+    assert rows == [
+        ("first historical excerpt", "2026-09-01", "2026-09-02", "import_record"),
+        ("second historical excerpt", "2026-09-03", "2026-09-04", "import_record"),
+    ]

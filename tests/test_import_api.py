@@ -167,6 +167,32 @@ def test_preview_effect_is_deterministic_when_record_order_changes(tmp_path):
     assert [record["external_key"] for record in forward["records"]] == ["forum:1", "forum:2"]
 
 
+def test_peer_duplicate_warnings_match_preview_and_persisted_sites(tmp_path):
+    api = client(tmp_path)
+    first = package("batch-peer-1", external_key="peer:1", name="Same bunker")
+    second = package("batch-peer-2", external_key="peer:2", name="Same bunker")
+    second["records"][0]["geometry"] = {"latitude": 63.4005, "longitude": 10.4005}
+    payload = {**first, "records": [first["records"][0], second["records"][0]]}
+
+    preview = api.post("/api/admin/imports/preview", headers=auth(), json=payload)
+    assert preview.status_code == 200
+    preview_warnings = {
+        record["external_key"]: record["warnings"] for record in preview.json()["records"]
+    }
+    assert all(warnings for warnings in preview_warnings.values())
+
+    assert api.post(
+        "/api/admin/imports/commit",
+        headers={**auth(), "X-Import-Preview": preview.json()["preview_hash"]},
+        json=payload,
+    ).status_code == 200
+    persisted = {
+        site["external_key"]: site["warnings"]
+        for site in api.get("/api/sites", headers=auth()).json()
+    }
+    assert persisted == preview_warnings
+
+
 def test_same_batch_with_different_payload_is_rejected(tmp_path):
     api = client(tmp_path)
     first = package()

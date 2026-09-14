@@ -315,7 +315,7 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
         """
     ).fetchall()
     for evidence in evidence_rows:
-        reconstructed = None
+        reconstructed: dict[tuple[int, int], dict[str, object]] = {}
         records = connection.execute(
             "SELECT id, payload_json FROM import_records WHERE site_id = ? ORDER BY id",
             (evidence["site_id"],),
@@ -333,30 +333,27 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
                     and source.get("url") == evidence["url"]
                     and isinstance(source.get("excerpt"), str)
                 ):
-                    reconstructed = (record["id"], source_index, source)
-                    break
-            if reconstructed:
-                break
-        if reconstructed and connection.execute(
-            "SELECT 1 FROM evidence_items WHERE import_record_id = ? AND source_index = ?",
-            reconstructed[:2],
-        ).fetchone():
-            reconstructed = None
+                    reconstructed[(record["id"], source_index)] = source
         if reconstructed:
-            import_record_id, source_index, source = reconstructed
-            connection.execute(
-                """
-                INSERT INTO evidence_items
-                    (site_id, source_id, import_record_id, source_index, excerpt,
-                     content_kind, role, published_at, accessed_at, provenance_status, created_at)
-                VALUES (?, ?, ?, ?, ?, 'unknown', 'context', ?, ?, 'import_record', ?)
-                """,
-                (
-                    evidence["site_id"], evidence["source_id"], import_record_id, source_index,
-                    source["excerpt"], source.get("publication_date"), source.get("access_date"),
-                    evidence["created_at"],
-                ),
-            )
+            for (import_record_id, source_index), source in reconstructed.items():
+                if connection.execute(
+                    "SELECT 1 FROM evidence_items WHERE import_record_id = ? AND source_index = ?",
+                    (import_record_id, source_index),
+                ).fetchone():
+                    continue
+                connection.execute(
+                    """
+                    INSERT INTO evidence_items
+                        (site_id, source_id, import_record_id, source_index, excerpt,
+                         content_kind, role, published_at, accessed_at, provenance_status, created_at)
+                    VALUES (?, ?, ?, ?, ?, 'unknown', 'context', ?, ?, 'import_record', ?)
+                    """,
+                    (
+                        evidence["site_id"], evidence["source_id"], import_record_id, source_index,
+                        source["excerpt"], source.get("publication_date"), source.get("access_date"),
+                        evidence["created_at"],
+                    ),
+                )
         else:
             connection.execute(
                 """

@@ -128,6 +128,14 @@ Verification: full suite `115 passed, 1 warning`; Node 22 syntax and `git diff -
 
 Non-claims: this validates application and migration behavior only; it does not establish coordinate truth, field verification, legal access, or production deployment.
 
+## Review remediation after L06
+
+- v1→v2 evidence migration now reconstructs every unique historical `(import_record_id, source_index)` for the linked site/source, including same-site same-URL imports with different excerpts and dates; unmatched or uncertain mappings remain `legacy_unresolved`.
+- Import-file changes clear `pendingImport`, preview hash, displayed result, and preview/commit controls synchronously. A delayed current file read is the only path that re-enables Preview.
+- Commit computes duplicate warnings once before writes using the same batch-peer set as Preview, so persisted peer warnings do not depend on input order or newly inserted peer rows.
+
+Verification: full suite `118 passed, 1 warning`; browser smoke `9 passed`; Node 22 syntax and `git diff --check` passed. No production import, database, push, PR, merge, deploy, or catalog mutation was performed.
+
 ## Review follow-up — stale GeoJSON auth and observation input
 
 - Direct GeoJSON fetches now check the captured auth epoch immediately after `fetch`, before a delayed old 401 can clear a newer session.

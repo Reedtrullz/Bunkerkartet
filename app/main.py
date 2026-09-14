@@ -630,8 +630,12 @@ def _commit_package(
                     "idempotent": True,
                 }
             raise HTTPException(409, "import batch is already in progress")
+        warnings_by_key = {
+            record.external_key: _warnings_for_record(connection, record, package.records)
+            for record in package.records
+        }
         for record in package.records:
-            warnings = _duplicate_warnings(connection, record)
+            warnings = warnings_by_key[record.external_key]
             existing = _existing_site(connection, record.external_key)
             if existing is None:
                 connection.execute(
