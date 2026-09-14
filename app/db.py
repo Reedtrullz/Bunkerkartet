@@ -4,6 +4,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 
 SCHEMA = """
@@ -117,8 +118,8 @@ CREATE TABLE IF NOT EXISTS route_plans (
 );
 """
 
-CURRENT_SCHEMA_VERSION = 1
-REQUIRED_SCHEMA = {
+CURRENT_SCHEMA_VERSION = 2
+BASE_REQUIRED_SCHEMA = {
     "sites": {
         "id", "external_key", "name", "site_kind", "latitude", "longitude",
         "precision", "uncertainty_m", "location_basis", "status", "access",
@@ -146,6 +147,13 @@ REQUIRED_SCHEMA = {
         "geometry_json", "gpx_text", "created_at",
     },
 }
+REQUIRED_SCHEMA = {table: set(columns) for table, columns in BASE_REQUIRED_SCHEMA.items()}
+REQUIRED_SCHEMA["import_batches"].add("payload_hash")
+REQUIRED_SCHEMA["evidence_items"] = {
+    "id", "site_id", "source_id", "import_record_id", "source_index", "legacy_evidence_id",
+    "excerpt", "content_kind", "role", "published_at", "accessed_at", "provenance_status",
+    "created_at",
+}
 
 
 def now_iso() -> str:
@@ -169,7 +177,8 @@ class Database:
             try:
                 with self.connect() as connection:
                     connection.executescript(SCHEMA)
-                    connection.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION}")
+                    connection.execute("PRAGMA user_version = 1")
+                    _run_migration(connection, _migrate_v2)
             except sqlite3.DatabaseError as exc:
                 raise RuntimeError("database initialization failed") from exc
             return
@@ -179,11 +188,20 @@ class Database:
                 version = connection.execute("PRAGMA user_version").fetchone()[0]
                 if version > CURRENT_SCHEMA_VERSION:
                     raise RuntimeError("future schema version is not supported")
-                errors = required_schema_errors(connection, allow_legacy_confidence=version == 0)
+                required = BASE_REQUIRED_SCHEMA if version < 2 else REQUIRED_SCHEMA
+                errors = required_schema_errors(
+                    connection,
+                    required_schema=required,
+                    allow_legacy_confidence=version == 0,
+                )
                 if errors:
                     raise RuntimeError("database is missing required schema")
-                if version == 0:
-                    _migrate_v1(connection)
+                while version < CURRENT_SCHEMA_VERSION:
+                    migration = {1: _migrate_v1, 2: _migrate_v2}.get(version + 1)
+                    if migration is None:
+                        raise RuntimeError("database migration is not available")
+                    _run_migration(connection, migration)
+                    version += 1
         except RuntimeError:
             raise
         except sqlite3.DatabaseError as exc:
@@ -191,10 +209,14 @@ class Database:
 
 
 def required_schema_errors(
-    connection: sqlite3.Connection, *, allow_legacy_confidence: bool = False
+    connection: sqlite3.Connection,
+    *,
+    required_schema: dict[str, set[str]] | None = None,
+    allow_legacy_confidence: bool = False,
 ) -> list[str]:
+    required_schema = required_schema or REQUIRED_SCHEMA
     errors: list[str] = []
-    for table, required_columns in REQUIRED_SCHEMA.items():
+    for table, required_columns in required_schema.items():
         object_type = connection.execute(
             "SELECT type FROM sqlite_master WHERE name = ?", (table,)
         ).fetchone()
@@ -211,35 +233,84 @@ def required_schema_errors(
 
 
 def _migrate_v1(connection: sqlite3.Connection) -> None:
-    with connection:
-        columns = {row[1] for row in connection.execute("PRAGMA table_info(sites)")}
-        if "confidence" not in columns:
-            connection.execute("ALTER TABLE sites ADD COLUMN confidence TEXT")
-        connection.execute(
-            """
-            UPDATE sites
-            SET confidence = (
-                SELECT json_extract(import_records.payload_json, '$.confidence')
-                FROM import_records
-                WHERE import_records.site_id = sites.id
-                  AND json_valid(import_records.payload_json) = 1
-                  AND json_extract(import_records.payload_json, '$.confidence')
-                      IN ('high', 'medium', 'low', 'unknown')
-                ORDER BY import_records.id DESC
-                LIMIT 1
-            )
-            WHERE sites.confidence IS NULL
-              AND EXISTS (
-                SELECT 1
-                FROM import_records
-                WHERE import_records.site_id = sites.id
-                  AND json_valid(import_records.payload_json) = 1
-                  AND json_extract(import_records.payload_json, '$.confidence')
-                      IN ('high', 'medium', 'low', 'unknown')
-              )
-            """
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(sites)")}
+    if "confidence" not in columns:
+        connection.execute("ALTER TABLE sites ADD COLUMN confidence TEXT")
+    connection.execute(
+        """
+        UPDATE sites
+        SET confidence = (
+            SELECT json_extract(import_records.payload_json, '$.confidence')
+            FROM import_records
+            WHERE import_records.site_id = sites.id
+              AND json_valid(import_records.payload_json) = 1
+              AND json_extract(import_records.payload_json, '$.confidence')
+                  IN ('high', 'medium', 'low', 'unknown')
+            ORDER BY import_records.id DESC
+            LIMIT 1
         )
-        connection.execute(f"PRAGMA user_version = {CURRENT_SCHEMA_VERSION}")
+        WHERE sites.confidence IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM import_records
+            WHERE import_records.site_id = sites.id
+              AND json_valid(import_records.payload_json) = 1
+              AND json_extract(import_records.payload_json, '$.confidence')
+                  IN ('high', 'medium', 'low', 'unknown')
+          )
+        """
+    )
+    connection.execute("PRAGMA user_version = 1")
+
+
+def _migrate_v2(connection: sqlite3.Connection) -> None:
+    connection.execute("ALTER TABLE import_batches ADD COLUMN payload_hash TEXT")
+    connection.execute(
+        """
+        CREATE TABLE evidence_items (
+            id INTEGER PRIMARY KEY,
+            site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+            source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+            import_record_id INTEGER REFERENCES import_records(id),
+            source_index INTEGER,
+            legacy_evidence_id INTEGER UNIQUE REFERENCES evidence(id),
+            excerpt TEXT NOT NULL,
+            content_kind TEXT NOT NULL DEFAULT 'unknown'
+                CHECK(content_kind IN ('quote', 'summary', 'unknown')),
+            role TEXT NOT NULL DEFAULT 'context'
+                CHECK(role IN ('identity', 'location', 'access', 'context')),
+            published_at TEXT,
+            accessed_at TEXT,
+            provenance_status TEXT NOT NULL
+                CHECK(provenance_status IN ('import_record', 'legacy_unresolved')),
+            created_at TEXT NOT NULL,
+            UNIQUE(import_record_id, source_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO evidence_items
+            (site_id, source_id, legacy_evidence_id, excerpt, content_kind, role,
+             published_at, accessed_at, provenance_status, created_at)
+        SELECT evidence.site_id, evidence.source_id, evidence.id,
+               COALESCE(sources.excerpt, ''), 'unknown', 'context',
+               sources.published_at, sources.accessed_at, 'legacy_unresolved', evidence.created_at
+        FROM evidence
+        JOIN sources ON sources.id = evidence.source_id
+        """
+    )
+    connection.execute("PRAGMA user_version = 2")
+
+
+def _run_migration(connection: sqlite3.Connection, migration: Callable[[sqlite3.Connection], None]) -> None:
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        migration(connection)
+        connection.commit()
+    except BaseException:
+        connection.rollback()
+        raise
 
 
 def dump_json(value: object) -> str:
