@@ -1,5 +1,6 @@
 const state = {
   token: "",
+  authEpoch: 0,
   sites: [],
   routes: [],
   pendingImport: null,
@@ -10,6 +11,7 @@ const state = {
   start: null,
   pickingStart: false,
   routeRequestInFlight: false,
+  gpxObjectUrls: new Set(),
 };
 
 const map = L.map("map").setView([63.4305, 10.3951], 12);
@@ -122,18 +124,33 @@ function textareaControl(value = "") {
 
 function setStatus(message) { text($("map-status"), message); }
 
+function revokeGpxObjectUrls() {
+  state.gpxObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+  state.gpxObjectUrls.clear();
+}
+
 function cacheSites(sites) { sites.forEach((site) => state.siteCache.set(site.id, site)); }
 
-function clearAuthenticatedData() {
+function isStaleRequest(error) { return error?.name === "AbortError"; }
+
+function clearAuthenticatedData({ resetToken = true } = {}) {
+  state.authEpoch += 1;
   state.sites = [];
   state.routes = [];
   state.prioritySites = [];
   state.routeSiteIds = [];
   state.siteCache.clear();
+  state.pendingImport = null;
+  state.importRequestInFlight = false;
+  state.start = null;
+  state.pickingStart = false;
+  state.routeRequestInFlight = false;
+  revokeGpxObjectUrls();
   markerLayer.clearLayers();
   uncertaintyLayer.clearLayers();
   observationLayer.clearLayers();
   if (routeLayer) { routeLayer.remove(); routeLayer = null; }
+  if (startMarker) { startMarker.remove(); startMarker = null; }
   $("download-geojson").disabled = true;
   renderSiteList();
   renderMap();
@@ -144,14 +161,27 @@ function clearAuthenticatedData() {
   text($("candidate-summary"), "");
   $("detail-panel").classList.remove("is-selected");
   text($("site-detail-heading"), "Site detail");
+  text($("site-detail"), "Select a marker or site.");
+  $("route-result").replaceChildren();
+  text($("route-start"), "Start: no route start selected");
+  $("import-file").value = "";
+  $("preview-import").disabled = true;
+  $("commit-import").disabled = true;
+  text($("import-result"), "");
+  if (resetToken) {
+    state.token = "";
+    $("admin-token").value = "";
+  }
 }
 
 async function api(path, options = {}) {
+  const requestEpoch = state.authEpoch;
   const headers = new Headers(options.headers || {});
   if (state.token) headers.set("Authorization", `Bearer ${state.token}`);
   if (options.body) headers.set("Content-Type", "application/json");
   const response = await fetch(path, { ...options, headers });
   const body = await response.json().catch(() => ({}));
+  if (requestEpoch !== state.authEpoch) throw new DOMException("Utdatert forespørsel", "AbortError");
   if (!response.ok) {
     const error = new Error(body.detail || `Request failed (${response.status})`);
     error.status = response.status;
@@ -299,9 +329,10 @@ function renderSiteList() {
 
 async function loadSites() {
   const token = $("admin-token").value.trim();
-  if (token !== state.token) clearAuthenticatedData();
+  if (token !== state.token) clearAuthenticatedData({ resetToken: false });
   state.token = token;
   if (!state.token) { setStatus("Enter the admin token to load sites."); return; }
+  const requestEpoch = state.authEpoch;
   const loadButton = $("load-sites"); loadButton.disabled = true; text(loadButton, "Loading...");
   const params = new URLSearchParams();
   const status = $("status-filter").value;
@@ -317,6 +348,7 @@ async function loadSites() {
   if (confidence) params.set("confidence", confidence);
   try {
     state.sites = await api(`/api/sites?${params}`);
+    if (requestEpoch !== state.authEpoch) return;
     cacheSites(state.sites);
     $("download-geojson").disabled = false;
     renderSiteList();
@@ -330,9 +362,12 @@ async function loadSites() {
     await loadFieldPriority();
     await loadRoutes();
   } catch (error) {
+    if (isStaleRequest(error)) return;
     if (error.status === 401 || error.status === 503) clearAuthenticatedData();
     setStatus(error.message);
-  } finally { loadButton.disabled = false; text(loadButton, "Load map"); }
+  } finally {
+    if (requestEpoch === state.authEpoch) { loadButton.disabled = false; text(loadButton, "Load map"); }
+  }
 }
 
 async function runReviewAction(id, action, targetSiteId = null) {
@@ -346,7 +381,7 @@ async function runReviewAction(id, action, targetSiteId = null) {
     if (result.site) state.siteCache.set(result.site.id, result.site);
     await loadSites();
     await loadDetail(targetSiteId || id);
-  } catch (error) { setStatus(error.message); }
+  } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
 }
 
 function renderLifecycleActions(site, root) {
@@ -434,7 +469,7 @@ function renderSiteEditor(site, root) {
       setStatus("Site changes saved.");
       await loadSites();
       await loadDetail(site.id);
-    } catch (error) { setStatus(error.message); }
+    } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
   });
   section.append(form); root.append(section);
 }
@@ -499,7 +534,7 @@ function renderObservations(site, root) {
       setStatus("Field observation saved.");
       await loadSites();
       await loadDetail(site.id);
-    } catch (error) { setStatus(error.message); }
+    } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
   });
   section.append(form); root.append(section);
 }
@@ -511,10 +546,11 @@ async function adoptObservationLocation(siteId, observationId) {
     setStatus("Observation coordinate adopted.");
     await loadSites();
     await loadDetail(siteId);
-  } catch (error) { setStatus(error.message); }
+  } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
 }
 
 async function loadDetail(id) {
+  const requestEpoch = state.authEpoch;
   const panel = $("detail-panel");
   const root = $("site-detail");
   panel.classList.add("is-selected");
@@ -552,7 +588,7 @@ async function loadDetail(id) {
     renderLifecycleActions(site, root);
     renderSiteEditor(site, root);
     renderObservations(site, root);
-  } catch (error) { text($("site-detail"), error.message); }
+  } catch (error) { if (!isStaleRequest(error)) text($("site-detail"), error.message); }
 }
 
 async function readImport(file) {
@@ -571,31 +607,44 @@ async function readImport(file) {
 
 async function previewImport() {
   if (!state.pendingImport || state.importRequestInFlight) return;
+  const requestEpoch = state.authEpoch;
   state.importRequestInFlight = true;
   const button = $("preview-import"); button.disabled = true; text(button, "Previewing...");
   try {
     const result = await api("/api/admin/imports/preview", { method: "POST", body: JSON.stringify(state.pendingImport) });
+    if (requestEpoch !== state.authEpoch) return;
     text($("import-result"), JSON.stringify(result, null, 2));
     $("commit-import").disabled = false;
-  } catch (error) { text($("import-result"), error.message); $("commit-import").disabled = true; }
-  finally { state.importRequestInFlight = false; text(button, "Preview"); button.disabled = !state.pendingImport; }
+  } catch (error) {
+    if (!isStaleRequest(error)) { text($("import-result"), error.message); $("commit-import").disabled = true; }
+  }
+  finally {
+    state.importRequestInFlight = false;
+    if (requestEpoch === state.authEpoch) { text(button, "Preview"); button.disabled = !state.pendingImport; }
+  }
 }
 
 async function commitImport() {
   if (!state.pendingImport || state.importRequestInFlight) return;
+  const requestEpoch = state.authEpoch;
   state.importRequestInFlight = true;
   const button = $("commit-import"); button.disabled = true; text(button, "Committing...");
   try {
     const result = await api("/api/admin/imports/commit", { method: "POST", body: JSON.stringify(state.pendingImport) });
+    if (requestEpoch !== state.authEpoch) return;
     text($("import-result"), JSON.stringify(result, null, 2));
     state.pendingImport = null;
     await loadSites();
-  } catch (error) { text($("import-result"), error.message); }
-  finally { state.importRequestInFlight = false; text(button, "Commit"); button.disabled = !state.pendingImport; }
+  } catch (error) { if (!isStaleRequest(error)) text($("import-result"), error.message); }
+  finally {
+    state.importRequestInFlight = false;
+    if (requestEpoch === state.authEpoch) { text(button, "Commit"); button.disabled = !state.pendingImport; }
+  }
 }
 
 async function loadCandidates() {
   if (!state.token) return;
+  const requestEpoch = state.authEpoch;
   try {
     const params = new URLSearchParams();
     const confidence = $("review-confidence-filter").value;
@@ -607,6 +656,7 @@ async function loadCandidates() {
     if (uncertaintyBand) params.set("uncertainty_band", uncertaintyBand);
     if (sourceType) params.set("source_type", sourceType);
     const candidates = await api(`/api/review/candidates?${params}`);
+    if (requestEpoch !== state.authEpoch) return;
     cacheSites(candidates);
     const list = $("candidate-list"); list.replaceChildren();
     text($("candidate-summary"), `${candidates.length} candidate${candidates.length === 1 ? "" : "s"} in this view.`);
@@ -633,7 +683,7 @@ async function loadCandidates() {
       });
       item.append(actions); list.append(item);
     });
-  } catch (error) { text($("candidate-list"), error.message); }
+  } catch (error) { if (!isStaleRequest(error)) text($("candidate-list"), error.message); }
 }
 
 function renderFieldPriority() {
@@ -659,11 +709,13 @@ function renderFieldPriority() {
 
 async function loadFieldPriority() {
   if (!state.token) return;
+  const requestEpoch = state.authEpoch;
   try {
     state.prioritySites = await api("/api/field-priority?limit=12");
+    if (requestEpoch !== state.authEpoch) return;
     cacheSites(state.prioritySites);
     renderFieldPriority();
-  } catch (error) { text($("field-priority-list"), error.message); }
+  } catch (error) { if (!isStaleRequest(error)) text($("field-priority-list"), error.message); }
 }
 
 function formatRouteDistance(distance) {
@@ -692,13 +744,16 @@ function renderRouteHistory() {
 
 async function loadRoutes() {
   if (!state.token) return;
+  const requestEpoch = state.authEpoch;
   try {
     state.routes = await api("/api/routes?limit=20");
+    if (requestEpoch !== state.authEpoch) return;
     renderRouteHistory();
-  } catch (error) { text($("route-history-list"), error.message); }
+  } catch (error) { if (!isStaleRequest(error)) text($("route-history-list"), error.message); }
 }
 
 function renderRouteResult(result) {
+  revokeGpxObjectUrls();
   const root = $("route-result"); root.replaceChildren();
   const summary = document.createElement("div"); text(summary, `${formatRouteDistance(result.distance_m)} | ${formatRouteDuration(result.duration_s)}`); root.append(summary);
   (result.warnings || []).forEach((warning) => { const p = document.createElement("p"); p.className = "warning"; text(p, warning); root.append(p); });
@@ -707,12 +762,26 @@ function renderRouteResult(result) {
     const warning = document.createElement("p"); warning.className = "warning";
     text(warning, `Access is not established for: ${cautionSites.map((site) => site.name).join(", ")}. Use public approaches only.`); root.append(warning);
   }
-  const download = document.createElement("a"); const href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" })); download.href = href; download.download = "bunkerkartet-route.gpx"; text(download, "Download GPX"); root.append(download); setTimeout(() => URL.revokeObjectURL(href), 0);
+  const download = document.createElement("a");
+  download.download = "bunkerkartet-route.gpx";
+  download.addEventListener("click", () => {
+    const href = URL.createObjectURL(new Blob([result.gpx], { type: "application/gpx+xml" }));
+    download.href = href;
+    state.gpxObjectUrls.add(href);
+    setTimeout(() => {
+      URL.revokeObjectURL(href);
+      state.gpxObjectUrls.delete(href);
+      download.removeAttribute("href");
+    }, 1000);
+  }, { once: true });
+  text(download, "Download GPX"); root.append(download);
 }
 
 async function loadRoute(id) {
+  const requestEpoch = state.authEpoch;
   try {
     const result = await api(`/api/routes/${id}`);
+    if (requestEpoch !== state.authEpoch) return;
     if (routeLayer) routeLayer.remove();
     routeLayer = L.geoJSON(result.geometry, { style: { color: "#c65d2e", weight: 4 } }).addTo(map);
     map.fitBounds(routeLayer.getBounds(), { padding: [24, 24] });
@@ -724,20 +793,26 @@ async function loadRoute(id) {
     renderRouteStops();
     renderRouteResult(result);
     setStatus(`Loaded ${result.name}.`);
-  } catch (error) { text($("route-result"), error.message); }
+  } catch (error) { if (!isStaleRequest(error)) text($("route-result"), error.message); }
 }
 
 async function downloadGeoJSON() {
+  const requestEpoch = state.authEpoch;
   try {
     const response = await fetch("/api/sites.geojson", { headers: { Authorization: `Bearer ${state.token}` } });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       throw new Error(body.detail || `Request failed (${response.status})`);
     }
-    const link = document.createElement("a"); link.href = URL.createObjectURL(await response.blob()); link.download = "bunkerkartet-sites.geojson"; link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 0);
+    if (requestEpoch !== state.authEpoch) throw new DOMException("Utdatert forespørsel", "AbortError");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(await response.blob());
+    state.gpxObjectUrls.add(link.href);
+    link.download = "bunkerkartet-sites.geojson";
+    link.click();
+    setTimeout(() => { URL.revokeObjectURL(link.href); state.gpxObjectUrls.delete(link.href); }, 1000);
     setStatus("GeoJSON downloaded.");
-  } catch (error) { setStatus(error.message); }
+  } catch (error) { if (!isStaleRequest(error)) setStatus(error.message); }
 }
 
 function updateRouteStart(point, label) {
@@ -778,22 +853,28 @@ async function createRoute() {
     return;
   }
   const waypoints = routeSites.map((site) => ({ lat: site.latitude, lon: site.longitude }));
+  const requestEpoch = state.authEpoch;
   state.routeRequestInFlight = true;
   const button = $("create-route"); button.disabled = true; text(button, "Creating route...");
   try {
     const name = $("route-name").value.trim() || "Trondheim field route";
     const result = await api("/api/routes", { method: "POST", body: JSON.stringify({ name, start: state.start, waypoints, waypoint_names: routeSites.map((site) => site.name) }) });
+    if (requestEpoch !== state.authEpoch) return;
     if (routeLayer) routeLayer.remove();
     routeLayer = L.geoJSON(result.geometry, { style: { color: "#c65d2e", weight: 4 } }).addTo(map);
     map.fitBounds(routeLayer.getBounds(), { padding: [24, 24] });
     renderRouteResult(result);
     await loadRoutes();
     setStatus(`Created ${result.name}.`);
-  } catch (error) { text($("route-result"), error.message); }
-  finally { state.routeRequestInFlight = false; text(button, "Create route"); renderRouteStops(); }
+  } catch (error) { if (!isStaleRequest(error)) text($("route-result"), error.message); }
+  finally {
+    state.routeRequestInFlight = false;
+    if (requestEpoch === state.authEpoch) { text(button, "Create route"); renderRouteStops(); }
+  }
 }
 
 $("auth-form").addEventListener("submit", (event) => { event.preventDefault(); loadSites(); });
+$("lock-app").addEventListener("click", () => { clearAuthenticatedData(); setStatus("Arbeidsflate låst."); });
 $("refresh-sites").addEventListener("click", loadSites);
 $("status-filter").addEventListener("change", loadSites);
 $("kind-filter").addEventListener("change", loadSites);
