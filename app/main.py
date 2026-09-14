@@ -378,14 +378,29 @@ def _commit_package(database: Database, package: ImportPackage) -> dict[str, obj
         if existing_batch:
             raise HTTPException(409, "import batch is already in progress")
 
-        connection.execute(
+        batch_insert = connection.execute(
             """
-            INSERT INTO import_batches
+            INSERT OR IGNORE INTO import_batches
                 (batch_id, schema_version, generated_at, created_at)
             VALUES (?, ?, ?, ?)
             """,
             (package.batch_id, package.schema_version, package.generated_at.isoformat(), timestamp),
         )
+        if batch_insert.rowcount == 0:
+            existing_batch = connection.execute(
+                "SELECT committed_at FROM import_batches WHERE batch_id = ?",
+                (package.batch_id,),
+            ).fetchone()
+            if existing_batch and existing_batch["committed_at"]:
+                return {
+                    "batch_id": package.batch_id,
+                    "created": 0,
+                    "updated": 0,
+                    "preserved": 0,
+                    "evidence_attached": 0,
+                    "idempotent": True,
+                }
+            raise HTTPException(409, "import batch is already in progress")
         for record in package.records:
             warnings = _duplicate_warnings(connection, record)
             existing = _existing_site(connection, record.external_key)
@@ -877,11 +892,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if row["merged_into_id"] is not None:
+                raise HTTPException(409, "merged site cannot be reviewed")
             if request.action == "merge":
                 if request.target_site_id is None or request.target_site_id == site_id:
                     raise HTTPException(400, "merge requires a different target site")
                 target = connection.execute(
-                    "SELECT id FROM sites WHERE id = ? AND id <> ? AND merged_into_id IS NULL",
+                    "SELECT id FROM sites WHERE id = ? AND id <> ? "
+                    "AND merged_into_id IS NULL AND status <> 'rejected'",
                     (request.target_site_id, site_id),
                 ).fetchone()
                 if target is None:
@@ -925,11 +943,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if row["status"] != "likely":
                         raise HTTPException(409, "field verification requires a researched site")
                     observation = connection.execute(
-                        "SELECT 1 FROM field_observations WHERE site_id = ? LIMIT 1",
+                        "SELECT 1 FROM field_observations "
+                        "WHERE site_id = ? AND outcome = 'found' LIMIT 1",
                         (site_id,),
                     ).fetchone()
                     if observation is None:
-                        raise HTTPException(409, "record a field observation before field verification")
+                        raise HTTPException(409, "record a found field observation before field verification")
                 if request.action == "confirm" and row["status"] not in {
                     "field-verified",
                     "trusted",

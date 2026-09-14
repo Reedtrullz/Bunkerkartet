@@ -319,6 +319,28 @@ def test_field_verification_requires_an_observation(tmp_path):
     assert "field observation" in response.json()["detail"]
 
 
+def test_field_verification_requires_a_found_observation(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+
+    assert api.post(
+        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "research"}
+    ).status_code == 200
+    assert api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={"observed_at": "2026-09-14", "outcome": "not_found", "note": "No feature visible."},
+    ).status_code == 201
+
+    response = api.post(
+        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "field_verify"}
+    )
+
+    assert response.status_code == 409
+    assert "found field observation" in response.json()["detail"]
+
+
 def test_site_list_exposes_observation_points(tmp_path):
     api = client(tmp_path)
     assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
@@ -587,3 +609,45 @@ def test_merge_transfers_evidence_without_duplicate_failure(tmp_path):
     assert response.json()["status"] == "merged"
     target = api.get(f"/api/sites/{sites[1]['id']}", headers=auth()).json()
     assert len(target["sources"]) == 1
+
+
+def test_merged_sites_cannot_be_reviewed_or_used_as_merge_targets(tmp_path):
+    api = client(tmp_path)
+    first = package()
+    second = package("batch-2", external_key="forum:2")
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=first).status_code == 200
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=second).status_code == 200
+    sites = api.get("/api/sites", headers=auth()).json()
+
+    merged = api.post(
+        f"/api/sites/{sites[0]['id']}/review",
+        headers=auth(),
+        json={"action": "merge", "target_site_id": sites[1]["id"]},
+    )
+    assert merged.status_code == 200
+
+    cannot_review = api.post(
+        f"/api/sites/{sites[0]['id']}/review",
+        headers=auth(),
+        json={"action": "restore"},
+    )
+    assert cannot_review.status_code == 409
+
+    target_rejected = api.post(
+        f"/api/sites/{sites[1]['id']}/review", headers=auth(), json={"action": "reject"}
+    )
+    assert target_rejected.status_code == 200
+
+    third = package("batch-3", external_key="forum:3")
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=third).status_code == 200
+    third_id = next(
+        site["id"]
+        for site in api.get("/api/sites", headers=auth()).json()
+        if site["external_key"] == "forum:3"
+    )
+    cannot_merge = api.post(
+        f"/api/sites/{third_id}/review",
+        headers=auth(),
+        json={"action": "merge", "target_site_id": sites[1]["id"]},
+    )
+    assert cannot_merge.status_code == 404
