@@ -219,8 +219,9 @@ opened.
   field projections and edit before/after payloads. Location review requires a
   nonblank reason and current revision.
 
-Verification: focused concurrency/revision tests passed; full local suite was
-`135 passed, 1 warning` excluding browser smoke, with `11 passed` browser smoke.
+Verification: focused concurrency/revision and worker-pool tests passed; the
+full local suite was `136 passed, 1 warning` excluding browser smoke, with `12
+passed` browser smoke.
 
 ## L13 — Ressursgrenser, readiness og CI-kontroller
 
@@ -255,8 +256,8 @@ decisions, coordinates, production data, or GitHub policy changes were added.
 
 | Area | Evidence | Boundary |
 |---|---|---|
-| Auth, import, DB, routes | 135 non-browser tests passed | local synthetic data only |
-| Browser/UI | 11 Chromium smoke tests passed; Node 22.22.3 syntax check passed | not visual acceptance for every device |
+| Auth, import, DB, routes | 136 non-browser tests passed | local synthetic data only |
+| Browser/UI | 12 Chromium smoke tests passed; Node 22.22.3 syntax check passed | not visual acceptance for every device |
 | Schema | fresh and forward migrations reach v8; migration tests pass | no production migration |
 | Drift/limits | body, cardinality, readiness, ORS busy, SHA/digest checks pass | no load test or live ORS quota use |
 | Curation | policy and queue structure documented | owner must decide identity/access/public selection |
