@@ -1,7 +1,73 @@
 from datetime import date, datetime
 from typing import Literal
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
+
+
+_SECRET_PARAMETER_NAMES = {
+    "api_key",
+    "apikey",
+    "access_token",
+    "token",
+    "password",
+    "secret",
+    "authorization",
+    "signature",
+    "sig",
+    "x-amz-signature",
+    "x-goog-signature",
+}
+
+
+def validate_reference_url(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("reference URL must be a string")
+    if len(value) > 8192:
+        raise ValueError("reference URL is too long")
+
+    pending = [(value, 0)]
+    seen: set[str] = set()
+    while pending:
+        current, depth = pending.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        try:
+            parsed = urlsplit(current)
+        except ValueError as exc:
+            raise ValueError("reference URL is invalid") from exc
+        if parsed.username is not None or parsed.password is not None:
+            raise ValueError("reference URL contains credential-like information")
+        try:
+            query = parse_qsl(parsed.query, keep_blank_values=True, max_num_fields=200)
+        except ValueError as exc:
+            raise ValueError("reference URL has too many query fields") from exc
+        for name, nested in query:
+            if name.casefold() in _SECRET_PARAMETER_NAMES:
+                raise ValueError("reference URL contains credential-like information")
+            decoded = unquote(nested)
+            if decoded != nested or ("://" in nested and "?" in nested):
+                if depth >= 4:
+                    raise ValueError("reference URL encoding is too deeply nested")
+                pending.append((decoded, depth + 1))
+        decoded_current = unquote(current)
+        if decoded_current != current:
+            if depth >= 4:
+                raise ValueError("reference URL encoding is too deeply nested")
+            pending.append((decoded_current, depth + 1))
+    return value
+
+
+def safe_validation_errors(errors: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [
+        {
+            "loc": list(error.get("loc", ())),
+            "type": error.get("type", "validation_error"),
+            "msg": error.get("msg", "Invalid value"),
+        }
+        for error in errors
+    ]
 
 
 class StrictModel(BaseModel):
@@ -20,6 +86,11 @@ class SourceEvidence(StrictModel):
     excerpt: str = Field(min_length=1, max_length=2000)
     publication_date: date | None = None
     access_date: date | None = None
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def reject_credential_urls(cls, value: str) -> str:
+        return validate_reference_url(value)
 
     @field_validator("publication_date", "access_date", mode="before")
     @classmethod

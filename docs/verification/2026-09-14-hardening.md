@@ -44,3 +44,16 @@ git diff --check -> 0
 
 - This proves the local browser lifecycle and synthetic auth cleanup only. It does not prove live ORS availability, route walkability, legal access, field verification, or deployment.
 - The source catalogue, production database, GitHub settings, and deployment were not changed.
+
+## L03 — Reference URL boundary
+
+Status: implemented locally; commit follows fresh verification.
+
+- `validate_reference_url` rejects URL userinfo and conservative credential-like query names, including encoded nested URLs, without returning the raw value.
+- The same validator is used for source URLs and observation photo URLs.
+- FastAPI and the research CLI serialize only `loc`, `type`, and controlled `msg`; Pydantic `input`/`ctx` are not returned.
+- Normal map/object query parameters remain intact.
+
+Verification: targeted URL/API/CLI tests passed (`8 passed` across the new L03 cases); the full suite and Node 22 syntax check were run with the L01–L02 follow-up and passed (`84 passed, 1 warning`; `node --check` exit 0). No production source was edited or sanitized.
+
+Non-claims: this does not determine whether any legacy URL parameter is an actual private key. Source/catalogue 139 still requires a separate owner decision and private remediation review.

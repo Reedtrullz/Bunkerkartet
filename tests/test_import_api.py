@@ -259,6 +259,42 @@ def test_import_rejects_excluded_snublestein_record(tmp_path):
     assert response.status_code == 422
 
 
+def test_import_url_validation_does_not_echo_nested_secret_value(tmp_path):
+    api = client(tmp_path)
+    payload = package()
+    sentinel = "synthetic-private-value"
+    payload["records"][0]["sources"][0]["url"] = (
+        "https://example.com/map?layer=https%3A%2F%2Fexample.org%2Fwms"
+        "%3Fapi_key%3D" + sentinel
+    )
+
+    response = api.post("/api/admin/imports/preview", headers=auth(), json=payload)
+
+    assert response.status_code == 422
+    assert sentinel not in response.text
+
+
+def test_observation_photo_url_validation_does_not_echo_secret_value(tmp_path):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+    sentinel = "synthetic-photo-secret"
+
+    response = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Observed from the public path.",
+            "photo_urls": [f"https://example.com/photo?token={sentinel}"],
+        },
+    )
+
+    assert response.status_code == 422
+    assert sentinel not in response.text
+
+
 def test_candidate_review_accept_reject_restore_and_duplicate_warning(tmp_path):
     api = client(tmp_path)
     first = package()

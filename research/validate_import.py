@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.imports import validate_import_package  # noqa: E402
+from app.imports import safe_validation_errors, validate_import_package  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValidationError as exc:
         print(
             json.dumps(
-                {"valid": False, "errors": exc.errors()},
+                {"valid": False, "errors": safe_validation_errors(exc.errors())},
                 indent=2,
                 default=str,
             ),

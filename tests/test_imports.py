@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from app.imports import ImportPackage, validate_import_package
+from app.imports import ImportPackage, validate_import_package, validate_reference_url
 
 
 def source():
@@ -132,3 +132,25 @@ def test_approximate_uncertainty_is_preserved():
 def test_unknown_fields_are_rejected():
     with pytest.raises(ValidationError):
         validate_import_package(package(record(unreviewed_chain_of_thought="secret")))
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://user:password@example.com/map",
+        "https://example.com/map?api_key=synthetic-private-value",
+        "https://example.com/map?X-AmZ-Signature=synthetic-private-value",
+        "https://example.com/map?layer=https%3A%2F%2Fexample.org%2Fwms%3Ftoken%3Dsynthetic-private-value",
+    ],
+)
+def test_reference_urls_reject_credential_like_values_without_echoing_input(url):
+    with pytest.raises(ValueError) as error:
+        validate_reference_url(url)
+
+    assert "synthetic-private-value" not in str(error.value)
+
+
+def test_reference_url_preserves_normal_map_parameters():
+    url = "https://example.com/map?layer=roads&object_id=42&lat=63.4&lon=10.4"
+
+    assert validate_reference_url(url) == url

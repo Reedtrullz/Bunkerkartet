@@ -10,14 +10,21 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, field_validator, model_validator
 from urllib.error import HTTPError, URLError
 
 from app.config import Settings
 from app.db import Database, dump_json, load_json, now_iso, observation_from_row, site_from_row
-from app.imports import ImportPackage, ImportRecord, validate_import_package
+from app.imports import (
+    ImportPackage,
+    ImportRecord,
+    safe_validation_errors,
+    validate_import_package,
+    validate_reference_url,
+)
 from app.routes import RouteResult, build_gpx, fetch_openrouteservice
 
 
@@ -119,6 +126,13 @@ class FieldObservation(BaseModel):
     access_notes: str | None = Field(default=None, max_length=2000)
     photo_urls: list[HttpUrl] = Field(default_factory=list, max_length=12)
 
+    @field_validator("photo_urls", mode="before")
+    @classmethod
+    def reject_credential_photo_urls(cls, value: object) -> object:
+        if value is None:
+            return value
+        return [validate_reference_url(item) for item in value]
+
     @model_validator(mode="after")
     def require_complete_coordinate_pair(self) -> "FieldObservation":
         if (self.latitude is None) != (self.longitude is None):
@@ -169,7 +183,7 @@ class RouteRequest(BaseModel):
 
 
 def _validation_detail(error: ValidationError) -> list[dict[str, object]]:
-    return json.loads(error.json())
+    return safe_validation_errors(error.errors())
 
 
 def _distance_m(first: tuple[float, float], second: tuple[float, float]) -> float:
@@ -575,6 +589,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Bunkerkartet", version=settings.app_version)
     app.state.settings = settings
     app.state.database = database
+
+    @app.exception_handler(RequestValidationError)
+    async def safe_request_validation_error(request, exc: RequestValidationError):
+        return JSONResponse(status_code=422, content={"detail": safe_validation_errors(exc.errors())})
 
     @app.middleware("http")
     async def set_response_headers(request, call_next):
