@@ -81,3 +81,10 @@ git diff --check -> 0
 ```
 
 Non-claims: the restore exercise used a newly generated empty synthetic database. It does not prove production backup completeness, recovery-point coverage, live-volume behavior, or deploy success. The verifier is intentionally read-only; it does not repair or upgrade a database.
+
+## Review follow-up — stale GeoJSON auth and observation input
+
+- Direct GeoJSON fetches now check the captured auth epoch immediately after `fetch`, before a delayed old 401 can clear a newer session.
+- `photo_urls` now leaves non-list containers to Pydantic, producing controlled 422 responses for numeric, object, and string inputs instead of a validator `TypeError`.
+- Verification: 7 synthetic browser smoke tests, 32 import API tests, full suite `94 passed, 1 warning`, Node 22 syntax, and `git diff --check` passed.
+- Legacy URL read-side screening remains intentionally deferred to L05, which owns evidence/read-response preservation; no historical URL values were auto-rewritten.

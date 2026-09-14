@@ -165,6 +165,28 @@ def test_auth_failure_allows_retry_and_lock_resets_busy_controls(page: Page, bas
     assert page.get_by_role("button", name="Commit", exact=True).is_disabled()
 
 
+def test_stale_geojson_401_cannot_clear_new_session(page: Page, base_url: str):
+    page.goto(base_url)
+    token = page.get_by_label("Admin token", exact=True)
+    token.fill("audit-only")
+    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_text("Synthetic site", exact=True).first.wait_for()
+
+    def delayed_unauthorized(route):
+        time.sleep(0.5)
+        route.fulfill(status=401, content_type="application/json", body='{"detail":"expired"}')
+
+    page.route("**/api/sites.geojson", delayed_unauthorized)
+    page.get_by_role("button", name="Download GeoJSON", exact=True).click()
+    page.get_by_role("button", name="Lock", exact=True).click()
+    token.fill("audit-only")
+    page.get_by_role("button", name="Load map", exact=True).click()
+    page.get_by_text("Synthetic site", exact=True).first.wait_for()
+    page.wait_for_timeout(700)
+
+    assert "Synthetic site" in page.locator("body").inner_text()
+
+
 def test_lock_discards_delayed_import_file_read(page: Page, base_url: str):
     page.goto(base_url)
     page.evaluate(

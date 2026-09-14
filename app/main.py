@@ -131,6 +131,8 @@ class FieldObservation(BaseModel):
     def reject_credential_photo_urls(cls, value: object) -> object:
         if value is None:
             return value
+        if not isinstance(value, list):
+            return value
         return [validate_reference_url(item) for item in value]
 
     @model_validator(mode="after")

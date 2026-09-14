@@ -816,6 +816,7 @@ async function downloadGeoJSON() {
   const requestEpoch = state.authEpoch;
   try {
     const response = await fetch("/api/sites.geojson", { headers: { Authorization: `Bearer ${state.token}` } });
+    if (requestEpoch !== state.authEpoch) throw new DOMException("Utdatert forespørsel", "AbortError");
     if (!response.ok) {
       if (response.status === 401) {
         clearAuthenticatedData();

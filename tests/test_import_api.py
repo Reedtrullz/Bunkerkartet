@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
@@ -293,6 +294,26 @@ def test_observation_photo_url_validation_does_not_echo_secret_value(tmp_path):
 
     assert response.status_code == 422
     assert sentinel not in response.text
+
+
+@pytest.mark.parametrize("photo_urls", [123, {"url": "https://example.com/photo.jpg"}, "https://example.com/photo.jpg"])
+def test_observation_photo_urls_wrong_container_is_validation_error(tmp_path, photo_urls):
+    api = client(tmp_path)
+    assert api.post("/api/admin/imports/commit", headers=auth(), json=package()).status_code == 200
+    site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
+
+    response = api.post(
+        f"/api/sites/{site_id}/observations",
+        headers=auth(),
+        json={
+            "observed_at": "2026-09-14",
+            "outcome": "found",
+            "note": "Observed from the public path.",
+            "photo_urls": photo_urls,
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_candidate_review_accept_reject_restore_and_duplicate_warning(tmp_path):
