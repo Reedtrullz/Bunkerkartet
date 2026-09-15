@@ -40,12 +40,12 @@ with app.state.database.connect() as connection:
         INSERT INTO sites
             (external_key, name, site_kind, latitude, longitude, precision,
              uncertainty_m, location_basis, status, access, confidence,
-             warnings_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            warnings_json, short_rationale, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            "browser:site",
-            "Synthetic site",
+            "krigskart:413",
+            "Jonsvatnet, Trondheim, 3",
             "bunker",
             63.435,
             10.4,
@@ -55,7 +55,8 @@ with app.state.database.connect() as connection:
             "candidate",
             "unknown",
             "medium",
-            dump_json([]),
+            dump_json(["Candidate point transcribed from a public map/source; coordinate, identity, condition, and access require independent verification."]),
+            "Coordinate copied from KrigsKart map marker #413; the source point is a starting area for review, not a field-verified entrance or footprint.",
             timestamp,
             timestamp,
         ),
@@ -84,9 +85,9 @@ with app.state.database.connect() as connection:
         """
         INSERT INTO sites
             (external_key, name, site_kind, latitude, longitude, precision,
-             uncertainty_m, location_basis, status, access, confidence,
-             warnings_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            uncertainty_m, location_basis, status, access, confidence,
+            condition, warnings_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             "browser:duplicate",
@@ -100,7 +101,8 @@ with app.state.database.connect() as connection:
             "candidate",
             "unknown",
             "low",
-            dump_json([]),
+            "delvis gjengrodd",
+            dump_json(["Registrert sikkerhetsvarsel fra testdata"]),
             timestamp,
             timestamp,
         ),
