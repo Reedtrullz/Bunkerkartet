@@ -131,12 +131,12 @@ def test_lock_clears_private_site_and_route_dom(page: Page, base_url: str):
     page.goto(base_url)
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
-    page.get_by_text("Synthetic site", exact=True).first.click()
+    page.get_by_text("Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).first.click()
     page.get_by_role("button", name="Tur", exact=True).click()
     page.get_by_role("button", name="Last inn rute", exact=True).click()
     page.get_by_role("button", name="Lås", exact=True).click(timeout=1000)
 
-    assert "Synthetic site" not in page.locator("body").inner_text()
+    assert "Junkers Ju 88 A – Jonsvatnet (markør 413)" not in page.locator("body").inner_text()
     assert "Synthetic excerpt" not in page.locator("body").inner_text()
     assert page.locator("#route-result").inner_text() == ""
     assert page.locator("#route-stops").inner_text() == ""
@@ -153,46 +153,46 @@ def test_delayed_detail_response_cannot_restore_private_dom(page: Page, base_url
         route.continue_()
 
     page.route("**/api/sites/1", delay_detail)
-    page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True).click()
+    page.locator("#site-list .site-item", has_text="Junkers Ju 88 A – Jonsvatnet (markør 413)").get_by_role("button", name="Detaljer", exact=True).click()
     page.get_by_role("button", name="Lås", exact=True).click(timeout=1000)
     page.wait_for_timeout(700)
 
     assert "Synthetic excerpt" not in page.locator("body").inner_text()
-    assert "Synthetic site" not in page.locator("#site-detail").inner_text()
+    assert "Junkers Ju 88 A – Jonsvatnet (markør 413)" not in page.locator("#site-detail").inner_text()
 
 
 def test_delayed_detail_response_cannot_override_newer_surface(page: Page, base_url: str):
     page.goto(base_url)
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
-    page.get_by_text("Synthetic site", exact=True).first.wait_for()
+    page.get_by_text("Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).first.wait_for()
 
     def delay_detail(route):
         time.sleep(0.5)
         route.continue_()
 
     page.route("**/api/sites/1", delay_detail)
-    page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True).click()
+    page.locator("#site-list .site-item", has_text="Junkers Ju 88 A – Jonsvatnet (markør 413)").get_by_role("button", name="Detaljer", exact=True).click()
     page.get_by_role("button", name="Kart", exact=True).click()
     page.wait_for_timeout(700)
 
     assert page.get_by_role("button", name="Kart", exact=True).get_attribute("aria-pressed") == "true"
     assert page.locator("#detail-panel").is_hidden()
-    assert "Stedsdetaljer: Synthetic site" not in page.locator("#site-detail").inner_text()
+    assert "Stedsdetaljer: Junkers Ju 88 A – Jonsvatnet (markør 413)" not in page.locator("#site-detail").inner_text()
 
 
 def test_auth_failure_outside_load_sites_clears_private_workspace(page: Page, base_url: str):
     page.goto(base_url)
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
-    page.get_by_text("Synthetic site", exact=True).first.click()
+    page.get_by_text("Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).first.click()
     page.wait_for_timeout(150)
 
     page.route(
         "**/api/sites/1",
         lambda route: route.fulfill(status=401, content_type="application/json", body='{"detail":"expired"}'),
     )
-    page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True).click()
+    page.locator("#site-list .site-item", has_text="Junkers Ju 88 A – Jonsvatnet (markør 413)").get_by_role("button", name="Detaljer", exact=True).click()
     page.wait_for_timeout(250)
 
     assert "Synthetic excerpt" not in page.locator("body").inner_text()
@@ -210,7 +210,7 @@ def test_auth_failure_allows_retry_and_lock_resets_busy_controls(page: Page, bas
 
     token.fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
-    page.get_by_text("Synthetic site", exact=True).first.wait_for()
+    page.get_by_text("Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).first.wait_for()
 
     page.route("**/api/sites?*", lambda route: (time.sleep(0.5), route.continue_()))
     page.get_by_role("button", name="Last inn kart", exact=True).click()
@@ -227,7 +227,7 @@ def test_stale_geojson_401_cannot_clear_new_session(page: Page, base_url: str):
     token = page.get_by_label("Administratortoken", exact=True)
     token.fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
-    page.get_by_text("Synthetic site", exact=True).first.wait_for()
+    page.get_by_text("Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).first.wait_for()
 
     def delayed_unauthorized(route):
         time.sleep(0.5)
@@ -238,10 +238,10 @@ def test_stale_geojson_401_cannot_clear_new_session(page: Page, base_url: str):
     page.get_by_role("button", name="Lås", exact=True).click()
     token.fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
-    page.get_by_text("Synthetic site", exact=True).first.wait_for()
+    page.get_by_text("Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).first.wait_for()
     page.wait_for_timeout(700)
 
-    assert "Synthetic site" in page.locator("body").inner_text()
+    assert "Junkers Ju 88 A – Jonsvatnet (markør 413)" in page.locator("body").inner_text()
 
 
 def test_lock_discards_delayed_import_file_read(page: Page, base_url: str):
@@ -358,7 +358,7 @@ def test_validation_errors_are_shown_next_to_the_field(page: Page, base_url: str
     page.goto(base_url)
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
-    page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True).click()
+    page.locator("#site-list .site-item", has_text="Junkers Ju 88 A – Jonsvatnet (markør 413)").get_by_role("button", name="Detaljer", exact=True).click()
     page.wait_for_timeout(200)
 
     def reject_patch(route):
@@ -389,18 +389,18 @@ def test_identical_points_offer_a_named_choice_without_clustering(page: Page, ba
     overlap.wait_for(state="visible")
     choices = page.locator("#overlap-panel button")
     assert choices.count() >= 2
-    choices.filter(has_text="Synthetic site").click()
-    page.get_by_role("heading", name="Stedsdetaljer: Synthetic site", exact=True).wait_for(state="visible", timeout=3000)
+    choices.filter(has_text="Junkers Ju 88 A – Jonsvatnet (markør 413)").click()
+    page.get_by_role("heading", name="Stedsdetaljer: Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).wait_for(state="visible", timeout=3000)
 
 
 def test_list_detail_back_returns_focus_to_visible_site_control(page: Page, base_url: str):
     page.goto(base_url)
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
-    origin = page.locator("#site-list .site-item", has_text="Synthetic site").get_by_role("button", name="Detaljer", exact=True)
+    origin = page.locator("#site-list .site-item", has_text="Junkers Ju 88 A – Jonsvatnet (markør 413)").get_by_role("button", name="Detaljer", exact=True)
     origin.focus()
     page.keyboard.press("Enter")
-    page.get_by_role("heading", name="Stedsdetaljer: Synthetic site", exact=True).wait_for()
+    page.get_by_role("heading", name="Stedsdetaljer: Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).wait_for()
     summary = page.locator("details.site-editor > summary")
     summary.focus()
     page.keyboard.press("Enter")
@@ -425,10 +425,10 @@ def test_overlap_detail_back_returns_focus_to_original_choice(page: Page, base_u
     page.goto(base_url)
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
-    origin = page.locator("#overlap-panel button", has_text="Synthetic site")
+    origin = page.locator("#overlap-panel button", has_text="Junkers Ju 88 A – Jonsvatnet (markør 413)")
     origin.focus()
     page.keyboard.press("Enter")
-    page.get_by_role("heading", name="Stedsdetaljer: Synthetic site", exact=True).wait_for()
+    page.get_by_role("heading", name="Stedsdetaljer: Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).wait_for()
     page.get_by_role("button", name="Tilbake til kart", exact=True).press("Enter")
 
     assert page.evaluate("""() => {
@@ -443,16 +443,58 @@ def test_marker_popup_detail_back_returns_focus_to_named_marker(page: Page, base
     page.get_by_role("button", name="Last inn kart", exact=True).click()
     marker = page.locator(".leaflet-marker-icon[data-detail-site-id='1']")
     marker.wait_for(state="visible")
-    marker.click()
+    marker.focus()
+    marker.press("Enter")
     popup = page.locator(".leaflet-popup")
     popup.get_by_role("button", name="Detaljer", exact=True).click()
-    page.get_by_role("heading", name="Stedsdetaljer: Synthetic site", exact=True).wait_for()
+    page.get_by_role("heading", name="Stedsdetaljer: Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).wait_for()
     page.get_by_role("button", name="Tilbake til kart", exact=True).press("Enter")
 
     assert page.evaluate("""() => {
         const active = document.activeElement;
-        return active?.dataset.detailSiteId === '1' && active.dataset.detailOrigin === 'marker' && active.getAttribute('aria-label')?.includes('Synthetic site') && active.offsetParent !== null;
+        return active?.dataset.detailSiteId === '1' && active.dataset.detailOrigin === 'marker' && active.getAttribute('aria-label')?.includes('Junkers Ju 88 A – Jonsvatnet (markør 413)') && active.offsetParent !== null;
     }""")
+
+
+def test_site_detail_prioritizes_enrichment_and_folds_technical_metadata(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    page.locator("#site-list .site-item", has_text="Junkers Ju 88 A – Jonsvatnet (markør 413)").get_by_role("button", name="Detaljer", exact=True).click()
+    page.get_by_role("heading", name="Stedsdetaljer: Junkers Ju 88 A – Jonsvatnet (markør 413)", exact=True).wait_for()
+
+    for heading in ("Om stedet", "Hva finnes her i dag", "Besøk og tilgang", "Fysisk tilgjengelighet", "Adgangsregler"):
+        assert page.get_by_role("heading", name=heading, exact=True).is_visible()
+    assert page.get_by_text("KrigsKart knytter markør 413 til et Junkers Ju 88 A som gikk gjennom smeltende is på Jonsvatnet. Kilden oppgir 21. april 1940; vannet ble brukt som flyplass tidlig i krigen.", exact=True).is_visible()
+    assert page.get_by_text("Uavklart", exact=True).count() >= 1
+    assert page.get_by_text("Registrert beskrivelse: Coordinate copied from KrigsKart map marker #413; the source point is a starting area for review, not a field-verified entrance or footprint.", exact=True).count() == 0
+    folded_warning = page.get_by_text("Candidate point transcribed from a public map/source; coordinate, identity, condition, and access require independent verification.", exact=True)
+    assert not any(folded_warning.nth(index).is_visible() for index in range(folded_warning.count()))
+    assert page.get_by_role("link", name="KrigsKart: Jonsvatnet, Trondheim, 3", exact=True).first.is_visible()
+    data_basis = page.locator("details[data-detail-section='data-basis']")
+    assert data_basis.locator("summary", has_text="Datagrunnlag").is_visible()
+    assert not data_basis.locator("text=Importnøkkel").is_visible()
+    data_basis.locator("summary", has_text="Datagrunnlag").click()
+    assert data_basis.get_by_text("Importnøkkel", exact=True).is_visible()
+    assert data_basis.get_by_text("Jonsvatnet, Trondheim, 3", exact=True).is_visible()
+    assert data_basis.get_by_role("link", name="Synthetic source", exact=True).is_visible()
+    assert data_basis.get_by_text("Coordinate copied from KrigsKart map marker #413; the source point is a starting area for review, not a field-verified entrance or footprint.", exact=True).is_visible()
+    assert data_basis.get_by_text("Candidate point transcribed from a public map/source; coordinate, identity, condition, and access require independent verification.", exact=True).is_visible()
+
+
+def test_unenriched_site_keeps_visible_fallback_and_registered_warning(page: Page, base_url: str):
+    page.goto(base_url)
+    page.get_by_label("Administratortoken", exact=True).fill("audit-only")
+    page.get_by_role("button", name="Last inn kart", exact=True).click()
+    page.locator("#site-list .site-item", has_text="Synthetic duplicate").get_by_role("button", name="Detaljer", exact=True).click()
+    page.get_by_role("heading", name="Stedsdetaljer: Synthetic duplicate", exact=True).wait_for()
+
+    for heading in ("Om stedet", "Hva finnes her i dag", "Besøk og tilgang"):
+        assert page.get_by_role("heading", name=heading, exact=True).is_visible()
+    assert page.get_by_text("Ikke beriket i kildeunderlaget.", exact=True).count() >= 3
+    assert page.get_by_text("Registrert tilstand: delvis gjengrodd", exact=True).is_visible()
+    assert page.get_by_role("heading", name="Registrerte varsler", exact=True).is_visible()
+    assert page.locator("#site-detail p.warning", has_text="Registrert sikkerhetsvarsel fra testdata").is_visible()
 
 
 def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url: str):
@@ -503,7 +545,7 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
     observation.locator("input[name=latitude]").fill("63.436")
     observation.locator("input[name=longitude]").fill("10.401")
     observation.get_by_role("button", name="Lagre observasjon", exact=True).click()
-    page.locator("#detail-panel").get_by_role("button", name="Marker som feltverifisert", exact=True).wait_for()
+    page.locator(".observation-list").get_by_text("Syntetisk observasjon", exact=True).wait_for(state="attached")
     page.get_by_role("button", name="Marker som feltverifisert", exact=True).click()
     page.locator("#detail-panel").get_by_role("button", name="Bekreft", exact=True).wait_for()
     page.get_by_role("button", name="Bekreft", exact=True).click()

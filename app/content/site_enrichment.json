@@ -1,0 +1,697 @@
+{
+  "schema_version": 1,
+  "sites": [
+    {
+      "external_key": "krigskart:413",
+      "display_name": "Junkers Ju 88 A – Jonsvatnet (markør 413)",
+      "kind_label": "Flyvrak / historisk havaristed",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Jonsvatnet, Trondheim, 3",
+          "url": "https://w.krigskart.no/index.php?title=Jonsvatnet,_Trondheim,_3&oldid=6380",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s2",
+          "title": "Trondheim kommune: Jonsvatnet",
+          "url": "https://trondheim.kommune.no/tema/veg-vann-og-avlop/vann-og-avlop/drikkevann/jonsvatnet/",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s3",
+          "title": "Flyvrak.info: Ju 88 A-1 Jonsvatnet",
+          "url": "https://www.flyvrak.info/jonsvatnet2.html",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "KrigsKart knytter markør 413 til et Junkers Ju 88 A som gikk gjennom smeltende is på Jonsvatnet. Kilden oppgir 21. april 1940; vannet ble brukt som flyplass tidlig i krigen.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "Nåværende vrakstatus for akkurat denne markøren er ikke avklart. Dokumentasjon om Ju 88 A-1 U4+TK og heving i 2004 kan ikke uten videre overføres til markør 413.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1",
+            "s3"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Kilden beskriver et fly som sank i vannet, ikke et landbasert besøksobjekt. Det er ikke dokumentert hva som eventuelt ligger igjen ved markøren.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s3"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Dykking i Jonsvatnet er forbudt. Kommunen oppgir også forbud mot bading; vannet er drikkevannskilde.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Flyets individuelle identitet, samsvar med hevede fly og eventuelle gjenværende deler må avklares. Kartpunktet er ikke en verifisert vrakposisjon.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1",
+            "s3"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:2644",
+      "display_name": "Dora I og Dora II",
+      "kind_label": "Ubåtbunkere",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "Store norske leksikon: Dora I og II",
+          "url": "https://snl.no/Dora_I_og_II",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s2",
+          "title": "Arkivsenteret: Besøke oss",
+          "url": "https://arkivsenteret.no/besoksinformasjon/",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "To ubåtbunkere på Nyhavna, oppført av den tyske okkupasjonsmakten. Dora I ble ferdig i juli 1943; Dora II var uferdig ved krigens slutt.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "Bunkerne står fortsatt og har fått sivile bruksområder. Arkivsenteret holder til ved Dora I, med arkivsamlinger inne i bunkeren.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Dette er to separate bygninger. Arkivsenterets besøksadresse er Maskinistgata 1; ett kartpunkt dekker ikke begge bunkernes innganger.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Arkivsenterets besøksordning gjelder deres publikumstilbud. Den dokumenterer ikke fri adgang til resten av bunkerne eller verkstedsområdene.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s2"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Tilgangen må avklares for den konkrete bygningen og virksomheten. Det samlede kartpunktet er ikke en kontrollert inngang.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:2655",
+      "display_name": "Gråkallen lytte- og vaktstasjon",
+      "kind_label": "Lytte- og vaktstasjon",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Gråkallen vaktstasjon",
+          "url": "https://w.krigskart.no/index.php?title=Gr%C3%A5kallen_vaktstasjon,_Trondheim",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s2",
+          "title": "WikiStrinda: Gråkallen",
+          "url": "https://strindahistorielag.no/wiki/index.php/Gr%C3%A5kallen",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "Tyskerne rev Gråkallhytta i 1942 og anla en lytte- og vaktstasjon på området. Fjellet fikk senere militære tele- og datainstallasjoner.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "WikiStrinda omtaler både krigsanlegget og senere radarinstallasjoner. Disse må ikke behandles som ett og samme objekt.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s2"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Lokaliteten ligger på Gråkallen. Kildene gir ikke en kontrollert inngang til den tidligere vaktstasjonen.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Dagens adgang til militære bygninger og inngjerdede områder er ikke dokumentert i de gjennomgåtte kildene.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Hvilke synlige rester som tilhører krigstiden, og den konkrete adkomsten, trenger nærmere dokumentasjon.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s2"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:2659",
+      "display_name": "Munkholmen luftvernbatteri",
+      "kind_label": "Luftvernbatteri",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "WikiStrinda: Munkholmen",
+          "url": "https://strindahistorielag.no/wiki/index.php/Munkholmen",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s2",
+          "title": "Munkholmen: besøksinformasjon",
+          "url": "https://www.munkholmen.no/",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s3",
+          "title": "SNL: Munkholmen",
+          "url": "https://snl.no/Munkholmen",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "Under okkupasjonen ble Munkholmen brukt til forsvar av blant annet ubåtbasen Dora. Tyskerne bygde om deler av festningen og opprettet luftvernstillinger.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "WikiStrinda beskriver bevarte betongfundamenter, en tilbakeført kanon og en optisk avstandsmåler. Dette er kildeopplysninger, ikke en fersk feltkontroll.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Anlegget ligger på en øy. Ordinært besøk skjer med sesongbåt; kontroller avgangene hos operatøren.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2",
+            "s3"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Besøks- og båttilbudet er sesongbasert. Operatørens gjeldende informasjon må sjekkes før turen.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Tilgangen til hvert enkelt militært rom eller anlegg er ikke verifisert. Kartmarkøren er ikke et godkjent landings- eller inngangspunkt.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:2674",
+      "display_name": "Retterstedet på Kristiansten",
+      "kind_label": "Rettersted / minnested",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "SNL: Kristiansten festning",
+          "url": "https://snl.no/Kristiansten_festning",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s2",
+          "title": "Forsvarsbygg: Kristiansten festning",
+          "url": "https://www.forsvarsbygg.no/eiendomsforvaltning/festningene/kristiansten-festning",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "Den tyske okkupasjonsmakten brukte indre Kristiansten som rettersted. Festningen ble også brukt ved henrettelser under landssvikoppgjøret.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "Retterstedet er omtalt og avbildet ved Arnolds batteri i den indre festningen. Området inngår i et historisk festningsanlegg som formidles til besøkende.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Et utendørs minnested inne på festningen. Følg festningens besøksinformasjon og merkede ferdselsveier.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Forsvarsbygg presenterer festningen som besøks- og turområde. Kontroller gjeldende åpning og eventuell avsperring hos forvalteren.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Tilgjengelighet helt frem til retterstedet og kartpunktets presisjon er ikke feltkontrollert.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:536",
+      "display_name": "Rustkammeret",
+      "kind_label": "Forsvarshistorisk museum",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "Forsvarshistorisk museum: Rustkammeret",
+          "url": "https://www.forsvarshistoriskmuseum.no/rustkammeret",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s2",
+          "title": "Rustkammerets historie",
+          "url": "https://www.forsvarshistoriskmuseum.no/rustkammerets-historie",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "Rustkammeret formidler Trøndelags forsvarshistorie med våpen, uniformer og andre historiske gjenstander. Museets historie går tilbake til 1826.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "Museet holder til i Erkebispegården ved Nidarosdomen, med utstillinger i Feltartillerifløyen.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Besøksadresse er Kongsgårdsgata 1D. Museet oppgir at det ligger i det sørvestlige bygget i Erkebispegården.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Dette er et museum med organiserte publikumsbesøk. Sjekk åpningstider og tilgjengelighetsinformasjon hos museet før besøk.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Inngang, trinnfri adkomst og åpningstider er ikke feltkontrollert her. Kartpunktet erstatter ikke museets besøksinformasjon.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:2665",
+      "display_name": "Lade flyplass – historisk flyplassområde",
+      "kind_label": "Tidligere flyplass",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "WikiStrinda: Lade flyplass",
+          "url": "https://strindahistorielag.no/wiki/index.php/Lade_flyplass",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s2",
+          "title": "WikiStrinda: Lade flyplass i krig og fred",
+          "url": "https://www.strindahistorielag.no/wiki/index.php/Lade_flyplass_i_krig_og_fred",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "Den tyske okkupasjonsmakten bygde en permanent flyplass på Lade i 1940, med rullebane, hangarer og takseveier. Anlegget hadde også nærforsvarsstillinger.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "Flyplassen var i drift etter krigen frem til 1965. Markøren viser et historisk flyplassområde, ikke en flyplass som fortsatt er i drift.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Flyplassområdet var omfattende. En enkelt markør beskriver ikke hele utstrekningen eller adkomsten til eventuelle rester.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Historiske beskrivelser av flyplassen gir ingen generell adgangstillatelse til dagens eiendommer i området.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Hvilke fysiske rester som fortsatt er synlige, og hvilke som kan besøkes lovlig, må dokumenteres hver for seg.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "tracesofwar:5554",
+      "display_name": "Cissi Klein-minnesmerket",
+      "kind_label": "Minnesmerke",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "Riksantikvaren: Cissi Klein minnesmerke",
+          "url": "https://www.riksantikvaren.no/fredninger/cissi-klein-minnesmerke/",
+          "accessed_at": "2026-09-15"
+        },
+        {
+          "id": "s2",
+          "title": "Trondheim kommune: Museumsplassen",
+          "url": "https://www.trondheim.kommune.no/tema/kultur-og-fritid/park-og-mark/parker-og-byrom/museumsplassen/",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "Minnesmerket på Museumsplass hedrer Cissi Klein og jødiske barn og unge som ble drept i Holocaust. Bronseskulpturen ble avduket i 1997.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "Skulpturen viser Cissi sittende på en benk. Minnesmerket og deler av omgivelsene ble fredet i 2022.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Statuen står utendørs i parken på Museumsplass, utenfor bygården der Cissi bodde.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Kommunen beskriver stedet som en park for opphold og ettertanke. Minnesmerket er fredet; et besøk gir ikke adgang til å endre eller flytte noe.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Eventuelle midlertidige avsperringer og den nøyaktige adkomsten er ikke kontrollert i felt.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1",
+            "s2"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "tracesofwar:3477",
+      "display_name": "Samveldekrigsgravene på Stavne",
+      "kind_label": "Krigsgravplass",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "CWGC: Trondheim (Stavne) Cemetery",
+          "url": "https://www.cwgc.org/visit-us/find-cemeteries-memorials/cemetery-details/2016203/trondheim-stavne-cemetery/",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "Stavne har Norges største samveldekrigsgravfelt. Her ligger blant andre sjøfolk, soldater og flygere som omkom under andre verdenskrig.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "CWGC beskriver et eget krigsgravfelt med minnekors på kirkegården. Feltet ligger bak trekapellet.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "CWGC oppgir at krigsgravfeltet kan sees fra kirkegårdens inngang, omtrent 100 meter bak kapellet. Dette er en kildebeskrivelse, ikke en kontrollert gangrute.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Besøksinformasjonen gjelder gravplassen. Vis hensyn til gravferder og følg lokal skilting. Åpning og midlertidige begrensninger er ikke kontrollert her.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Trinnfri adkomst og kartpunktets presisjon er ikke feltverifisert. Vi gjengir ikke gravtall fordi sidens ulike tall trenger avklaring.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "tracesofwar:3491",
+      "display_name": "Havstein tyske krigsgravplass",
+      "kind_label": "Krigsgravplass",
+      "reviewed_at": "2026-09-15",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "Volksbund: Trondheim-Havstein",
+          "url": "https://kriegsgraeberstaetten.volksbund.de/friedhof/trondheim-havstein",
+          "accessed_at": "2026-09-15"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "Den tyske krigsgravplassen på Havstein ble anlagt i 1943. Etter krigen ble tyske krigsdøde flyttet hit fra andre gravsteder.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "current",
+          "section": "current",
+          "text": "Volksbund beskriver et gressdekket gravfelt med navneplater og en inngangshall. Anlegget ble innviet i 1960.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Kilden beskriver adkomst via en liten terrasse og en port til en åpen hall. Dette dokumenterer ikke trinnfri tilgjengelighet.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Gravplassen er omtalt som et besøkssted. Vis hensyn til gravferder og følg lokale skilt; gjeldende åpning er ikke kontrollert her.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Den konkrete inngangen og eventuelle midlertidige begrensninger er ikke kontrollert i felt.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s1"
+          ]
+        }
+      ]
+    }
+  ]
+}
+

@@ -77,6 +77,75 @@ const accessLabel = (access) => ACCESS_LABELS[access] || access;
 const outcomeLabel = (outcome) => ({
   found: "Funnet", not_found: "Ikke funnet", inaccessible: "Utilgjengelig", needs_follow_up: "Må følges opp",
 }[outcome] || outcome);
+const siteDisplayName = (site) => site.enrichment?.display_name || site.name;
+const siteDisplayKind = (site) => site.enrichment?.kind_label || site.site_kind;
+const enrichmentCertaintyLabel = (certainty) => ({
+  supported: "Kildestøttet", uncertain: "Uavklart", unknown: "Ikke dokumentert", registered: "Registrert",
+}[certainty] || certainty);
+
+const importedCoordinateRationale = (site) => {
+  const match = /^krigskart:(\d+)$/.exec(site.external_key || "");
+  const expected = match && `Coordinate copied from KrigsKart map marker #${match[1]}; the source point is a starting area for review, not a field-verified entrance or footprint.`;
+  return site.enrichment && expected === site.short_rationale ? site.short_rationale : null;
+};
+const importedCoordinateWarning = "Candidate point transcribed from a public map/source; coordinate, identity, condition, and access require independent verification.";
+
+function appendEnrichmentClaims(parent, claims = []) {
+  if (!claims.length) {
+    const empty = document.createElement("p"); empty.className = "site-meta"; text(empty, "Ikke beriket i kildeunderlaget."); parent.append(empty);
+    return;
+  }
+  const list = document.createElement("ul"); list.className = "enrichment-claims";
+  claims.forEach((claim) => {
+    const item = document.createElement("li"); item.className = `enrichment-claim certainty-${claim.certainty}`;
+    const label = document.createElement("span"); label.className = "badge"; text(label, enrichmentCertaintyLabel(claim.certainty)); item.append(label);
+    const statement = document.createElement("p"); text(statement, claim.text); item.append(statement);
+    if (claim.sources?.length) {
+      const sourceList = document.createElement("ul"); sourceList.className = "claim-sources";
+      claim.sources.forEach((source) => {
+        const sourceItem = document.createElement("li");
+        const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title); sourceItem.append(link);
+        if (source.accessed_at) { const accessed = document.createElement("span"); accessed.className = "site-meta"; text(accessed, ` lest ${source.accessed_at}`); sourceItem.append(accessed); }
+        sourceList.append(sourceItem);
+      });
+      item.append(sourceList);
+    }
+    list.append(item);
+  });
+  parent.append(list);
+}
+
+function appendEnrichmentSection(parent, title, claims) {
+  const section = document.createElement("section"); section.className = "detail-section enrichment-section";
+  const heading = document.createElement("h3"); text(heading, title); section.append(heading);
+  appendEnrichmentClaims(section, claims);
+  parent.append(section);
+}
+
+function renderEnrichment(site, root) {
+  const enrichment = site.enrichment;
+  if (enrichment) {
+    const identity = document.createElement("p"); identity.className = "site-meta enrichment-identity";
+    text(identity, `${enrichment.kind_label} | kildeunderlag kontrollert ${enrichment.reviewed_at}`); root.append(identity);
+  }
+  appendEnrichmentSection(root, "Om stedet", enrichment?.about);
+  if (site.short_rationale && !importedCoordinateRationale(site)) {
+    const registered = document.createElement("p"); registered.className = "site-meta"; text(registered, `Registrert beskrivelse: ${site.short_rationale}`); root.append(registered);
+  }
+  const currentClaims = enrichment?.present_day || (site.condition ? [{ certainty: "registered", text: `Registrert tilstand: ${site.condition}` }] : undefined);
+  appendEnrichmentSection(root, "Hva finnes her i dag", currentClaims);
+  const access = document.createElement("section"); access.className = "detail-section enrichment-section";
+  const accessHeading = document.createElement("h3"); text(accessHeading, "Besøk og tilgang"); access.append(accessHeading);
+  const physicalHeading = document.createElement("h4"); text(physicalHeading, "Fysisk tilgjengelighet"); access.append(physicalHeading);
+  appendEnrichmentClaims(access, enrichment?.visit_access?.physical_access);
+  const rulesHeading = document.createElement("h4"); text(rulesHeading, "Adgangsregler"); access.append(rulesHeading);
+  appendEnrichmentClaims(access, enrichment?.visit_access?.access_rules);
+  if (!enrichment) {
+    const registeredAccess = document.createElement("p"); registeredAccess.className = "site-meta"; text(registeredAccess, `Registrert tilgangsfelt: ${accessLabel(site.access)}. Dette er ikke en kildebasert adgangstillatelse.`); access.append(registeredAccess);
+  }
+  root.append(access);
+  appendEnrichmentSection(root, "Usikkerhet", enrichment?.uncertainty);
+}
 
 function locationCategory(siteKind) {
   const kind = String(siteKind || "").toLowerCase();
@@ -371,7 +440,7 @@ function renderOverlapChoices() {
       const button = document.createElement("button");
       button.type = "button";
       markDetailControl(button, site.id, "overlap");
-      text(button, `${site.name} — ${site.site_kind} — ${statusLabel(site.status)}`);
+      text(button, `${siteDisplayName(site)} — ${siteDisplayKind(site)} — ${statusLabel(site.status)}`);
       button.addEventListener("click", () => {
         openDetail(site.id, "map", "overlap");
       });
@@ -392,7 +461,7 @@ function renderMap(fit = false) {
     bounds.push(point);
     const category = locationCategory(site.site_kind);
     const marker = L.marker(point, {
-      alt: `${category.label}: ${site.name}`,
+      alt: `${category.label}: ${siteDisplayName(site)}`,
       icon: L.divIcon({
         className: "site-marker-icon",
         html: `<span class="site-marker site-marker-${category.key} status-${statusClass(site.status)}" aria-label="${category.label}">${category.glyph}</span>`,
@@ -400,13 +469,13 @@ function renderMap(fit = false) {
         iconSize: [28, 28],
         popupAnchor: [0, -14],
       }),
-      title: `${category.label}: ${site.name}`,
+      title: `${category.label}: ${siteDisplayName(site)}`,
     }).addTo(markerLayer);
     const markerElement = marker.getElement();
     if (markerElement) {
       markDetailControl(markerElement, site.id, "marker");
       markerElement.tabIndex = 0;
-      markerElement.setAttribute("aria-label", `${category.label}: ${site.name}`);
+      markerElement.setAttribute("aria-label", `${category.label}: ${siteDisplayName(site)}`);
     }
     if (site.uncertainty_m > 0) {
       L.circle(point, {
@@ -419,12 +488,12 @@ function renderMap(fit = false) {
     }
     const popup = document.createElement("div");
     const heading = document.createElement("strong");
-    text(heading, site.name);
+    text(heading, siteDisplayName(site));
     popup.append(heading);
     const meta = document.createElement("div");
     meta.className = "site-meta";
     const uncertainty = site.uncertainty_m == null ? "usikkerhet ukjent" : `${Math.round(site.uncertainty_m)} m`;
-    text(meta, `${site.site_kind} | ${statusLabel(site.status)} | ${VALUE_LABELS[site.confidence] || "Ukjent"} | ${uncertainty} | ${accessLabel(site.access)}`);
+    text(meta, `${siteDisplayKind(site)} | ${statusLabel(site.status)} | ${VALUE_LABELS[site.confidence] || "Ukjent"} | ${uncertainty} | ${accessLabel(site.access)}`);
     popup.append(meta);
     const actions = document.createElement("div");
     actions.className = "site-actions";
@@ -485,7 +554,7 @@ function renderSiteList() {
     const head = document.createElement("div");
     head.className = "site-item-head";
     const name = document.createElement("h3");
-    text(name, site.name);
+    text(name, siteDisplayName(site));
     const badge = document.createElement("span");
     badge.className = "badge";
     text(badge, statusLabel(site.status));
@@ -493,7 +562,7 @@ function renderSiteList() {
     item.append(head);
     const meta = document.createElement("div");
     meta.className = "site-meta";
-    text(meta, `${site.site_kind} | ${site.precision} | ${accessLabel(site.access)}`);
+    text(meta, `${siteDisplayKind(site)} | ${site.precision} | ${accessLabel(site.access)}`);
     item.append(meta);
     const actions = document.createElement("div");
     actions.className = "site-actions";
@@ -822,11 +891,14 @@ async function loadDetail(id) {
     const [site, events] = await Promise.all([api(`/api/sites/${id}`), api(`/api/sites/${id}/events?limit=50`)]);
     if (requestEpoch !== state.authEpoch || detailGeneration !== state.detailGeneration || navigationGeneration !== state.navigationGeneration) return;
     state.siteCache.set(site.id, site);
-    text($("site-detail-heading"), `Stedsdetaljer: ${site.name}`);
+    text($("site-detail-heading"), `Stedsdetaljer: ${siteDisplayName(site)}`);
     root.replaceChildren();
+    renderEnrichment(site, root);
     const coordinates = site.latitude == null ? "Ukjent" : `${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}`;
+    const dataBasis = document.createElement("details"); dataBasis.dataset.detailSection = "data-basis";
+    const dataSummary = document.createElement("summary"); text(dataSummary, "Datagrunnlag"); dataBasis.append(dataSummary);
     const copy = document.createElement("dl"); copy.className = "detail-copy";
-    [["Navn", site.name], ["Ekstern nøkkel", site.external_key], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
+    [["Importnøkkel", site.external_key], ["Rånavn", site.name], ["Type", site.site_kind], ["Status", statusLabel(site.status)],
       ["Sikkerhet", VALUE_LABELS[site.confidence] || site.confidence || "Ukjent"],
       ["Koordinater", coordinates],
       ["Presisjon", `${VALUE_LABELS[site.precision] || site.precision}${site.uncertainty_m == null ? "" : ` (${site.uncertainty_m} m)`}`],
@@ -839,13 +911,20 @@ async function loadDetail(id) {
         const dd = document.createElement("dd"); text(dd, value);
         field.append(dt, dd); copy.append(field);
       });
-    root.append(copy);
-    if (site.short_rationale) { const rationale = document.createElement("p"); text(rationale, site.short_rationale); root.append(rationale); }
-    if (site.warnings?.length) { const warning = document.createElement("p"); warning.className = "warning"; text(warning, site.warnings.join(" | ")); root.append(warning); }
+    dataBasis.append(copy);
+    const foldedImportMetadata = [importedCoordinateRationale(site), ...(site.enrichment ? (site.warnings || []).filter((warning) => warning === importedCoordinateWarning) : [])].filter(Boolean);
+    const visibleWarnings = (site.warnings || []).filter((warning) => !site.enrichment || warning !== importedCoordinateWarning);
+    if (visibleWarnings.length) { const warningTitle = document.createElement("h3"); text(warningTitle, "Registrerte varsler"); const warning = document.createElement("p"); warning.className = "warning"; text(warning, visibleWarnings.join(" | ")); root.append(warningTitle, warning); }
+    if (foldedImportMetadata.length) {
+      const importTitle = document.createElement("h3"); text(importTitle, "Importinformasjon");
+      const importMetadata = document.createElement("section"); importMetadata.className = "detail-section"; importMetadata.append(importTitle);
+      foldedImportMetadata.forEach((entry) => { const paragraph = document.createElement("p"); text(paragraph, entry); importMetadata.append(paragraph); });
+      dataBasis.append(importMetadata);
+    }
     const sourcesTitle = document.createElement("h3"); text(sourcesTitle, "Kilder");
     const sources = document.createElement("section"); sources.className = "detail-section"; sources.append(sourcesTitle); const sourceList = document.createElement("ul"); sourceList.className = "source-list";
     (site.sources || []).forEach((source) => { const li = document.createElement("li"); if (source.url) { const link = document.createElement("a"); link.href = source.url; link.target = "_blank"; link.rel = "noreferrer"; text(link, source.title || source.url); li.append(link); } else { const withheld = document.createElement("span"); text(withheld, source.title || "Referanse holdt tilbake"); li.append(withheld); } const sourceMeta = document.createElement("div"); sourceMeta.className = "site-meta"; text(sourceMeta, [source.source_type || "kilde", source.published_at && `publisert ${source.published_at}`, source.accessed_at && `lest ${source.accessed_at}`, source.url_status].filter(Boolean).join(" | ")); li.append(sourceMeta); const excerpt = document.createElement("div"); excerpt.className = "site-meta"; text(excerpt, source.excerpt); li.append(excerpt); sourceList.append(li); });
-    sources.append(sourceList); root.append(sources);
+    sources.append(sourceList); dataBasis.append(sources); root.append(dataBasis);
     if (site.relations?.length) {
       const relationsTitle = document.createElement("h3"); text(relationsTitle, "Relaterte steder"); root.append(relationsTitle);
       const relationList = document.createElement("ul"); relationList.className = "source-list";

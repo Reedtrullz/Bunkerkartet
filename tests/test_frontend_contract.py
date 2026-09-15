@@ -31,7 +31,7 @@ def test_frontend_exposes_operational_controls_without_duplicate_auth_binding():
     assert "target_site_id" in javascript
     assert "Kopier koordinater" in javascript
     assert "startMarker = L.circleMarker" in javascript
-    assert "Ekstern nøkkel" in javascript
+    assert "Importnøkkel" in javascript
     assert "function locationCategory(siteKind)" in javascript
     assert "L.divIcon" in javascript
     assert "site-marker-${category.key}" in javascript

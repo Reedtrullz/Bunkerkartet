@@ -21,6 +21,7 @@ from starlette.concurrency import run_in_threadpool
 from urllib.error import HTTPError, URLError
 
 from app.config import Settings
+from app.enrichment import load_site_enrichment
 from app.db import (
     CURRENT_SCHEMA_VERSION,
     REQUIRED_SCHEMA,
@@ -81,6 +82,7 @@ SECURITY_HEADERS = {
 MAX_IMPORT_BODY_BYTES = 2 * 1024 * 1024
 # ponytail: one process-wide semaphore is enough for the bounded provider quota; use a distributed limiter if scaling out.
 ORS_SEMAPHORE = threading.BoundedSemaphore(2)
+SITE_ENRICHMENT = load_site_enrichment()
 
 
 async def _read_import_json(request: Request) -> object:
@@ -388,6 +390,11 @@ def _safe_observation(row: sqlite3.Row) -> dict[str, object]:
 
 def _site_summary(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
     site = site_from_row(row)
+    enrichment = SITE_ENRICHMENT.get(row["external_key"])
+    if enrichment:
+        site["enrichment"] = {
+            key: enrichment[key] for key in ("display_name", "kind_label", "reviewed_at")
+        }
     site["observation_points"] = _observation_points(connection, int(row["id"]))
     return site
 
@@ -416,6 +423,7 @@ def _site_relations(connection: sqlite3.Connection, site_id: int) -> list[dict[s
 
 def _site_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
     site = site_from_row(row)
+    site["enrichment"] = SITE_ENRICHMENT.get(row["external_key"])
     site["relations"] = _site_relations(connection, int(row["id"]))
     site["sources"] = _source_rows(connection, int(row["id"]))
     observations = connection.execute(
@@ -1175,7 +1183,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if q and q.strip():
             term = f"%{q.strip()}%"
             searchable_fields = ("name", "site_kind", "short_rationale", "observed_location_text", "condition")
-            conditions.append(
+            database_search = (
                 "(" + " OR ".join(
                     f"lower(COALESCE({field}, '')) LIKE lower(?)" for field in searchable_fields
                 ) + " OR EXISTS ("
@@ -1185,7 +1193,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "lower(COALESCE(sources.excerpt, '')) LIKE lower(?)"
                 ")))"
             )
-            values.extend([term] * (len(searchable_fields) + 2))
+            enrichment_keys = [
+                external_key
+                for external_key, enrichment in SITE_ENRICHMENT.items()
+                if q.strip().casefold() in " ".join(
+                    str(enrichment.get(field, ""))
+                    for field in ("display_name", "kind_label")
+                ).casefold()
+            ]
+            if enrichment_keys:
+                placeholders = ",".join("?" for _ in enrichment_keys)
+                conditions.append(f"({database_search} OR external_key IN ({placeholders}))")
+                values.extend([term] * (len(searchable_fields) + 2))
+                values.extend(enrichment_keys)
+            else:
+                conditions.append(database_search)
+                values.extend([term] * (len(searchable_fields) + 2))
         query = f"SELECT * FROM sites WHERE {' AND '.join(conditions)} ORDER BY name, id"
         with database.connect() as connection:
             return [_site_summary(connection, row) for row in connection.execute(query, values).fetchall()]

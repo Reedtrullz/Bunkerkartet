@@ -110,6 +110,52 @@ def test_private_sites_api_requires_bearer_token(tmp_path):
     ).status_code == 200
 
 
+def test_site_detail_exposes_external_enrichment_without_changing_site_facts(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path, admin_token="admin"))
+    with app.state.database.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO sites
+                (external_key, name, site_kind, precision, location_basis, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("krigskart:413", "Jonsvatnet, Trondheim, 3", "bunker", "unknown", "map_reference", "2026-09-15", "2026-09-15"),
+        )
+
+    response = TestClient(app).get("/api/sites/1", headers={"Authorization": "Bearer admin"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enrichment"]["display_name"] == "Junkers Ju 88 A – Jonsvatnet (markør 413)"
+    assert body["enrichment"]["about"][0]["certainty"] == "supported"
+    assert body["enrichment"]["about"][0]["sources"][0]["url"].endswith("oldid=6380")
+    assert "Dykking i Jonsvatnet er forbudt" in body["enrichment"]["visit_access"]["access_rules"][0]["text"]
+    assert body["status"] == "candidate"
+    assert body["latitude"] is None
+    assert body["access"] == "unknown"
+
+
+def test_site_search_matches_enrichment_display_name_without_rewriting_db_name(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path, admin_token="admin"))
+    with app.state.database.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO sites
+                (external_key, name, site_kind, precision, location_basis, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("krigskart:413", "Jonsvatnet, Trondheim, 3", "bunker", "unknown", "map_reference", "2026-09-15", "2026-09-15"),
+        )
+
+    client = TestClient(app)
+    for query in ("Junkers", "Ju 88"):
+        response = client.get("/api/sites", params={"q": query}, headers={"Authorization": "Bearer admin"})
+        assert response.status_code == 200
+        assert [site["external_key"] for site in response.json()] == ["krigskart:413"]
+        assert response.json()[0]["name"] == "Jonsvatnet, Trondheim, 3"
+        assert response.json()[0]["enrichment"]["display_name"].startswith("Junkers Ju 88 A")
+
+
 def test_unicode_bearer_token_is_rejected_without_server_error(tmp_path):
     settings = Settings(data_dir=tmp_path, admin_token="admin")
 

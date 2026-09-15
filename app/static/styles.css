@@ -223,6 +223,23 @@ textarea { font: inherit; border: 1px solid var(--line); border-radius: 8px; pad
 .map-key, .map-status { box-shadow: 0 3px 16px rgba(23,33,43,.08); }
 .map-status { max-width: calc(100% - 24px); }
 
+/* Source-backed statements stay readable without competing with the map. */
+.enrichment-identity { margin-top: 14px; }
+.enrichment-section h4 { margin: 0; font-size: 13px; color: var(--muted); }
+.enrichment-claims, .claim-sources { list-style: none; margin: 0; padding: 0; }
+.enrichment-claims { display: grid; gap: 12px; }
+.enrichment-claim { min-width: 0; }
+.enrichment-claim > p { margin-top: 7px; line-height: 1.65; overflow-wrap: anywhere; }
+.enrichment-claim.certainty-supported > .badge { background: #e5efea; color: #285b49; }
+.enrichment-claim.certainty-uncertain > .badge { background: #fbf0dc; color: #765017; }
+.enrichment-claim.certainty-unknown > .badge { background: #edf0f2; color: #455660; }
+.claim-sources { margin-top: 8px; display: grid; gap: 5px; font-size: 12px; }
+.claim-sources a { color: #235d85; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.claim-sources .site-meta { font-size: 11px; }
+[data-detail-section="data-basis"] { border-top: 1px solid var(--line); padding-top: 16px; }
+[data-detail-section="data-basis"] > summary { cursor: pointer; font-weight: 600; }
+[data-detail-section="data-basis"] h4 { font-size: 13px; margin: 12px 0 6px; }
+
 @media (max-width: 800px) {
   .app-header { align-items: stretch; flex-direction: column; gap: 8px; }
   .auth-bar { flex-wrap: wrap; }
