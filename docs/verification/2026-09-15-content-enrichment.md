@@ -29,3 +29,13 @@ The focused browser checks cover enriched display/search, boilerplate folding,
 technical metadata, source preservation, fallback content, and registered
 warnings. The full pytest suite is the release-local check; no deployment,
 push, production database write, or Obsidian update is part of this change.
+
+## Final results — 2026-09-15
+
+- Implementation commit: `8456d4c` on `codex/site-content-enrichment`.
+- Full `.venv/bin/python -m pytest -q`: **163 passed, 1 existing deprecation warning**, including 22 Chromium tests.
+- Coordinator independently checked Node 22.22.3 syntax and `git diff --check`.
+- Coordinator verified all ten external keys against authenticated read-only production responses; the 50 statements match the researched pilot JSON exactly. This is source checking, not field verification.
+- Local Chromium: searching `Junkers` finds the Ju 88 card; the 390px detail view has no horizontal overflow. Desktop and mobile images were visually inspected.
+- Marker focus regression uses real keyboard focus and Enter, without a synthetic JavaScript click.
+- Database schema remains v8; no database migration, production mutation, push or deployment.
