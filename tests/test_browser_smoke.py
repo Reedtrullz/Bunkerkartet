@@ -545,7 +545,7 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
     observation.locator("input[name=latitude]").fill("63.436")
     observation.locator("input[name=longitude]").fill("10.401")
     observation.get_by_role("button", name="Lagre observasjon", exact=True).click()
-    page.locator("#detail-panel").get_by_role("button", name="Marker som feltverifisert", exact=True).wait_for()
+    page.locator(".observation-list").get_by_text("Syntetisk observasjon", exact=True).wait_for(state="attached")
     page.get_by_role("button", name="Marker som feltverifisert", exact=True).click()
     page.locator("#detail-panel").get_by_role("button", name="Bekreft", exact=True).wait_for()
     page.get_by_role("button", name="Bekreft", exact=True).click()
