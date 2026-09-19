@@ -22,7 +22,7 @@ All Python checks used the existing project environment at
 `/Users/reidar/Projectos/Bunkerkartet/.venv/bin/python`; system Python did not
 have the repository dependencies installed.
 
-- Full suite: `167 passed, 1 warning in 40.82s`.
+- Full suite: `168 passed, 1 warning in 41.03s`.
 - Focused enrichment/API/frontend suite: `18 passed, 1 warning`.
 - Focused content/API suite after the first wave: `17 passed, 1 warning`.
 - Browser smoke: focused enrichment/detail/fallback checks passed; the full suite included the complete browser test module.
@@ -49,3 +49,9 @@ does not render the old `Ikke beriket i kildeunderlaget.` text.
 - No field verification, ownership confirmation, access permission, coordinate correction, status promotion, or duplicate merge was performed.
 - The research report remains local curator material and is intentionally not a public runtime import.
 - The branch is ready for owner review only; no push, PR, production import, merge, or deploy was performed.
+
+## Final review
+
+- The requested read-only reviewer was dispatched but shut down after bounded timeouts without returning a review; no reviewer findings were therefore treated as evidence.
+- Native self-review found no unresolved Critical or Important implementation issue. It added one regression test proving that a legacy overlay record without `research_state` still defaults to `curated`.
+- Final full suite after that test: `168 passed, 1 warning`.
