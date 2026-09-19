@@ -73,6 +73,18 @@ def test_overlay_preserves_pending_and_identity_review_states(tmp_path: Path):
     assert enrichment[payload["sites"][1]["external_key"]]["research_state"] == "identity_review"
 
 
+def test_legacy_overlay_without_research_state_defaults_to_curated(tmp_path: Path):
+    payload = json.loads(ENRICHMENT_PATH.read_text())
+    legacy_site = payload["sites"][0]
+    legacy_site.pop("research_state")
+    path = tmp_path / "legacy.json"
+    path.write_text(json.dumps(payload))
+
+    enrichment = load_site_enrichment(path)
+
+    assert enrichment[legacy_site["external_key"]]["research_state"] == "curated"
+
+
 def test_overlay_rejects_non_unknown_claim_without_sources(tmp_path: Path):
     invalid = ENRICHMENT_PATH.read_text().replace(
         '"source_ids": [\n            "s1"\n          ]',
