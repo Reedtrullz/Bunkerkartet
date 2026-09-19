@@ -158,6 +158,28 @@ def test_site_search_matches_enrichment_display_name_without_rewriting_db_name(t
         assert response.json()[0]["enrichment"]["research_state"] == "curated"
 
 
+def test_first_wave_detail_keeps_access_conservative_and_canonical_facts(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path, admin_token="admin"))
+    with app.state.database.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO sites
+                (external_key, name, site_kind, status, access, precision, location_basis, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("krigskart:2673", "Polsmohulen", "cave", "candidate", "unknown", "approximate", "map_reference", "2026-09-19", "2026-09-19"),
+        )
+
+    response = TestClient(app).get("/api/sites/1", headers={"Authorization": "Bearer admin"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enrichment"]["research_state"] == "curated"
+    assert body["status"] == "candidate"
+    assert body["access"] == "unknown"
+    assert any("adgang" in claim["text"].lower() for claim in body["enrichment"]["visit_access"]["access_rules"])
+
+
 def test_unicode_bearer_token_is_rejected_without_server_error(tmp_path):
     settings = Settings(data_dir=tmp_path, admin_token="admin")
 

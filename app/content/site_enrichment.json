@@ -5,6 +5,7 @@
       "external_key": "krigskart:413",
       "display_name": "Junkers Ju 88 A – Jonsvatnet (markør 413)",
       "kind_label": "Flyvrak / historisk havaristed",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -81,6 +82,7 @@
       "external_key": "krigskart:2644",
       "display_name": "Dora I og Dora II",
       "kind_label": "Ubåtbunkere",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -151,6 +153,7 @@
       "external_key": "krigskart:2655",
       "display_name": "Gråkallen lytte- og vaktstasjon",
       "kind_label": "Lytte- og vaktstasjon",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -221,6 +224,7 @@
       "external_key": "krigskart:2659",
       "display_name": "Munkholmen luftvernbatteri",
       "kind_label": "Luftvernbatteri",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -296,6 +300,7 @@
       "external_key": "krigskart:2674",
       "display_name": "Retterstedet på Kristiansten",
       "kind_label": "Rettersted / minnested",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -366,6 +371,7 @@
       "external_key": "krigskart:536",
       "display_name": "Rustkammeret",
       "kind_label": "Forsvarshistorisk museum",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -435,6 +441,7 @@
       "external_key": "krigskart:2665",
       "display_name": "Lade flyplass – historisk flyplassområde",
       "kind_label": "Tidligere flyplass",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -504,6 +511,7 @@
       "external_key": "tracesofwar:5554",
       "display_name": "Cissi Klein-minnesmerket",
       "kind_label": "Minnesmerke",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -574,6 +582,7 @@
       "external_key": "tracesofwar:3477",
       "display_name": "Samveldekrigsgravene på Stavne",
       "kind_label": "Krigsgravplass",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -635,6 +644,7 @@
       "external_key": "tracesofwar:3491",
       "display_name": "Havstein tyske krigsgravplass",
       "kind_label": "Krigsgravplass",
+      "research_state": "curated",
       "reviewed_at": "2026-09-15",
       "sources": [
         {
@@ -691,7 +701,715 @@
           ]
         }
       ]
+    },
+    {
+      "external_key": "krigskart:2666",
+      "display_name": "Leira batteri – Schwere MarineFlakBatterie 5/702",
+      "kind_label": "Luftvernbatteri / bunkeranlegg",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "Kystfort: Schwere MarineFlakBatterie 5/702 Leira",
+          "url": "https://www.kystfort.com/forum/viewtopic.php?t=940",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "Peakbook: Gammel bunker og liten topp",
+          "url": "https://peakbook.org/no/tour/109299/Gammel+bunker+og+liten+topp.html",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "Foreningen For Kristiansten Festning: Tur til Batteri Leira",
+          "url": "https://foreningenkristiansten.no/tur-til-batteri-leira-og-karolinerne-vadested-over-nidelven/",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s4",
+          "title": "Peakbook: Leira Fort",
+          "url": "https://peakbook.org/no/peakbook-element/60494/no/Leira+Fort.html",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s5",
+          "title": "Geocaching: Leira batteri",
+          "url": "https://www.geocaching.com/geocache/GC7XPPY_leira-batteri",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "about",
+          "section": "about",
+          "text": "Leira-batteriet, også omtalt som Schwere MarineFlakBatterie 5/702, lå mellom Leira gods og Nedre Leirfoss. Kildene beskriver fire 10,5 cm SKC/32-kanoner, to 2 cm luftvernkanoner og en ildledningsbunker med 6 m avstandsmåler.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s4"
+          ]
+        },
+        {
+          "id": "structures",
+          "section": "about",
+          "text": "Anlegget omfattet opptil fire boligbunkere, flere store og små brakker, en koblingsbunker, en ammunisjonsbunker og nærforsvarsstillinger. Kystfort beskriver også MG-stillinger og piggtrådfelt.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s1",
+            "s2",
+            "s4",
+            "s5"
+          ]
+        },
+        {
+          "id": "remaining",
+          "section": "current",
+          "text": "To store boligbunkere står igjen av fire som ble bygget. Peakbook beskriver også gjenværende vegger etter ammunisjonsbunkeren, mens taket er rast ned og bunkeren er fylt med masse.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2",
+            "s4",
+            "s5"
+          ]
+        },
+        {
+          "id": "visible",
+          "section": "current",
+          "text": "Mye av anlegget er skjult av natur, men deler er fortsatt synlige. Det finnes også publiserte oversikts- og nærbilder av batteriet, bunkerne og restene etter anlegget.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2",
+            "s3",
+            "s4"
+          ]
+        },
+        {
+          "id": "approach",
+          "section": "physical_access",
+          "text": "Peakbook beskriver adkomst fra parkeringslommen ved Leira naturreservat via stier, med omtrent 1,5 km tur og én times angitt turtid. Dette er en kildebeskrevet tilnærming til området, ikke en bekreftet inngang til bunkerne.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2"
+          ]
+        },
+        {
+          "id": "closed",
+          "section": "physical_access",
+          "text": "Nyere besøksomtaler sier at alle tidligere åpne deler nå er stengt og låst, og at besøkende ikke kom inn i anlegget. De synlige restene kan derfor ikke behandles som innvendig tilgjengelige.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2",
+            "s3"
+          ]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "En Peakbook-kommentar fra 2021 opplyser at plater var boltet over alle innganger. Foreningen For Kristiansten Festning skrev etter en tur i 2024 at alt som tidligere var åpent, var lukket og låst.",
+          "certainty": "source_supported",
+          "source_ids": [
+            "s2",
+            "s3"
+          ]
+        },
+        {
+          "id": "no_permission_claim",
+          "section": "access_rules",
+          "text": "Kildene dokumenterer ikke en generell besøks- eller inntrengningstillatelse. Ikke gå inn i lukkede eller låste bygg; følg aktuell skilting og eventuelle instrukser fra grunneier.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s2",
+            "s3",
+            "s5"
+          ]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Rapportene beskriver forhold observert i 2014–2024. Dagens vegetasjon, stiforhold, eiendomsadgang og nøyaktige plassering av hver rest er ikke feltverifisert av Bunkerkartet; kartmarkøren er ikke en bekreftet inngang.",
+          "certainty": "uncertain",
+          "source_ids": [
+            "s2",
+            "s3",
+            "s4"
+          ]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:2663",
+      "display_name": "Kuhaugen batteri og kommandosenter",
+      "kind_label": "Luftvernbatteri / kommandosenter",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Kuhaugen batteri",
+          "url": "https://krigskart.no/kart?k=2663",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "Wikipedia: Kuhaugen",
+          "url": "https://no.wikipedia.org/wiki/Kuhaugen",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "Trondheim kommune: Kulturminneplan for Nyhavna",
+          "url": "https://www.trondheim.kommune.no/globalassets/10-bilder-og-filer/10-byutvikling/byplankontoret/1b-off-ettersyn/2020/kvalitetsprogram-for-nyhavna/3-kulturminneplan-for-nyhavna.pdf",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "history",
+          "section": "about",
+          "text": "Kuhaugen beskrives som et tysk kommandosenter for luftvern med radiostasjon, forlegning og luftvernfunksjon, knyttet til Flakgruppenkommandoen i Trondheim.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "later_use",
+          "section": "current",
+          "text": "Kuhaugen har senere vært brukt av Luftforsvaret. Kildene dokumenterer ikke hvilke tyske bygg eller spor som fortsatt er bevart.",
+          "certainty": "source_supported",
+          "source_ids": ["s2", "s3"]
+        },
+        {
+          "id": "approach",
+          "section": "physical_access",
+          "text": "Kildene beskriver området og installasjonene, men dokumenterer ikke at den konkrete kommandobunkeren kan besøkes. Kartpunktet er ikke en bekreftet inngang.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s3"]
+        },
+        {
+          "id": "access",
+          "section": "access_rules",
+          "text": "Dagens eierforhold og adgangsregler for eventuelle militære eller virksomhetsrelaterte områder er ikke dokumentert her.",
+          "certainty": "unknown"
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Bevaring, nøyaktig restlokalisering og dagens bruk må avklares separat før fysisk besøksinformasjon kan publiseres.",
+          "certainty": "unknown"
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:2673",
+      "display_name": "Polsmohulen / Polsmohula",
+      "kind_label": "Tunnel / tilfluktsrom",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Polsmohulen",
+          "url": "https://krigskart.no/kart?k=2673",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "Kystfort: Tunellen ved Djupvika",
+          "url": "https://kystfort.com/forum/viewtopic.php?t=5952",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "Adresseavisen: Polsmohula",
+          "url": "https://www.adressa.no/nyheter/sainntja/article819057.ece",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "history",
+          "section": "about",
+          "text": "Polsmohulen beskrives som en omtrent 100 meter lang utsprengt tunnel øst for Østmarkbukta, brukt som mat- og ammunisjonsdepot og tilfluktsrom.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "remains",
+          "section": "current",
+          "text": "Kystfort beskriver innganger, muring og senere bruk til arrangementer. Dette er kildebeskrevne observasjoner, ikke en garanti for dagens tilstand.",
+          "certainty": "source_supported",
+          "source_ids": ["s2", "s3"]
+        },
+        {
+          "id": "approach",
+          "section": "physical_access",
+          "text": "Kildene knytter hulen til området ved Ladestien og beskriver tilnærming gjennom et friluftsområde. Dette dokumenterer en tilnærming til området, ikke en bekreftet åpen inngang.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Dagens regler for adgang inn i tunnelen er ikke bekreftet. Sti eller tidligere arrangementer skal ikke tolkes som fri innvendig adgang.",
+          "certainty": "uncertain",
+          "source_ids": ["s2", "s3"]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Tilstand, åpne eller stengte innganger og eventuelle nye restriksjoner må kontrolleres på nytt.",
+          "certainty": "unknown"
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:2676",
+      "display_name": "Støttepunkt på Østmarkneset",
+      "kind_label": "Marine støttepunkt / bunkeranlegg",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Støttepunkt, Østmarkneset",
+          "url": "https://krigskart.no/kart?k=2676",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "Strinda historielag: Tyske installasjoner på Østmarkneset",
+          "url": "https://www.strindahistorielag.no/wiki/index.php/Tyske_installasjoner_p%C3%A5_%C3%98stmarkneset",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "Nyhavna: Historien",
+          "url": "https://www.nyhavna.no/historien/",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "history",
+          "section": "about",
+          "text": "Østmarkneset hadde et marine støttepunkt med dypvannskai, hydrofon- og mineverksted, bunkere, skinnegang, heis, minefelt og luftvern.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "heritage",
+          "section": "current",
+          "text": "Bygningsmassen ble vernet i 2004, og deler av området har senere fått sivile funksjoner som Ladekaia. Dette beskriver ikke nødvendigvis tilgjengeligheten til hver militære struktur.",
+          "certainty": "source_supported",
+          "source_ids": ["s2", "s3"]
+        },
+        {
+          "id": "approach",
+          "section": "physical_access",
+          "text": "Kildene beskriver et blandet område med offentlige og virksomhetsrelaterte deler. Offentlig tilgang til Ladekaia eller nærområdet er ikke det samme som tilgang til alle bunkere.",
+          "certainty": "uncertain",
+          "source_ids": ["s2", "s3"]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Adgang til konkrete bygninger, kaier og virksomhetsarealer må avklares med aktuell eier eller aktør; ingen generell adgangstillatelse er dokumentert her.",
+          "certainty": "unknown"
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Kartpunktet dekker et større historisk kompleks. Hvilke deler som er bevart og tilgjengelige i dag, er ikke feltverifisert.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s2"]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:2677",
+      "display_name": "Værvarslingstasjon for ubåter",
+      "kind_label": "Mottaksbunker / samband",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Værvarslingstasjon for ubåter",
+          "url": "https://krigskart.no/kart?k=2677",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "NTNU Open: Lager Nordblitz",
+          "url": "https://ntnuopen.ntnu.no/ntnu-xmlui/handle/11250/3207021",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "Kystfort: Nordblitz mottaksbunker",
+          "url": "https://kystfort.com/forum/viewtopic.php?t=297",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "history",
+          "section": "about",
+          "text": "Markøren beskrives som en mottaksbunker sørvest for Charlottenlund skole, knyttet til Admiral Nordküste/Nordblitz og mottak av værdata fra ubåter og automatiske stasjoner.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "network",
+          "section": "current",
+          "text": "NTNU-arbeidet behandler Lager Nordblitz som en etterretnings- og kommandobunker. Kildene bekrefter ikke hvilket inventar eller hvilke bygningsdeler som er bevart ved denne markøren.",
+          "certainty": "uncertain",
+          "source_ids": ["s2", "s3"]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Kildene identifiserer en konkret bunkerfunksjon, men dokumenterer ikke en offentlig besøksadkomst eller en kontrollert inngang.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s3"]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Dagens eierforhold, eventuell inngjerding og adgang til mottaksbunkeren er ikke dokumentert som offentlig tillatt.",
+          "certainty": "unknown"
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Den eksakte fysiske identiteten og dagens vern eller bruk må verifiseres separat.",
+          "certainty": "unknown"
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:3475",
+      "display_name": "Nordblitz leir",
+      "kind_label": "Tysk militær- og ubåtstasjon",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Nordblitz leir",
+          "url": "https://krigskart.no/kart?k=3475",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "NTNU Open: Lager Nordblitz",
+          "url": "https://ntnuopen.ntnu.no/ntnu-xmlui/handle/11250/3207021",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "Strinda historielag: Tysk militær aktivitet 1940–1945",
+          "url": "https://www.strindahistorielag.no/%C3%85rb%C3%B8ker/2003/Strinda_i_krigs%C3%A5rene_-_Tysk_milit%C3%A6r_aktivitet_1940-1945.pdf",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "history",
+          "section": "about",
+          "text": "Nordblitz beskrives som en tysk militær- og ubåtstasjon med admiralhovedkvarter, værvarslingsfunksjon, flere hundre personer og russisk fangeleir.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2", "s3"]
+        },
+        {
+          "id": "bunker",
+          "section": "current",
+          "text": "Kildene omtaler en stor underjordisk bunker og behandler Lager Nordblitz som en etterretnings- eller kommandobunker. Nåværende bevaring er ikke feltkontrollert.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Markøren dekker et historisk leir- og bunkerområde, ikke en verifisert offentlig inngang eller tursti.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Dagens eierforhold og adgang til militære eller virksomhetsrelaterte deler er ikke dokumentert som offentlig tillatt.",
+          "certainty": "unknown"
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Leirens historiske utstrekning, gjenværende strukturer og forholdet mellom markøren og mottaksbunkeren må avklares separat.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s2", "s3"]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:721",
+      "display_name": "Persaunet leir / fangeleir",
+      "kind_label": "Leir- og forlegningsområde",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Persaunet fangeleir",
+          "url": "https://krigskart.no/kart?k=721",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "Store norske leksikon: Persaunet leir",
+          "url": "https://snl.no/Persaunet_leir",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "Kulturminnesøk: Persaunet",
+          "url": "https://www.kulturminnesok.no/kart/?&id=94394",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s4",
+          "title": "Forsvarsbygg: Der historien møter fremtiden",
+          "url": "https://www.forsvarsbygg.no/no/nyheter/nyhetsarkiv-avhending/2004/der-historien-moter-fremtiden-1/",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "identity",
+          "section": "about",
+          "text": "KrigsKart bruker betegnelsen fangeleir, mens eksterne kilder primært beskriver Persaunet som en tysk høystatus forlegnings- og ubåtleir. Den historiske markørtittelen beholdes uten å late som kildene beskriver samme funksjon.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "complex",
+          "section": "current",
+          "text": "Persaunet-komplekset hadde rundt 50 bygninger og ble senere brukt av norsk forsvar. Området og bygningene er dokumentert som kulturhistorisk verdifulle og fredet i 2004.",
+          "certainty": "source_supported",
+          "source_ids": ["s2", "s3", "s4"]
+        },
+        {
+          "id": "approach",
+          "section": "physical_access",
+          "text": "Markøren gjelder et større leirkompleks. Kildene dokumenterer ikke at alle bygninger eller deler av området kan besøkes av publikum.",
+          "certainty": "uncertain",
+          "source_ids": ["s3", "s4"]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Adgang til konkrete bygninger og arealer må avklares med aktuell eier eller bruker; historisk vern er ikke en generell adgangstillatelse.",
+          "certainty": "unknown"
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Den konkrete markørens forhold til enkeltbygninger og betegnelsen fangeleir trenger fortsatt kilde- og identitetskontroll.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s2"]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:742",
+      "display_name": "Vollan fengsel",
+      "kind_label": "Fengsel / krigsminne",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Vollan fengsel",
+          "url": "https://krigskart.no/kart?k=742",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "Wikipedia: Vollan fengsel",
+          "url": "https://no.wikipedia.org/wiki/Vollan_fengsel",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "NOU 1998:12",
+          "url": "https://www.regjeringen.no/nb/dep/hod/dok/nouer/1998/nou-1998-12/26/7.html?id=375569",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "history",
+          "section": "about",
+          "text": "Vollan var et kretsfengsel og transittsted for politiske fanger under okkupasjonen. Kildene knytter også avhør ved Vollan til Misjonshotellet og Rinnan-miljøet.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2", "s3"]
+        },
+        {
+          "id": "demolished",
+          "section": "current",
+          "text": "Fengselsbygningen er revet, og tomten brukes som parkering. Markøren er derfor et historisk sted, ikke en bevart fengselsbygning.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Det historiske stedet kan sees fra dagens byrom, men det er ikke dokumentert en bevart bygning eller museumsadgang ved markøren.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Det finnes ingen dokumentert generell adgang til en bevart fengselsbygning på markørstedet.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Markørens historiske avgrensing og eventuelle synlige minnespor bør holdes adskilt fra den revne fengselsbygningen.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s2"]
+        }
+      ]
+    },
+    {
+      "external_key": "krigskart:3479",
+      "display_name": "Misjonshotellet",
+      "kind_label": "Gestapo-hovedkvarter / avhørssentral",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "KrigsKart: Misjonshotellet",
+          "url": "https://krigskart.no/kart?k=3479",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "Wikipedia: Henry Rinnan",
+          "url": "https://no.wikipedia.org/wiki/Henry_Rinnan",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "Wikipedia: Vollan fengsel",
+          "url": "https://no.wikipedia.org/wiki/Vollan_fengsel",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "history",
+          "section": "about",
+          "text": "Misjonshotellet beskrives som Gestapo-hovedkvarter og avhørssentral, med kjellerceller og forbindelser til Rinnan-gruppen.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2", "s3"]
+        },
+        {
+          "id": "cells",
+          "section": "current",
+          "text": "KrigsKart omtaler blant annet lyscellen og en rekonstruksjon ved Rettsmuseet. Kildene dokumenterer ikke at de historiske kjellerrommene er bevart eller åpne.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "physical_access",
+          "section": "physical_access",
+          "text": "Markøren viser til et historisk bygg- og avhørsted, men det er ikke dokumentert en offentlig besøksadgang til kjellerrom eller rekonstruksjon på selve stedet.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s2"]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Dagens bygning, eierforhold og adgangsregler er ikke bekreftet i denne researchen. Ikke oppsøk eller gå inn i private eller låste arealer.",
+          "certainty": "unknown"
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Forholdet mellom dagens bygningsmasse, historiske kjellerceller og Rettsmuseets rekonstruksjon må holdes eksplisitt adskilt.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s2"]
+        }
+      ]
+    },
+    {
+      "external_key": "kystfort:topic:414",
+      "display_name": "Kystadhaugen tunnel og samband",
+      "kind_label": "Fjellanlegg / samband",
+      "research_state": "curated",
+      "reviewed_at": "2026-09-19",
+      "sources": [
+        {
+          "id": "s1",
+          "title": "Kystfort: Kystadhaugen tunnel / samband",
+          "url": "https://kystfort.com/forum/viewtopic.php?t=414",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s2",
+          "title": "Kystfort: Kystadhaugen, side 2",
+          "url": "https://kystfort.com/forum/viewtopic.php?t=414&start=15",
+          "accessed_at": "2026-09-19"
+        },
+        {
+          "id": "s3",
+          "title": "Strinda historielag: Kystad tysk sambandstasjon",
+          "url": "https://www.strindahistorielag.no/wiki/index.php?title=Kystad-_tysk_sambandstasjon",
+          "accessed_at": "2026-09-19"
+        }
+      ],
+      "claims": [
+        {
+          "id": "history",
+          "section": "about",
+          "text": "Kystadhaugen beskrives som et støttepunkt med minst to fjellanlegg eller telefonsentraler, flere MG-stillinger, tunnel og sambandssentral.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2", "s3"]
+        },
+        {
+          "id": "remains",
+          "section": "current",
+          "text": "Forum- og historielagskilder beskriver betongspor, tunnel- og stillingsrester og arbeid utført av krigsfanger. Omfanget av bevarte spor i dag er ikke feltverifisert.",
+          "certainty": "source_supported",
+          "source_ids": ["s1", "s2", "s3"]
+        },
+        {
+          "id": "approach",
+          "section": "physical_access",
+          "text": "Kildene dokumenterer strukturer og observasjoner i området, men gir ikke en bekreftet offentlig inngang eller rett til å krysse privat grunn.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s3"]
+        },
+        {
+          "id": "access_rules",
+          "section": "access_rules",
+          "text": "Eiendomsforhold og adgang til fjellanleggene er delvis uklare. Ikke gå inn i tunneler eller på privat areal uten uttrykkelig tillatelse.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s3"]
+        },
+        {
+          "id": "uncertainty",
+          "section": "uncertainty",
+          "text": "Funksjon, dagens tilstand og nøyaktig utstrekning for de enkelte anleggene må holdes adskilt fra den samlede Kystadhaugen-markøren.",
+          "certainty": "uncertain",
+          "source_ids": ["s1", "s2", "s3"]
+        }
+      ]
     }
   ]
 }
-

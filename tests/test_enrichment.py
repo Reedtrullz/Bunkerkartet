@@ -5,11 +5,23 @@ import pytest
 
 from app.enrichment import ENRICHMENT_PATH, load_site_enrichment
 
+FIRST_WAVE_KEYS = {
+    "krigskart:2663",
+    "krigskart:2673",
+    "krigskart:2676",
+    "krigskart:2677",
+    "krigskart:3475",
+    "krigskart:721",
+    "krigskart:742",
+    "krigskart:3479",
+    "kystfort:topic:414",
+}
+
 
 def test_overlay_contains_reviewed_production_keys_including_leira_battery():
     enrichment = load_site_enrichment()
 
-    assert len(enrichment) == 11
+    assert len(enrichment) == 20
     assert set(enrichment) == {
         "krigskart:413",
         "krigskart:2644",
@@ -22,7 +34,7 @@ def test_overlay_contains_reviewed_production_keys_including_leira_battery():
         "tracesofwar:5554",
         "tracesofwar:3477",
         "tracesofwar:3491",
-    }
+    } | FIRST_WAVE_KEYS
     assert enrichment["krigskart:413"]["uncertainty"][0]["certainty"] == "uncertain"
     assert all(site["research_state"] == "curated" for site in enrichment.values())
     leira = enrichment["krigskart:2666"]
@@ -32,6 +44,20 @@ def test_overlay_contains_reviewed_production_keys_including_leira_battery():
         claim["certainty"] == "uncertain"
         for claim in leira["visit_access"]["access_rules"]
     )
+
+
+def test_first_wave_claim_sources_are_https_and_resolve_locally():
+    raw = json.loads(ENRICHMENT_PATH.read_text())
+    first_wave = {site["external_key"]: site for site in raw["sites"] if site["external_key"] in FIRST_WAVE_KEYS}
+
+    assert set(first_wave) == FIRST_WAVE_KEYS
+    for site in first_wave.values():
+        assert site["research_state"] == "curated"
+        source_ids = {source["id"] for source in site["sources"]}
+        assert all(source["url"].startswith("https://") for source in site["sources"])
+        for claim in site["claims"]:
+            assert set(claim.get("source_ids", [])) <= source_ids
+        assert any(claim["section"] == "about" for claim in site["claims"])
 
 
 def test_overlay_preserves_pending_and_identity_review_states(tmp_path: Path):
