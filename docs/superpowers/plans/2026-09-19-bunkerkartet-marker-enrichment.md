@@ -131,7 +131,7 @@
 **Files:**
 
 - Append a review table to the local working report `research/marker-research-2026-09-19.md`; keep it out of the runtime overlay until decisions are approved.
-- Update `/Users/reidar/Obsidian/Hermes/Hermes/Personal/Projects/Bunkerkartet/Kuratorkø - 14-09-2026.md` with the same queue references; link the queue from `Bunkerkartet.md` only if a project-level pointer is useful.
+- Update the private Obsidian curator queue at `Personal/Projects/Bunkerkartet/Kuratorkø - 14-09-2026.md` with the same queue references; link the queue from `Bunkerkartet.md` only if a project-level pointer is useful.
 - Do not modify site rows, coordinates, statuses, or merge records in this task.
 
 - [ ] Add queue item `CQ-011` for `krigskart:2660` vs `krigskart:2672` (Ormhaugen), requiring source-level identity comparison before either record is changed.

@@ -2,7 +2,7 @@
 
 ## Scope
 
-- Worktree: `/Users/reidar/.codex/worktrees/bunkerkartet-leira-enrichment/Bunkerkartet`
+- Worktree: isolated local Bunkerkartet worktree
 - Branch: `codex/leira-battery-enrichment`
 - Verification head before this report commit: `2fbee103`
 - Base: `b56e7b347fe72cfbcc559d9861730f506e68264d`
@@ -18,9 +18,8 @@
 
 ## Verification commands
 
-All Python checks used the existing project environment at
-`/Users/reidar/Projectos/Bunkerkartet/.venv/bin/python`; system Python did not
-have the repository dependencies installed.
+All Python checks used the repository's existing `.venv/bin/python`; system
+Python did not have the repository dependencies installed.
 
 - Full suite: `168 passed, 1 warning in 41.03s`.
 - Focused enrichment/API/frontend suite: `18 passed, 1 warning`.
