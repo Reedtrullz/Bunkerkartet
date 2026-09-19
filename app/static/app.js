@@ -82,6 +82,12 @@ const siteDisplayKind = (site) => site.enrichment?.kind_label || site.site_kind;
 const enrichmentCertaintyLabel = (certainty) => ({
   supported: "Kildestøttet", uncertain: "Uavklart", unknown: "Ikke dokumentert", registered: "Registrert",
 }[certainty] || certainty);
+const enrichmentResearchStateLabel = (state) => ({
+  curated: "Kildeunderlag kuratert",
+  researched_pending: "Research funnet – venter på kuratering",
+  identity_review: "Identitet må avklares",
+  not_curated: "Ikke kuratert i kartet",
+}[state] || "Ikke kuratert i kartet");
 
 const importedCoordinateRationale = (site) => {
   const match = /^krigskart:(\d+)$/.exec(site.external_key || "");
@@ -92,7 +98,7 @@ const importedCoordinateWarning = "Candidate point transcribed from a public map
 
 function appendEnrichmentClaims(parent, claims = []) {
   if (!claims.length) {
-    const empty = document.createElement("p"); empty.className = "site-meta"; text(empty, "Ikke beriket i kildeunderlaget."); parent.append(empty);
+    const empty = document.createElement("p"); empty.className = "site-meta"; text(empty, "Ingen kildebasert opplysning er kuratert for dette feltet."); parent.append(empty);
     return;
   }
   const list = document.createElement("ul"); list.className = "enrichment-claims";
@@ -124,6 +130,9 @@ function appendEnrichmentSection(parent, title, claims) {
 
 function renderEnrichment(site, root) {
   const enrichment = site.enrichment;
+  const state = enrichment?.research_state || "not_curated";
+  const status = document.createElement("p"); status.className = "site-meta enrichment-status";
+  text(status, enrichmentResearchStateLabel(state)); root.append(status);
   if (enrichment) {
     const identity = document.createElement("p"); identity.className = "site-meta enrichment-identity";
     text(identity, `${enrichment.kind_label} | kildeunderlag kontrollert ${enrichment.reviewed_at}`); root.append(identity);

@@ -465,6 +465,7 @@ def test_site_detail_prioritizes_enrichment_and_folds_technical_metadata(page: P
 
     for heading in ("Om stedet", "Hva finnes her i dag", "Besøk og tilgang", "Fysisk tilgjengelighet", "Adgangsregler"):
         assert page.get_by_role("heading", name=heading, exact=True).is_visible()
+    assert page.get_by_text("Kildeunderlag kuratert", exact=True).is_visible()
     assert page.get_by_text("KrigsKart knytter markør 413 til et Junkers Ju 88 A som gikk gjennom smeltende is på Jonsvatnet. Kilden oppgir 21. april 1940; vannet ble brukt som flyplass tidlig i krigen.", exact=True).is_visible()
     assert page.get_by_text("Uavklart", exact=True).count() >= 1
     assert page.get_by_text("Registrert beskrivelse: Coordinate copied from KrigsKart map marker #413; the source point is a starting area for review, not a field-verified entrance or footprint.", exact=True).count() == 0
@@ -491,7 +492,9 @@ def test_unenriched_site_keeps_visible_fallback_and_registered_warning(page: Pag
 
     for heading in ("Om stedet", "Hva finnes her i dag", "Besøk og tilgang"):
         assert page.get_by_role("heading", name=heading, exact=True).is_visible()
-    assert page.get_by_text("Ikke beriket i kildeunderlaget.", exact=True).count() >= 3
+    assert page.get_by_text("Ikke kuratert i kartet", exact=True).is_visible()
+    assert page.get_by_text("Ingen kildebasert opplysning er kuratert for dette feltet.", exact=True).count() >= 3
+    assert page.get_by_text("Ikke beriket i kildeunderlaget.", exact=True).count() == 0
     assert page.get_by_text("Registrert tilstand: delvis gjengrodd", exact=True).is_visible()
     assert page.get_by_role("heading", name="Registrerte varsler", exact=True).is_visible()
     assert page.locator("#site-detail p.warning", has_text="Registrert sikkerhetsvarsel fra testdata").is_visible()

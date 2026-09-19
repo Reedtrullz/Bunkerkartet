@@ -393,7 +393,8 @@ def _site_summary(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str,
     enrichment = SITE_ENRICHMENT.get(row["external_key"])
     if enrichment:
         site["enrichment"] = {
-            key: enrichment[key] for key in ("display_name", "kind_label", "reviewed_at")
+            key: enrichment[key]
+            for key in ("display_name", "kind_label", "research_state", "reviewed_at")
         }
     site["observation_points"] = _observation_points(connection, int(row["id"]))
     return site

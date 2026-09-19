@@ -54,3 +54,19 @@ def test_sidebar_surfaces_location_and_selected_site_details():
     assert 'focus({ preventScroll: true })' in javascript
     assert 'text(root, "Laster stedsdetaljer ...")' in javascript
     assert 'classList.add("is-selected")' in javascript
+
+
+def test_enrichment_contract_exposes_truthful_state_and_source_freshness():
+    javascript = (ROOT / "app/static/app.js").read_text()
+
+    for label in (
+        "Kildeunderlag kuratert",
+        "Research funnet – venter på kuratering",
+        "Identitet må avklares",
+        "Ikke kuratert i kartet",
+        "Ingen kildebasert opplysning er kuratert for dette feltet.",
+    ):
+        assert label in javascript
+    assert "research_state" in javascript
+    assert "source.accessed_at" in javascript
+    assert "Ikke beriket i kildeunderlaget." not in javascript

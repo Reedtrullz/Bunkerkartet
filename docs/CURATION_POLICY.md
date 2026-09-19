@@ -29,6 +29,19 @@ An identical point is a duplicate warning or possible relation, never a merge
 decision. A `related` link means that the source connected two external keys;
 it does not mean same-as, parent/child, or verified identity.
 
+## Staged enrichment states
+
+The map overlay uses four presentation states:
+
+- `curated` — source-backed claims have been reviewed for the overlay.
+- `researched_pending` — relevant research exists, but the claims are not yet ready for map-visible curation.
+- `identity_review` — the marker identity or relationship to another marker remains unresolved.
+- `not_curated` — no overlay is present for the marker. This is a presentation state, not a claim that no online research exists.
+
+The local 85-marker research report separately tracks `baseline_only`,
+`external_found`, `identity_review`, and `curation_ready`. It must not be
+replaced by the map fallback text.
+
 ## Source and coordinate rules
 
 Use source references rather than copied full text. Treat unclear licensing as
@@ -36,6 +49,12 @@ unclear. Do not publish a coordinate without a separate positive selection for
 that publication. Keep historical names and source wording intact; a
 normalized category is not historical identity evidence. Do not invent a
 radius, access permission, approach approval, or field observation.
+
+For source weighting, use official or archival material for identity, ownership,
+and access; specialist or local-history material for structure and wartime
+history; forums, trip reports, Peakbook, and geocaching for dated observations
+of approach or visible remains only; and search-result snippets for discovery
+only. A visit report is not an access permission.
 
 ## Owner decisions required before broader use
 

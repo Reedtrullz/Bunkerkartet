@@ -45,6 +45,7 @@ class ResearchSite(BaseModel):
     external_key: str = Field(min_length=1, max_length=300)
     display_name: str = Field(min_length=1, max_length=500)
     kind_label: str = Field(min_length=1, max_length=200)
+    research_state: Literal["curated", "researched_pending", "identity_review"] = "curated"
     reviewed_at: date
     sources: list[ResearchSource] = Field(min_length=1, max_length=50)
     claims: list[ResearchClaim] = Field(min_length=1, max_length=30)
@@ -97,6 +98,7 @@ def load_site_enrichment(path: Path = ENRICHMENT_PATH) -> dict[str, dict[str, ob
         result[site.external_key] = {
             "display_name": site.display_name,
             "kind_label": site.kind_label,
+            "research_state": site.research_state,
             "reviewed_at": site.reviewed_at.isoformat(),
             "about": claims["about"],
             "present_day": claims["current"],

@@ -127,6 +127,7 @@ def test_site_detail_exposes_external_enrichment_without_changing_site_facts(tmp
     assert response.status_code == 200
     body = response.json()
     assert body["enrichment"]["display_name"] == "Junkers Ju 88 A – Jonsvatnet (markør 413)"
+    assert body["enrichment"]["research_state"] == "curated"
     assert body["enrichment"]["about"][0]["certainty"] == "supported"
     assert body["enrichment"]["about"][0]["sources"][0]["url"].endswith("oldid=6380")
     assert "Dykking i Jonsvatnet er forbudt" in body["enrichment"]["visit_access"]["access_rules"][0]["text"]
@@ -154,6 +155,7 @@ def test_site_search_matches_enrichment_display_name_without_rewriting_db_name(t
         assert [site["external_key"] for site in response.json()] == ["krigskart:413"]
         assert response.json()[0]["name"] == "Jonsvatnet, Trondheim, 3"
         assert response.json()[0]["enrichment"]["display_name"].startswith("Junkers Ju 88 A")
+        assert response.json()[0]["enrichment"]["research_state"] == "curated"
 
 
 def test_unicode_bearer_token_is_rejected_without_server_error(tmp_path):
