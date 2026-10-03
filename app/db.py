@@ -184,8 +184,27 @@ for _table, _columns in {
     'identity_hypotheses': {'id','question_id','state','payload_json','revision','created_at','updated_at'},
     'claim_assertions': {'id','external_key','target_external_key','claim_id','target_claim_id','relation','state','payload_json','revision','created_at','updated_at'},
 }.items(): V11_REQUIRED_SCHEMA[_table]=_columns
-CURRENT_SCHEMA_VERSION = 11
-REQUIRED_SCHEMA = V11_REQUIRED_SCHEMA
+OBSERVATION_WORKFLOW_COLUMNS = {
+    'field_observations': {'context_json'},
+    'observation_amendments': {'id','observation_id','site_id','revision','request_id','payload_hash','request_json','changes_json','reason','support_invalidated','created_at'},
+    'observation_visits': {'id','request_id','payload_hash','request_json','state','planned_date','occurred_date','visit_outcome','selected_questions_json','site_ids_json','route_snapshot_json','manual_approaches_json','outcomes_json','retention_until','revision','created_at','updated_at','close_reason','closed_at'},
+    'visit_observations': {'id','visit_id','site_id','observation_id','question_id','request_id','payload_hash','request_json','attached_at'},
+}
+V12_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V11_REQUIRED_SCHEMA.items()}
+for _table, _columns in OBSERVATION_WORKFLOW_COLUMNS.items():
+    V12_REQUIRED_SCHEMA.setdefault(_table, set()).update(_columns)
+V13_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V12_REQUIRED_SCHEMA.items()}
+V13_REQUIRED_SCHEMA['route_plans'].add('details_json')
+V14_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V13_REQUIRED_SCHEMA.items()}
+V14_REQUIRED_SCHEMA['image_references']={'id','image_id','site_id','receipt_json','state','created_at','deleted_at','deletion_reason'}
+from app.pilots import PILOT_REQUIRED
+V15_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V14_REQUIRED_SCHEMA.items()}
+V15_REQUIRED_SCHEMA.update({table:set(columns) for table,columns in PILOT_REQUIRED.items()})
+V15_REQUIRED_SCHEMA['import_batches'].add('provenance_json')
+V16_REQUIRED_SCHEMA = {table:set(columns) for table,columns in V15_REQUIRED_SCHEMA.items()}
+V16_REQUIRED_SCHEMA['route_retention_receipts']={'id','route_id','payload_json','created_at'}
+CURRENT_SCHEMA_VERSION = 16
+REQUIRED_SCHEMA = V16_REQUIRED_SCHEMA
 
 
 def now_iso() -> str:
@@ -295,6 +314,15 @@ def required_schema_errors(
         "evidence_items": [("legacy_evidence_id",), ("import_record_id", "source_index")],
         "site_relations": [("site_id", "related_external_key", "relation_kind")],
         "route_requests": [("request_id",)],
+        "route_retention_receipts": [("route_id",)],
+        "observation_amendments": [("observation_id","revision"),("observation_id","request_id")],
+        "image_references": [("image_id",)],
+        "pilot_offline_outbox": [("original_request_id",)],
+        "pilot_historical_assertions": [("assertion_key",)],
+        "pilot_reader_credentials": [("credential_id",)],
+        "pilot_publication_receipts": [("package_id",)],
+        "observation_visits": [("request_id",)],
+        "visit_observations": [("visit_id","request_id"),("visit_id","observation_id")],
     }
     version = connection.execute("PRAGMA user_version").fetchone()[0]
     if version >= 8:
@@ -308,15 +336,29 @@ def required_schema_errors(
         "evidence_items": [("site_id", "sites", "id", "CASCADE"), ("source_id", "sources", "id", "CASCADE"), ("import_record_id", "import_records", "id", "NO ACTION")],
         "site_relations": [("site_id", "sites", "id", "CASCADE")],
         "route_requests": [("route_id", "route_plans", "id", "SET NULL")],
+        "route_retention_receipts": [("route_id", "route_plans", "id", "NO ACTION")],
+        "pilot_offline_outbox": [("pack_id","pilot_offline_packs","pack_id","CASCADE")],
+        "image_references": [("site_id","sites","id","CASCADE")],
         "question_events": [("question_id", "research_questions", "id", "CASCADE")],
+        "observation_amendments": [("observation_id","field_observations","id","CASCADE"),("site_id","sites","id","CASCADE")],
+        "visit_observations": [("visit_id","observation_visits","id","CASCADE"),("site_id","sites","id","CASCADE"),("observation_id","field_observations","id","CASCADE"),("question_id","research_questions","id","SET NULL")],
         "identity_hypotheses": [("question_id", "research_questions", "id", "CASCADE")],
     }
     if version >= 6:
         foreign_keys["evidence_items"].append(("legacy_evidence_id", "evidence", "id", "SET NULL"))
     for table in required_schema:
         columns = list(connection.execute(f"PRAGMA table_info({table})"))
+        integer_fields = {"id", "site_id", "source_id", "import_record_id", "source_index", "legacy_evidence_id", "merged_into_id", "revision", "location_review_required", "route_id", "question_id", "observation_id", "visit_id", "support_invalidated", "cached_site_revision", "reviewed_site_revision"}
+        real_fields = {"latitude", "longitude", "uncertainty_m", "approach_latitude", "approach_longitude", "distance_m", "duration_s", "expires_at"}
+        for column in columns:
+            if column[1] not in required_schema[table]: continue
+            declaration = column[2].upper()
+            affinity = "INTEGER" if "INT" in declaration else "TEXT" if any(word in declaration for word in ("CHAR", "CLOB", "TEXT")) else "REAL" if any(word in declaration for word in ("REAL", "FLOA", "DOUB")) else "BLOB" if not declaration or "BLOB" in declaration else "NUMERIC"
+            expected = "INTEGER" if column[1] in integer_fields else "REAL" if column[1] in real_fields and (column[1] != "expires_at" or table == "route_requests") else "TEXT"
+            if affinity != expected: errors.append(f"{table}:column_affinity")
         primary = [row for row in columns if row[5]]
-        if len(primary) != 1 or primary[0][1] != "id" or primary[0][2].upper() != "INTEGER":
+        key, key_type = ("pack_id", "TEXT") if table == "pilot_offline_packs" else ("id", "INTEGER")
+        if len(primary) != 1 or primary[0][1] != key or primary[0][2].upper() != key_type:
             errors.append(f"{table}:primary_key")
         indexes = set()
         for index in connection.execute(f"PRAGMA index_list({table})"):
@@ -349,6 +391,10 @@ def required_schema_errors(
             (latitude IS NULL) != (longitude IS NULL) OR latitude NOT BETWEEN -90 AND 90 OR
             longitude NOT BETWEEN -180 AND 180 LIMIT 1""").fetchone()
         if invalid_observation: errors.append(f"field_observations:{invalid_observation[0]}:semantic")
+        for table, field, kind in (("sites", "warnings_json", "strings"), ("field_observations", "photo_urls_json", "strings"), ("route_plans", "geometry_json", "geometry"), ("route_plans", "start_json", "start"), ("route_plans", "waypoints_json", "points")):
+            for row in connection.execute(f"SELECT id,{field} FROM {table}"):
+                if decode_stored_json(row[1], kind)[1] not in {"valid", "valid_empty"}:
+                    errors.append(f"{table}:{row[0]}:stored_field"); break
     return list(dict.fromkeys(errors))
 
 
@@ -622,6 +668,36 @@ def _migrate_v11(connection: sqlite3.Connection) -> None:
     from app.research import RESEARCH_SCHEMA
     for statement in RESEARCH_SCHEMA: connection.execute(statement)
     connection.execute("PRAGMA user_version=11")
+
+
+def _migrate_v12(connection: sqlite3.Connection) -> None:
+    from app.observation_workflows import OBSERVATION_WORKFLOW_SCHEMA
+    for statement in OBSERVATION_WORKFLOW_SCHEMA: connection.execute(statement)
+    connection.execute("PRAGMA user_version=12")
+
+
+def _migrate_v13(connection: sqlite3.Connection) -> None:
+    connection.execute("ALTER TABLE route_plans ADD COLUMN details_json TEXT")
+    connection.execute("PRAGMA user_version=13")
+
+
+def _migrate_v14(connection: sqlite3.Connection) -> None:
+    from app.media_api import MEDIA_SCHEMA
+    for statement in MEDIA_SCHEMA: connection.execute(statement)
+    connection.execute("PRAGMA user_version=14")
+
+
+def _migrate_v15(connection: sqlite3.Connection) -> None:
+    from app.pilots import PILOT_SCHEMA
+    for statement in PILOT_SCHEMA.split(';'):
+        if statement.strip():connection.execute(statement)
+    connection.execute('ALTER TABLE import_batches ADD COLUMN provenance_json TEXT')
+    connection.execute("PRAGMA user_version=15")
+
+
+def _migrate_v16(connection: sqlite3.Connection) -> None:
+    connection.execute("CREATE TABLE route_retention_receipts(id INTEGER PRIMARY KEY,route_id INTEGER NOT NULL UNIQUE REFERENCES route_plans(id),payload_json TEXT NOT NULL,created_at TEXT NOT NULL)")
+    connection.execute("PRAGMA user_version=16")
 
 
 def _repair_evidence_item_fk(connection: sqlite3.Connection) -> None:

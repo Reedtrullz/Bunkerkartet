@@ -46,3 +46,8 @@ def test_related_key_length_is_bounded():
     raw = json.loads(__import__('pathlib').Path('research/example-import.json').read_text())['records'][0]
     with pytest.raises(ValidationError):
         ImportRecord.model_validate({**raw, "related_site_keys": ['x' * 301]})
+@pytest.mark.parametrize("raw", [b'{"value":1e999}', b'{"value":-1e999}'])
+def test_exponent_overflow_is_rejected(raw):
+    from app.json_input import decode_json_strict
+    with pytest.raises(ValueError, match="non-finite"):
+        decode_json_strict(raw, max_bytes=4096)

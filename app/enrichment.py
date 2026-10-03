@@ -30,6 +30,23 @@ class ResearchSource(BaseModel):
         return validate_reference_url(value)
 
 
+class CitationLocator(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_id: str = Field(min_length=1, max_length=100)
+    archive_reference: str | None = Field(default=None, max_length=500)
+    page: str | None = Field(default=None, max_length=200)
+    figure: str | None = Field(default=None, max_length=200)
+    map_sheet: str | None = Field(default=None, max_length=200)
+    quotation: str | None = Field(default=None, max_length=2000)
+    rights: str | None = Field(default=None, max_length=1000)
+
+    @field_validator('*')
+    @classmethod
+    def nonblank(cls, value):
+        if isinstance(value, str) and not value.strip(): raise ValueError("citation text cannot be blank")
+        return value
+
+
 class ResearchClaim(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -38,11 +55,14 @@ class ResearchClaim(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     certainty: Literal["source_supported", "uncertain", "unknown"]
     source_ids: list[str] = Field(default_factory=list, max_length=20)
+    citations: list[CitationLocator] | None = Field(default=None, max_length=20)
 
     @model_validator(mode="after")
     def require_source_for_non_unknown(self) -> "ResearchClaim":
         if self.certainty != "unknown" and not self.source_ids:
             raise ValueError("non-unknown enrichment claims require sources")
+        if self.citations and any(item.source_id not in self.source_ids for item in self.citations):
+            raise ValueError("citation locator must reference a selected claim source")
         return self
 
 
@@ -56,6 +76,7 @@ class ResearchSite(BaseModel):
     reviewed_at: date
     sources: list[ResearchSource] = Field(min_length=1, max_length=50)
     claims: list[ResearchClaim] = Field(min_length=1, max_length=30)
+    retired_claim_ids: list[str] | None = Field(default=None, max_length=100)
 
     @field_validator("reviewed_at", mode="before")
     @classmethod
@@ -80,6 +101,11 @@ class ResearchSite(BaseModel):
             raise ValueError("site claim ids cannot be blank")
         if len({claim.id for claim in self.claims}) != len(self.claims):
             raise ValueError("site claims must have unique ids")
+        retired = self.retired_claim_ids or []
+        if len(set(retired)) != len(retired) or any(not item.strip() or len(item) > 100 for item in retired):
+            raise ValueError("retired claim IDs must be unique and bounded")
+        if set(retired) & {claim.id for claim in self.claims}:
+            raise ValueError("retired claim identity cannot be reused")
         for claim in self.claims:
             if len(set(claim.source_ids)) != len(claim.source_ids):
                 raise ValueError("claim source references must be unique")
@@ -102,6 +128,7 @@ def _claim_payload(claim: ResearchClaim, sources: dict[str, ResearchSource]) -> 
     certainty = "supported" if claim.certainty == "source_supported" else claim.certainty
     return {
         "id": claim.id,
+        "citations": [citation.model_dump(mode="json", exclude_none=True) for citation in claim.citations] if claim.citations else None,
         "section": claim.section,
         "text": claim.text,
         "certainty": certainty,

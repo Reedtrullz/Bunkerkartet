@@ -54,16 +54,16 @@ def test_import_limits_are_enforced_before_commit_validation(tmp_path):
 
 
 def test_import_work_does_not_block_health_while_worker_waits(tmp_path, monkeypatch):
-    api = TestClient(create_app(Settings(data_dir=tmp_path, admin_token="admin")))
     started = Event()
     release = Event()
 
-    def blocked_commit(*_args):
+    def blocked_commit(*_args, **_kwargs):
         started.set()
         assert release.wait(3)
         return {"status": "synthetic"}
 
     monkeypatch.setattr("app.main._commit_package", blocked_commit)
+    api = TestClient(create_app(Settings(data_dir=tmp_path, admin_token="admin")))
     payload = {
         "schema_version": "1.0",
         "batch_id": "worker-test",
