@@ -218,5 +218,36 @@ class ImportPackage(StrictModel):
         return self
 
 
+class SourceEvidenceV11(SourceEvidence):
+    content_kind: Literal["quote", "summary", "unknown"] = "unknown"
+    role: Literal["identity", "location", "access", "context"] = "context"
+    claim_ids: list[str] = Field(default_factory=list, max_length=30)
+    uncertainty_note: str | None = Field(default=None, max_length=2000)
+    rights_status: Literal["unknown", "permission_recorded", "restricted"] = "unknown"
+    rights_note: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("claim_ids")
+    @classmethod
+    def bounded_claim_ids(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value) or any(not item.strip() or len(item) > 100 for item in value):
+            raise ValueError("claim links must be unique nonblank IDs of at most 100 characters")
+        return value
+
+
+class ImportRecordV11(ImportRecord):
+    sources: list[SourceEvidenceV11] = Field(min_length=1, max_length=20)
+
+
+class ImportPackageV11(ImportPackage):
+    schema_version: Literal["1.1"]
+    records: list[ImportRecordV11] = Field(min_length=1, max_length=500)
+
+
+def import_schema() -> dict[str, object]:
+    from pydantic import TypeAdapter
+    return TypeAdapter(ImportPackage | ImportPackageV11).json_schema()
+
+
 def validate_import_package(payload: object) -> ImportPackage:
-    return ImportPackage.model_validate(payload)
+    model = ImportPackageV11 if isinstance(payload, dict) and payload.get("schema_version") == "1.1" else ImportPackage
+    return model.model_validate(payload)
