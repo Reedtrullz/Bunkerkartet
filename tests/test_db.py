@@ -7,6 +7,16 @@ import app.db as db_module
 from app.db import CURRENT_SCHEMA_VERSION, SCHEMA, Database
 
 
+def initialize_historical(database, version):
+    """Build a real historical schema rather than relabeling the newest one."""
+    with sqlite3.connect(database.path, factory=db_module.OwnedConnection) as connection:
+        connection.row_factory = sqlite3.Row
+        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA user_version=1")
+        for boundary in range(2, version + 1):
+            db_module._run_migration(connection, getattr(db_module, f"_migrate_v{boundary}"))
+
+
 def test_connection_context_closes_after_commit_and_rollback(tmp_path):
     database = Database(tmp_path / "owned.sqlite3")
     database.initialize()
@@ -411,7 +421,7 @@ def test_legacy_evidence_without_import_records_is_safe_across_retries(tmp_path)
 def test_v5_repairs_old_legacy_evidence_fk_without_losing_rows(tmp_path):
     path = tmp_path / "old-fk.sqlite3"
     database = Database(path)
-    database.initialize()
+    initialize_historical(database, 4)
     with database.connect() as connection:
         connection.execute(
             "INSERT INTO sites (external_key, name, site_kind, precision, location_basis, created_at, updated_at) VALUES ('legacy:site', 'Legacy site', 'bunker', 'unknown', 'landmark_description', '2026-09-14', '2026-09-14')"
@@ -463,7 +473,7 @@ def test_v5_repairs_old_legacy_evidence_fk_without_losing_rows(tmp_path):
 def test_v6_repairs_a_database_that_already_recorded_v5(tmp_path):
     path = tmp_path / "existing-v5.sqlite3"
     database = Database(path)
-    database.initialize()
+    initialize_historical(database, 5)
     with database.connect() as connection:
         connection.execute(
             "INSERT INTO sites (external_key, name, site_kind, precision, location_basis, created_at, updated_at) VALUES ('legacy:v5', 'Legacy v5 site', 'bunker', 'unknown', 'landmark_description', '2026-09-14', '2026-09-14')"
@@ -484,7 +494,7 @@ def test_v6_repairs_a_database_that_already_recorded_v5(tmp_path):
         row = connection.execute(
             "SELECT excerpt, provenance_status FROM evidence_items WHERE legacy_evidence_id = 1"
         ).fetchone()
-    assert version == 8
+    assert version == CURRENT_SCHEMA_VERSION
     assert tuple(row) == ("kept", "legacy_unresolved")
 
 
@@ -493,7 +503,7 @@ def test_v7_creates_site_relations_and_migrates_existing_import_keys(tmp_path):
     with sqlite3.connect(path) as connection:
         connection.executescript(SCHEMA)
         connection.execute("PRAGMA user_version = 1")
-    Database(path).initialize()
+    initialize_historical(Database(path), 6)
     with sqlite3.connect(path) as connection:
         connection.execute("PRAGMA user_version = 6")
         connection.execute(
@@ -514,7 +524,7 @@ def test_v7_creates_site_relations_and_migrates_existing_import_keys(tmp_path):
             "SELECT site_id, related_external_key, relation_kind FROM site_relations"
         ).fetchone()
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-    assert version == 8
+    assert version == CURRENT_SCHEMA_VERSION
     assert tuple(relation) == (1, "legacy:missing", "related")
 
 
@@ -539,7 +549,7 @@ def test_v8_adds_site_revision_and_observation_request_identity(tmp_path):
         observation_columns = {row[1] for row in connection.execute("PRAGMA table_info(field_observations)")}
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         indexes = {row[1] for row in connection.execute("PRAGMA index_list(field_observations)")}
-    assert version == 8
+    assert version == CURRENT_SCHEMA_VERSION
     assert "revision" in site_columns
     assert {"request_id", "payload_hash"} <= observation_columns
     assert "idx_field_observations_request" in indexes

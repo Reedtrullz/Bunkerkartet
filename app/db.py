@@ -173,8 +173,12 @@ V7_REQUIRED_SCHEMA["site_relations"] = {
 V8_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V7_REQUIRED_SCHEMA.items()}
 V8_REQUIRED_SCHEMA["sites"].add("revision")
 V8_REQUIRED_SCHEMA["field_observations"].update({"request_id", "payload_hash"})
-CURRENT_SCHEMA_VERSION = 8
-REQUIRED_SCHEMA = V8_REQUIRED_SCHEMA
+V9_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V8_REQUIRED_SCHEMA.items()}
+V9_REQUIRED_SCHEMA["route_requests"] = {"id", "request_id", "payload_hash", "route_id", "expires_at"}
+V10_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V9_REQUIRED_SCHEMA.items()}
+V10_REQUIRED_SCHEMA["sites"].add("content_json")
+CURRENT_SCHEMA_VERSION = 10
+REQUIRED_SCHEMA = V10_REQUIRED_SCHEMA
 
 
 def now_iso() -> str:
@@ -222,13 +226,8 @@ class Database:
                 with self.connect() as connection:
                     connection.executescript(SCHEMA)
                     connection.execute("PRAGMA user_version = 1")
-                    _run_migration(connection, _migrate_v2)
-                    _run_migration(connection, _migrate_v3)
-                    _run_migration(connection, _migrate_v4)
-                    _run_migration(connection, _migrate_v5)
-                    _run_migration(connection, _migrate_v6)
-                    _run_migration(connection, _migrate_v7)
-                    _run_migration(connection, _migrate_v8)
+                    for boundary in range(2, CURRENT_SCHEMA_VERSION + 1):
+                        _run_migration(connection, globals()[f"_migrate_v{boundary}"])
             except sqlite3.DatabaseError as exc:
                 raise RuntimeError("database initialization failed") from exc
             return
@@ -239,16 +238,7 @@ class Database:
                 version = connection.execute("PRAGMA user_version").fetchone()[0]
                 if version > CURRENT_SCHEMA_VERSION:
                     raise RuntimeError("future schema version is not supported")
-                required = (
-                    BASE_REQUIRED_SCHEMA if version < 2
-                    else V2_REQUIRED_SCHEMA if version == 2
-                    else V3_REQUIRED_SCHEMA if version == 3
-                    else V4_REQUIRED_SCHEMA if version == 4
-                    else V5_REQUIRED_SCHEMA if version == 5
-                    else V6_REQUIRED_SCHEMA if version == 6
-                    else V7_REQUIRED_SCHEMA if version == 7
-                    else REQUIRED_SCHEMA
-                )
+                required = BASE_REQUIRED_SCHEMA if version < 2 else globals()[f"V{version}_REQUIRED_SCHEMA"]
                 errors = required_schema_errors(
                     connection,
                     required_schema=required,
@@ -257,10 +247,7 @@ class Database:
                 if errors:
                     raise RuntimeError("database is missing required schema")
                 while version < CURRENT_SCHEMA_VERSION:
-                    migration = {
-                        1: _migrate_v1, 2: _migrate_v2, 3: _migrate_v3, 4: _migrate_v4,
-                        5: _migrate_v5, 6: _migrate_v6, 7: _migrate_v7, 8: _migrate_v8,
-                    }.get(version + 1)
+                    migration = globals().get(f"_migrate_v{version + 1}")
                     if migration is None:
                         raise RuntimeError("database migration is not available")
                     _run_migration(connection, migration)
@@ -300,6 +287,7 @@ def required_schema_errors(
         "import_batches": [("batch_id",)], "import_records": [("batch_id", "external_key")],
         "evidence_items": [("legacy_evidence_id",), ("import_record_id", "source_index")],
         "site_relations": [("site_id", "related_external_key", "relation_kind")],
+        "route_requests": [("request_id",)],
     }
     version = connection.execute("PRAGMA user_version").fetchone()[0]
     if version >= 8:
@@ -312,6 +300,7 @@ def required_schema_errors(
         "field_observations": [("site_id", "sites", "id", "CASCADE")],
         "evidence_items": [("site_id", "sites", "id", "CASCADE"), ("source_id", "sources", "id", "CASCADE"), ("import_record_id", "import_records", "id", "NO ACTION")],
         "site_relations": [("site_id", "sites", "id", "CASCADE")],
+        "route_requests": [("route_id", "route_plans", "id", "SET NULL")],
     }
     if version >= 6:
         foreign_keys["evidence_items"].append(("legacy_evidence_id", "evidence", "id", "SET NULL"))
@@ -332,7 +321,7 @@ def required_schema_errors(
             if key not in actual_fk: errors.append(f"{table}:foreign_key")
     # Old migration repair paths deliberately handle historical orphans; current
     # workspaces must satisfy these invariants before being declared ready.
-    if version >= CURRENT_SCHEMA_VERSION:
+    if version >= 8:
         if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
             errors.append("records:foreign_key")
         invalid_site = connection.execute("""
@@ -604,6 +593,22 @@ def _migrate_v8(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA user_version = 8")
 
 
+def _migrate_v9(connection: sqlite3.Connection) -> None:
+    connection.execute("""CREATE TABLE route_requests (
+        id INTEGER PRIMARY KEY,
+        request_id TEXT NOT NULL UNIQUE,
+        payload_hash TEXT NOT NULL,
+        route_id INTEGER REFERENCES route_plans(id) ON DELETE SET NULL,
+        expires_at REAL NOT NULL
+    )""")
+    connection.execute("PRAGMA user_version=9")
+
+
+def _migrate_v10(connection: sqlite3.Connection) -> None:
+    connection.execute("ALTER TABLE sites ADD COLUMN content_json TEXT")
+    connection.execute("PRAGMA user_version=10")
+
+
 def _repair_evidence_item_fk(connection: sqlite3.Connection) -> None:
     foreign_keys = connection.execute("PRAGMA foreign_key_list(evidence_items)").fetchall()
     if any(
@@ -698,6 +703,7 @@ def decode_stored_json(value: str | None, kind: str) -> tuple[object | None, str
 
 def site_from_row(row: sqlite3.Row) -> dict[str, object]:
     result = dict(row)
+    result.pop("content_json", None)
     result["warnings"], status = decode_stored_json(result.pop("warnings_json", None), "strings")
     result["stored_field_status"] = {"warnings": status}
     result["data_status"] = "valid" if status in {"valid", "valid_empty"} else "unavailable"
