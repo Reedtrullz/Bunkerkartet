@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 from app.imports import validate_reference_url
+from app.json_input import decode_json_strict
 
 
 class ResearchSource(BaseModel):
@@ -55,7 +56,13 @@ class ResearchSite(BaseModel):
         source_ids = {source.id for source in self.sources}
         if len(source_ids) != len(self.sources):
             raise ValueError("site sources must have unique ids")
+        if any(not claim.id.strip() for claim in self.claims):
+            raise ValueError("site claim ids cannot be blank")
+        if len({claim.id for claim in self.claims}) != len(self.claims):
+            raise ValueError("site claims must have unique ids")
         for claim in self.claims:
+            if len(set(claim.source_ids)) != len(claim.source_ids):
+                raise ValueError("claim source references must be unique")
             if not set(claim.source_ids) <= source_ids:
                 raise ValueError("claim references an unknown source")
         return self
@@ -74,15 +81,18 @@ ENRICHMENT_PATH = Path(__file__).parent / "content" / "site_enrichment.json"
 def _claim_payload(claim: ResearchClaim, sources: dict[str, ResearchSource]) -> dict[str, object]:
     certainty = "supported" if claim.certainty == "source_supported" else claim.certainty
     return {
+        "id": claim.id,
         "text": claim.text,
         "certainty": certainty,
+        "source_ids": list(claim.source_ids),
         "sources": [sources[source_id].model_dump(mode="json") for source_id in claim.source_ids],
     }
 
 
 def load_site_enrichment(path: Path = ENRICHMENT_PATH) -> dict[str, dict[str, object]]:
     try:
-        document = ResearchDocument.model_validate_json(path.read_text())
+        raw = decode_json_strict(path.read_bytes(), max_bytes=2 * 1024 * 1024)
+        document = ResearchDocument.model_validate_json(__import__("json").dumps(raw))
         if len({site.external_key for site in document.sites}) != len(document.sites):
             raise ValueError("site enrichment keys must be unique")
     except (OSError, ValueError) as error:
@@ -96,6 +106,8 @@ def load_site_enrichment(path: Path = ENRICHMENT_PATH) -> dict[str, dict[str, ob
             for section in ("about", "current", "physical_access", "access_rules", "uncertainty")
         }
         result[site.external_key] = {
+            "sources": [source.model_dump(mode="json") for source in site.sources],
+            "claims": [_claim_payload(claim, sources) for claim in site.claims],
             "display_name": site.display_name,
             "kind_label": site.kind_label,
             "research_state": site.research_state,

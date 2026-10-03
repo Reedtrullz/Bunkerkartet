@@ -21,6 +21,7 @@ from starlette.concurrency import run_in_threadpool
 from urllib.error import HTTPError, URLError
 
 from app.config import Settings
+from app.json_input import decode_json_strict
 from app.enrichment import load_site_enrichment
 from app.db import (
     CURRENT_SCHEMA_VERSION,
@@ -96,13 +97,13 @@ async def _read_import_json(request: Request) -> object:
         if len(body) > MAX_IMPORT_BODY_BYTES:
             raise HTTPException(413, "request body too large")
     try:
-        return json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        return decode_json_strict(bytes(body), max_bytes=MAX_IMPORT_BODY_BYTES)
+    except (UnicodeDecodeError, ValueError) as error:
         raise HTTPException(422, "request body must be valid JSON") from error
 
 
 class SitePatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     expected_revision: int = Field(gt=0)
     name: str | None = Field(default=None, min_length=1, max_length=500)
@@ -138,12 +139,18 @@ class SitePatch(BaseModel):
     ] | None = None
     confidence: Literal["high", "medium", "low", "unknown"] | None = None
     condition: str | None = Field(default=None, max_length=1000)
-    warnings: list[str] | None = None
+    warnings: list[str] | None = Field(default=None, max_length=30)
     short_rationale: str | None = Field(default=None, max_length=2000)
     observed_location_text: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def require_complete_coordinate_pair(self) -> "SitePatch":
+        for field in ("name", "site_kind", "condition", "short_rationale", "observed_location_text"):
+            value = getattr(self, field)
+            if value is not None and not value.strip():
+                raise ValueError("mutation text cannot be blank")
+        if self.warnings and any(not item.strip() or len(item) > 1000 for item in self.warnings):
+            raise ValueError("warnings must be nonblank and at most 1000 characters")
         for field in ("name", "site_kind", "precision", "location_basis", "status", "access", "confidence", "warnings"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
@@ -157,7 +164,7 @@ class SitePatch(BaseModel):
 
 
 class FieldObservation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     request_id: str | None = Field(default=None, min_length=1, max_length=200)
     observed_at: date
@@ -192,7 +199,7 @@ class FieldObservation(BaseModel):
 
 
 class ReviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     action: Literal[
         "accept",
@@ -210,7 +217,7 @@ class ReviewRequest(BaseModel):
 
 
 class LocationReviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     reason: str = Field(min_length=1, max_length=2000)
     expected_revision: int = Field(gt=0)
@@ -224,20 +231,20 @@ class LocationReviewRequest(BaseModel):
 
 
 class ExpectedRevisionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     expected_revision: int | None = Field(default=None, gt=0)
 
 
 class RoutePoint(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
 
 
 class ApproachRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     expected_revision: int | None = Field(default=None, gt=0)
     latitude: float = Field(ge=-90, le=90)
@@ -254,7 +261,7 @@ class ApproachRequest(BaseModel):
 
 
 class RouteRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     name: str = Field(default="Trondheim field route", min_length=1, max_length=200)
     start: RoutePoint
@@ -1057,6 +1064,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def set_response_headers(request, call_next):
+        if request.method in {"POST", "PATCH", "PUT"} and request.url.path.startswith("/api/"):
+            body = bytearray()
+            async for chunk in request.stream():
+                body.extend(chunk)
+                if len(body) > MAX_IMPORT_BODY_BYTES:
+                    return JSONResponse(status_code=413, content={"detail": "request body too large"}, headers={"Cache-Control": "no-store", **SECURITY_HEADERS})
+            request._body = bytes(body)
+            if body:
+                try:
+                    decode_json_strict(bytes(body), max_bytes=MAX_IMPORT_BODY_BYTES)
+                except (UnicodeDecodeError, ValueError):
+                    return JSONResponse(status_code=422, content={"detail": "request body must be unambiguous bounded JSON"}, headers={"Cache-Control": "no-store", **SECURITY_HEADERS})
         response = await call_next(request)
         if request.url.path in {"/", "/static/app.js", "/static/styles.css"} or request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"

@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.imports import safe_validation_errors, validate_import_package  # noqa: E402
+from app.json_input import decode_json_strict  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,9 +24,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        payload = json.loads(args.package.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"Unable to read valid JSON: {exc}", file=sys.stderr)
+        with args.package.open("rb") as handle:
+            payload = decode_json_strict(handle.read(2 * 1024 * 1024 + 1), max_bytes=2 * 1024 * 1024)
+    except (OSError, UnicodeDecodeError, ValueError):
+        print("Unable to read unambiguous bounded JSON", file=sys.stderr)
         return 2
 
     try:
