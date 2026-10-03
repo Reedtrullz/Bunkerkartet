@@ -26,6 +26,7 @@ from app.db import (
     CURRENT_SCHEMA_VERSION,
     REQUIRED_SCHEMA,
     Database,
+    OwnedConnection,
     canonical_payload_hash,
     dump_json,
     load_json,
@@ -1093,7 +1094,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if not database.path.exists():
                 database_status = "unavailable"
             else:
-                with sqlite3.connect(f"{database.path.resolve().as_uri()}?mode=ro", uri=True) as connection:
+                with sqlite3.connect(f"{database.path.resolve().as_uri()}?mode=ro", uri=True, factory=OwnedConnection) as connection:
                     if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                         database_status = "unavailable"
                     elif required_schema_errors(connection, required_schema=REQUIRED_SCHEMA):

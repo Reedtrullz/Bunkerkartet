@@ -189,17 +189,31 @@ def canonical_payload_hash(payload: dict[str, object]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+class OwnedConnection(sqlite3.Connection):
+    """A transaction context owns both completion and connection lifetime."""
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 class Database:
     def __init__(self, path: Path | str):
         self.path = Path(path)
 
     def connect(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.path, timeout=10)
+        connection = sqlite3.connect(self.path, timeout=10, factory=OwnedConnection)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA journal_mode = WAL")
         return connection
+
+    def transaction(self) -> sqlite3.Connection:
+        """Open a commit/rollback/close context; connect remains compatible."""
+        return self.connect()
 
     def initialize(self) -> None:
         if not self.path.exists() or self.path.stat().st_size == 0:
@@ -219,7 +233,7 @@ class Database:
             return
 
         try:
-            with sqlite3.connect(self.path, timeout=10) as connection:
+            with sqlite3.connect(self.path, timeout=10, factory=OwnedConnection) as connection:
                 connection.row_factory = sqlite3.Row
                 version = connection.execute("PRAGMA user_version").fetchone()[0]
                 if version > CURRENT_SCHEMA_VERSION:
