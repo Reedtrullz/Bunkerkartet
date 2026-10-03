@@ -31,3 +31,15 @@ def test_startup_failure_is_fail_closed(tmp_path):
     app=create_app(Settings(data_dir=directory))
     with pytest.raises((OSError,RuntimeError)):
         with TestClient(app): pass
+
+
+def test_started_client_context_owns_one_startup_and_one_shutdown(tmp_path,monkeypatch):
+    from started_client import StartedClient,close_started_clients
+    from app.db import Database
+    calls=[];initialize=Database.initialize
+    def tracked(database):calls.append('initialize');return initialize(database)
+    monkeypatch.setattr(Database,'initialize',tracked)
+    with StartedClient(create_app(Settings(data_dir=tmp_path,admin_token='synthetic'))) as api:
+        assert api.get('/api/ready').status_code==200
+    close_started_clients()
+    assert calls==['initialize']

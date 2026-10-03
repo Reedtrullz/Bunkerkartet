@@ -23,7 +23,8 @@ def test_image_runs_nonroot_with_synthetic_volume_and_reports_exact_readiness():
 
     name = "bunkerkartet-smoke-" + uuid.uuid4().hex[:10]
     volume = name + "-data"
-    version = "a" * 40
+    version = os.environ.get("BUNKERKARTET_SMOKE_VERSION") or os.environ.get("GITHUB_SHA") or "a" * 40
+    assert len(version)==40 and all(character in "0123456789abcdef" for character in version)
     created_volume = False
     started_container = False
     try:

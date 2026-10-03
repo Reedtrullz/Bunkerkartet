@@ -36,3 +36,14 @@ def test_expired_reader_cannot_read_or_mutate(tmp_path):
     issued=api.post('/api/pilots/readers',headers=auth(),json={'scopes':['sites:read'],'ttl_seconds':60}).json()
     with api.app.state.database.connect() as c:c.execute("UPDATE pilot_reader_credentials SET expires_at='2000-01-01T00:00:00Z'")
     assert api.get('/api/sites',headers={'Authorization':'Bearer '+issued['token']}).status_code==403
+
+
+def test_history_only_grant_can_discover_its_session_but_cannot_read_catalogue(tmp_path):
+    api=StartedClient(create_app(Settings(data_dir=tmp_path,admin_token='secret',pilot_readers_enabled=True)))
+    assert commit_previewed(api,package()).status_code==200
+    issued=api.post('/api/pilots/readers',headers=auth(),json={'scopes':['history:read'],'ttl_seconds':60}).json()
+    headers={'Authorization':'Bearer '+issued['token']}
+    assert api.get('/api/session',headers=headers).json()['role']=='reader'
+    assert api.get('/api/sites',headers=headers).status_code==403
+    assert api.get('/api/sites/1/history',headers=headers).status_code==200
+    assert api.get('/api/routes',headers=headers).status_code==403

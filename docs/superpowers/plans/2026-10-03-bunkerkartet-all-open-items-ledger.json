@@ -108,7 +108,7 @@
       "priority": "P1",
       "Acceptance Target": "A retained connection is demonstrably closed after success and exception paths; writes commit/rollback as before; repeated synthetic requests leave bounded connection ownership; migration/evidence tests remain passing.",
       "Scope Boundaries": "No ORM, pool, new database engine, or speculative async rewrite.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/main.py, scripts/verify_database.py",
       "tests": [
         "tests/test_db.py",
@@ -124,11 +124,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 2,
@@ -139,7 +141,7 @@
       "priority": "P1",
       "Acceptance Target": "Missing revisions fail validation; stale revisions return 409 without events or row changes; two distinct stale approach writes and a changed merge target reproduce one accepted write and one conflict; existing idempotent observations remain valid.",
       "Scope Boundaries": "No user-account system or universal transaction framework. Version/document the breaking API precondition for external clients.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js",
       "tests": [
         "tests/test_revision_contract.py",
@@ -155,11 +157,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 3,
@@ -170,7 +174,7 @@
       "priority": "P1",
       "Acceptance Target": "Streamed oversized PATCH/POST bodies receive 413; oversized warning/key elements and non-finite radius inputs receive controlled validation responses with no writes; normal historical imports and observations remain compatible; errors do not echo credential values.",
       "Scope Boundaries": "Reuse validators and existing request paths; no schema-wide framework. Keep URL and secret screening intact.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/imports.py",
       "tests": [
         "tests/test_json_input.py",
@@ -186,11 +190,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 4,
@@ -201,7 +207,7 @@
       "priority": "P1",
       "Acceptance Target": "Whitespace, sparse geometry, unknown access/confidence, retained warnings, and reordered peers yield the displayed effective values on readback; changed effects reject old previews; identical committed 1.0 packages still retry idempotently.",
       "Scope Boundaries": "This is the warranted shared helper, not a generic import engine. Preserve the original schema-1.0 payload hash and exact retry identity; effect-hash changes must be documented and require a fresh preview.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py",
       "tests": [
         "tests/test_import_effects.py",
@@ -217,11 +223,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 5,
@@ -232,7 +240,7 @@
       "priority": "P2",
       "Acceptance Target": "Synthetic `Æ/Ø/Å` upper/lower pairs, later same-URL excerpts, edited display names, and claim text are discoverable under the same filters; `%` and `_` behavior is documented/tested; rejected/merged visibility rules remain unchanged.",
       "Scope Boundaries": "No semantic/vector search, source fetching, or unrelated reclassification.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/enrichment.py",
       "tests": [
         "tests/test_content_editor.py",
@@ -250,11 +258,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 6,
@@ -265,7 +275,7 @@
       "priority": "P1",
       "Acceptance Target": "Controlled delayed responses cannot revert newer filters, route selection, or lock state; malformed 200 JSON is a recoverable error; aborted reads do not show failure alerts; last-good data is visibly stale rather than silently current.",
       "Scope Boundaries": "No global state library. Do not blindly retry mutations whose commit outcome is unknown, or assume browser abort cancels server writes.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/static/app.js",
       "tests": [
         "tests/test_browser_contracts.py"
@@ -281,9 +291,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 7,
@@ -296,7 +308,7 @@
       "priority": "P1",
       "Acceptance Target": "Slow calculation plus reorder/start/remove cannot yield apparently matching stale GPX; filtered-out saved stops remain visible; changed approach warning persists; repeated identical route request yields one saved plan; provider failures release request/limiter state.",
       "Scope Boundaries": "No automatic stop optimization. A stale saved route remains historical data, not current permission. The same request ID with changed inputs must conflict.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/db.py, app/static/app.js",
       "tests": [
         "tests/test_route_idempotency.py",
@@ -314,9 +326,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 8,
@@ -327,7 +341,7 @@
       "priority": "P1",
       "Acceptance Target": "Candidate imports with `access=public` but no reviewed approach are never presented as field-ready; a reviewed public viewpoint remains eligible even for a dangerous structure; no button bypasses rejected/merged/location-review guards; reasons are consistent in API and UI.",
       "Scope Boundaries": "Do not globally require structure `access=public`; preserve the public-approach distinction and existing conservative warnings.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js",
       "tests": [
         "tests/test_route_api.py",
@@ -343,11 +357,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 9,
@@ -358,7 +374,7 @@
       "priority": "P2",
       "Acceptance Target": "Invalid ordering/count and malformed finite values fail controllably; timeouts/quota responses do not expose provider credentials/body; semaphore slots always release; valid missing-index routes retain the existing uncontrolled-snapping warning.",
       "Scope Boundaries": "Keep stdlib HTTP and the current limiter; no distributed breaker or provider marketplace. Verify provider contract from official documentation when implementing.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/routes.py, app/main.py, app/static/app.js",
       "tests": [
         "tests/test_routes.py",
@@ -374,11 +390,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 10,
@@ -411,9 +429,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Real host preflight, exact image/backup/rollback coordinates and deployment remain unapplied.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 11,
@@ -427,7 +447,7 @@
       "priority": "P1",
       "Acceptance Target": "Exact failing scenario has a documented reproduction or clearly bounded non-reproduction; tests pass in reordered/repeated execution without shared mutation assumptions; injected faults yield actionable artifacts; no real catalogue or credentials enter artifacts.",
       "Scope Boundaries": "Do not solve timeouts by lengthening waits, deleting assertions or accepting rerun success as root-cause proof. Cross-browser expansion belongs to BK-22.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "tests/test_browser_smoke.py, tests/browser_server.py, .github/workflows/ci.yml",
       "tests": [
         "tests/test_browser_smoke.py",
@@ -445,9 +465,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 12,
@@ -461,7 +483,7 @@
       "priority": "P2",
       "Acceptance Target": "Real v8 fixture migrates to v9; current seed loads unchanged with all research states; persisted overrides survive restart; sources and claim IDs round-trip; stale edits fail; malformed stored content fails closed; rollback compatibility is documented and verified synthetically.",
       "Scope Boundaries": "Reuse this branch, not a second editor; do not replace main's JSON wholesale or delete newer curation-policy sections. No production content selection or status/coordinate promotion.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/enrichment.py, app/main.py, app/static/app.js, app/static/styles.css",
       "tests": [
         "tests/test_content_editor.py",
@@ -479,11 +501,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 13,
@@ -496,7 +520,7 @@
       "priority": "P2",
       "Acceptance Target": "Multiple independent questions attach to one site; deferral retains evidence; changes are revisioned/audited; only an explicit curator decision resolves an item; the public repository and ordinary exports omit private queue material.",
       "Scope Boundaries": "No automatic decisions, promotions, external fetching or public queue export. Start with one owner; assignment may be a label, not a user-management system.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/main.py, app/static/app.js, docs/CURATION_POLICY.md",
       "tests": [
         "tests/test_research_questions.py",
@@ -512,11 +536,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 14,
@@ -530,7 +556,7 @@
       "priority": "P2",
       "Acceptance Target": "Preview and commit effects agree; changed source/target produces 409; evidence/request IDs/history remain traceable; original keys resolve to an explicitly merged identity; unrelated/ambiguous records remain separate.",
       "Scope Boundaries": "No automatic merge, proximity-based identity decision, wholesale unmerge machinery or silent copying of source enrichment over target content. Warn or reject self-relations created by the merge.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/main.py, app/static/app.js",
       "tests": [
         "tests/test_merge_preview.py",
@@ -550,9 +576,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 15,
@@ -565,7 +593,7 @@
       "priority": "P2",
       "Acceptance Target": "Original fixtures/exact retries preserve their historical identity; new evidence round-trips and is visible before commit; absent rights are shown as unknown rather than permission; private review annotations are not included in ordinary catalogue exports.",
       "Scope Boundaries": "Do not infer new metadata for legacy evidence, copy full articles, retroactively rewrite hashes, or call an LLM from the app. Unknown remains a legitimate value.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/imports.py, app/main.py, research/validate_import.py, research/llm-import-prompt.md",
       "tests": [
         "tests/test_import_v11.py",
@@ -581,11 +609,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 16,
@@ -616,9 +646,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner chooses freshness interval; default policy remains disabled.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 17,
@@ -650,9 +682,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner applies actual source/field review criteria to real evidence.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 18,
@@ -665,7 +699,7 @@
       "priority": "P2",
       "Acceptance Target": "A synthetic feature/entrance/viewpoint/approach set is distinguishable without color alone; radius appears only when explicitly recorded; exports preserve role semantics; routes still target reviewed approaches, never merely the visually closest point.",
       "Scope Boundaries": "No entrance inference, surveyed polygon claims or new authoritative geometry. Unknown roles remain visibly unknown and none establishes permission.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js, app/static/styles.css",
       "tests": [
         "tests/test_geojson_export.py",
@@ -683,9 +717,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 19,
@@ -699,7 +735,7 @@
       "priority": "P2",
       "Acceptance Target": "Corrections are traceable, idempotent and conflict-safe; original events remain inspectable; withdrawn supporting evidence cannot silently justify new promotion; the browser clearly labels original versus effective assessment.",
       "Scope Boundaries": "No arbitrary deletion or silent retroactive rewriting of adopted site coordinates. Privacy deletion follows owner retention policy, not this provenance feature.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/main.py, app/static/app.js",
       "tests": [
         "tests/test_observation_workflows.py",
@@ -717,9 +753,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 20,
@@ -733,7 +771,7 @@
       "priority": "P2",
       "Acceptance Target": "Navigation and transient errors preserve unsent work within the session; stale reload never silently overwrites current data; successful sends clear only the corresponding draft; lock erases all private state and delayed callbacks cannot restore it.",
       "Scope Boundaries": "Do not persist credentials or private drafts in browser storage by default. Lock must erase drafts; opt-in durable field drafts belong to BK-30.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/static/app.js",
       "tests": [
         "tests/test_browser_contracts.py"
@@ -749,9 +787,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 21,
@@ -762,7 +802,7 @@
       "priority": "P2",
       "Acceptance Target": "Browser tests block CDN/tiles and still allow authentication, list/detail/review; errors distinguish map service from private API failure; recovery does not duplicate listeners/layers; vendored files match the pinned upstream release and license.",
       "Scope Boundaries": "No bulk tile downloads, tile proxy or full offline map service. Confirm provider terms before caching; preserve attribution and private API no-store behavior.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/static/index.html, app/static/app.js, app/static/vendor/leaflet/ (new), docs/DEPLOYMENT.md",
       "tests": [
         "tests/test_browser_contracts.py",
@@ -780,9 +820,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 22,
@@ -813,9 +855,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Manual screen-reader and physical mobile-device acceptance.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 23,
@@ -829,7 +873,7 @@
       "priority": "P2",
       "Acceptance Target": "Norwegian and English category aliases classify consistently; raw type remains inspectable; back/forward restores the intended surface/selection after auth; rejected records can be reviewed/restored without manually calling the API; URLs never contain credentials or personal route starts.",
       "Scope Boundaries": "No automatic historical identity normalization. Exclude tokens, precise browser location, private notes and evidence text from URLs; private bookmarks may remain in-session by default.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/static/app.js, app/static/index.html",
       "tests": [
         "tests/test_browser_contracts.py",
@@ -847,9 +891,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 24,
@@ -864,7 +910,7 @@
       "priority": "P2",
       "Acceptance Target": "Preview and downloaded membership/fields match; unknown geometry remains null; sensitive defaults exclude private queue/observation material and precise personal start; timestamps/currentness and permission caveats survive print/export; dossiers never promote statuses.",
       "Scope Boundaries": "Existing full private GeoJSON stays available and clearly named. This is not public publication, a complete backup, route safety certification or a license grant.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js, app/static/dossier.css (new)",
       "tests": [
         "tests/test_exchange_workflows.py",
@@ -884,9 +930,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 25,
@@ -919,9 +967,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Production restore/RTO under real host permissions remains unverified.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 26,
@@ -952,9 +1002,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner chooses RPO/RTO, encryption/offsite destination, schedule/retention and approves a real offsite restore. No automatic deletion/offsite transfer enabled.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 27,
@@ -969,7 +1021,7 @@
       "priority": "P2",
       "Acceptance Target": "Injected provider/database errors can be correlated to a safe error code and request ID; logs/artifacts pass credential/private-content canaries; rotation/retention is bounded; readiness cost is reported with dataset/hardware rather than an unsupported latency claim.",
       "Scope Boundaries": "No visitor analytics, tracing SaaS requirement, location tracking or high-cardinality coordinate metrics. Do not weaken readiness integrity claims without explicit replacement semantics.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/routes.py, app/config.py, docs/DEPLOYMENT.md",
       "tests": [
         "tests/test_diagnostics.py"
@@ -985,9 +1037,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 28,
@@ -1019,9 +1073,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Proposed main governance rules are inactive; owner must approve/apply required review and bypass policy. Python3.12 retained.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 29,
@@ -1036,7 +1092,7 @@
       "priority": "P3",
       "Acceptance Target": "Publish before/after measurements on fixed fixtures with a declared target before coding; observation retrieval is bounded per list rather than per site; 500-record import effects remain identical; map/filter/auth resets remain correct. If measurements show no worthwhile user impact, keep the probe and skip speculative optimization.",
       "Scope Boundaries": "No Redis, PostGIS, service split, vector index or generic repository layer. Do not cache private responses in shared/browser storage; do not trade evidence correctness for speed.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "scripts/benchmark_catalogue.py (new), app/main.py, app/static/app.js",
       "tests": [
         "tests/test_catalogue_quality.py"
@@ -1052,9 +1108,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 30,
@@ -1090,9 +1148,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Real-device IndexedDB exposure, field usability and erase policy; no tile caching.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 31,
@@ -1125,9 +1185,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Independently reviewed real attributed historical sample and useful navigation.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 32,
@@ -1165,9 +1227,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Actual reader scope/TTL and separate per-record publication rights/coordinate/membership approval. No publish/hosting action.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 33,
@@ -1180,7 +1244,7 @@
       "priority": "P1",
       "Acceptance Target": "Same-name/wrong-key fixtures, missing observation request index and broken foreign keys fail; valid legacy/current fixtures remain distinguishable; genuine corruption is not accepted as ready; scans never mutate inspected files.",
       "Scope Boundaries": "No generic schema-diff framework, automatic repair, production scans in this PR or guessed corrections to historical records. Report safe record handles and bounded categories, not private contents.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, scripts/verify_database.py, app/main.py",
       "tests": [
         "tests/test_schema_qualification.py",
@@ -1196,11 +1260,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 34,
@@ -1211,7 +1277,7 @@
       "priority": "P2",
       "Acceptance Target": "Multiple roles, legacy links, repeated imports and merge transfers yield unique evidence IDs; two historical titles remain attributable to their original package; genuinely distinct readings remain available; raw payloads/hashes are unchanged.",
       "Scope Boundaries": "Never collapse differing excerpts as duplicates or treat repeated URLs as independent corroboration. Unrecoverable metadata remains explicitly unknown; no URL normalization that changes original provenance.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/db.py",
       "tests": [
         "tests/test_import_api.py",
@@ -1227,11 +1293,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 35,
@@ -1242,7 +1310,7 @@
       "priority": "P2",
       "Acceptance Target": "Duplicate IDs across different sections fail with a safe field-level error; existing valid documents round-trip; section changes preserve identity; references to superseded or missing claims are explicitly handled, not rebound by list position.",
       "Scope Boundaries": "No globally unique identity service, automatic renumbering of existing public claims or second editor. A deleted/superseded claim reference remains traceable rather than reused for unrelated text.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/enrichment.py",
       "tests": [
         "tests/test_claim_identity.py",
@@ -1260,11 +1328,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 36,
@@ -1275,7 +1345,7 @@
       "priority": "P2",
       "Acceptance Target": "Top-level/nested duplicate keys fail in CLI, browser and API; legacy clean retries keep their hashes; malformed/nested files fail boundedly without dumping private excerpts into errors; preview and commit consume identical accepted semantics.",
       "Scope Boundaries": "No new parser dependency or retroactive hash redefinition. Retain existing streaming byte ceilings and model field limits; apply decoding consistently rather than adding a browser-only guard.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/json_input.py (new), app/main.py, app/enrichment.py, research/validate_import.py, app/static/app.js",
       "tests": [
         "tests/test_json_input.py",
@@ -1295,11 +1365,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 37,
@@ -1312,7 +1384,7 @@
       "priority": "P1",
       "Acceptance Target": "Invalid JSON, wrong-shape JSON, missing legacy fields and valid empty values have separate fixtures/states; one bad historical row does not conceal all healthy rows; unavailable records cannot be adopted/exported as verified data; logs contain no raw private payload.",
       "Scope Boundaries": "No destructive repair, silently regenerated routes or pretending withheld data is empty. Defaults remain acceptable only for fields whose contract genuinely defines absence as empty.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/main.py, app/enrichment.py",
       "tests": [
         "tests/test_stored_record_decoding.py",
@@ -1328,11 +1400,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 38,
@@ -1345,7 +1419,7 @@
       "priority": "P2",
       "Acceptance Target": "Every supported boundary rolls back or stops at a documented committed version, then resumes correctly; no duplicate history or lost IDs/hashes; future versions fail without writes; verifier qualification passes after successful completion.",
       "Scope Boundaries": "Keep existing repair logic unless a failing fixture identifies a defect; do not blindly enable foreign keys inside incompatible rebuild steps. No production migration or expensive combinatorial test matrix.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, tests/fixtures/migrations/ (new)",
       "tests": [
         "tests/test_migration_boundaries.py",
@@ -1361,11 +1435,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 39,
@@ -1378,7 +1454,7 @@
       "priority": "P2",
       "Acceptance Target": "Importing the module with a protected nonexistent data path creates nothing; explicitly started app initializes its selected synthetic directory; multiple test instances do not share defaults; startup failures remain fail-closed and container entrypoint smoke passes.",
       "Scope Boundaries": "No wholesale decomposition of the 2,000-line module, service layer or dependency container. Preserve the configured production invocation or migrate it with a tested compatibility path.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, tests/browser_server.py, Dockerfile",
       "tests": [
         "tests/test_app_lifecycle.py",
@@ -1394,11 +1470,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 40,
@@ -1409,7 +1487,7 @@
       "priority": "P1",
       "Acceptance Target": "Shell snippets parse in the documented shell, the maintained source quickstart reaches one idempotent synthetic commit, and examples never default to an authenticated production write; existing WIP/database remain outside the test directory.",
       "Scope Boundaries": "Do not switch this checkout, publish research packages, fetch secrets or install dependencies during discovery. No setup generator or new build system.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "README.md, research/README.md, docs/DEPLOYMENT.md",
       "tests": [
         "tests/test_research_quickstart.py"
@@ -1425,9 +1503,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 41,
@@ -1441,7 +1521,7 @@
       "priority": "P2",
       "Acceptance Target": "A synthetic client can discover auth and round-trip supported operations; null/unknown and 409/422 semantics are explicit; incompatible schema drift fails a focused check; legacy clients have a documented compatibility path.",
       "Scope Boundaries": "No GraphQL, generated SDK requirement, application framework change or broad response rewrite. Do not expose private records as documentation examples; credential values never appear in specs.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/imports.py, docs/API_CONTRACT.md (new)",
       "tests": [
         "tests/test_api_contract.py"
@@ -1457,9 +1537,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 42,
@@ -1488,9 +1570,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Actual owner token rotation and idle/hidden lock intervals remain unselected; restart rotation is synthetically tested.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 43,
@@ -1519,9 +1603,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Actual provider/egress/terms choice; default emits no tiles.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 44,
@@ -1535,7 +1621,7 @@
       "priority": "P2",
       "Acceptance Target": "Exact retries resolve to the same receipt; conflicting payloads remain rejected; record effects are traceable after later review/merge; unauthenticated access fails; aggregate counts distinguish source links from retained evidence items.",
       "Scope Boundaries": "No export of raw private package text by default, automatic rollback or rewriting legacy payloads. A ledger is an audit view, not a second import engine.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js",
       "tests": [
         "tests/test_import_v11.py",
@@ -1551,11 +1637,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 45,
@@ -1569,7 +1657,7 @@
       "priority": "P3",
       "Acceptance Target": "Downloaded/submitted subset matches selected keys and its own receipt; changing selection invalidates preview; referenced unselected keys remain unresolved rather than silently imported; original package/hash and later independent selections remain auditable.",
       "Scope Boundaries": "Never reuse the original batch ID for a different payload or make partial writes under one atomic batch. No automatic acceptance based on confidence, background ingestion or queue service.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/imports.py, app/static/app.js",
       "tests": [
         "tests/test_exchange_workflows.py",
@@ -1589,9 +1677,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 46,
@@ -1606,7 +1696,7 @@
       "priority": "P2",
       "Acceptance Target": "Older history remains reachable without duplicate/omitted IDs; comparisons distinguish missing from empty values; a stale compensating draft conflicts; restoring ordinary text never bypasses source, location-review or lifecycle guards.",
       "Scope Boundaries": "No event-sourcing rewrite, snapshot rollback of the whole site or automatic unmerge/trust/coordinate restoration. History gaps must be labeled rather than synthesized; consequential review still uses its protected workflow.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js",
       "tests": [
         "tests/test_curator_history.py",
@@ -1624,9 +1714,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 47,
@@ -1641,7 +1733,7 @@
       "priority": "P3",
       "Acceptance Target": "Contradictory claims coexist and are individually attributable; derived citations do not inflate independence; resolving a conflict records the reviewed references/reason; reopening a decision never silently changes status or approach permission.",
       "Scope Boundaries": "No probabilistic truth score, automatic source ranking, LLM adjudication or inference that a popular assertion grants access. Legacy claims stay readable without guessed opposition links.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/main.py, app/static/app.js",
       "tests": [
         "tests/test_research_questions.py",
@@ -1657,11 +1749,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 48,
@@ -1675,7 +1769,7 @@
       "priority": "P3",
       "Acceptance Target": "Several hypotheses can remain unresolved; comparison labels candidate versus current point; resolving a hypothesis does not bypass merge/location review; private discussion is absent from ordinary exports/public source.",
       "Scope Boundaries": "No invented hypothesis coordinates, auto-deduplication or conversion of hypotheses into trusted sites. Reuse the queue's private ownership and revision conventions rather than adding a general knowledge-graph engine.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/main.py, app/static/app.js",
       "tests": [
         "tests/test_research_questions.py",
@@ -1691,11 +1785,13 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 49,
@@ -1709,7 +1805,7 @@
       "priority": "P2",
       "Acceptance Target": "Two claims can cite different pages of one source; unknown locators remain absent, not guessed; editor/print/JSON round-trip the exact reference; private identifiers are included only in approved private outputs.",
       "Scope Boundaries": "No copying full documents, archive crawling, OCR pipeline or automatic locator validation. A locator's presence does not prove the source was read or supports the assertion.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/enrichment.py, app/main.py, app/static/app.js",
       "tests": [
         "tests/test_citation_locators.py",
@@ -1729,9 +1825,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 50,
@@ -1744,7 +1842,7 @@
       "priority": "P2",
       "Acceptance Target": "Markup, Unicode, control-character and boundary fixtures have explicit outcomes; exported GPX parses and satisfies its schema; GeoJSON retains stable IDs, null geometry and correct axis order; ordinary saved routes remain compatible.",
       "Scope Boundaries": "No broad sanitizer that silently changes historical names, new map engine or claim that valid GPX is a safe route. Preserve accepted provenance separately from export-safe labels.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/routes.py, app/main.py, tests/fixtures/gpx/ (new)",
       "tests": [
         "tests/test_routes.py",
@@ -1764,9 +1862,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 51,
@@ -1781,7 +1881,7 @@
       "priority": "P3",
       "Acceptance Target": "Synthetic export-edit-preview-commit round trips exactly; stale revisions, swapped/out-of-range coordinates and role changes fail clearly; unchanged rows cause no writes; reviewed coordinate changes trigger the same location-review state as native edits.",
       "Scope Boundaries": "No blind GeoJSON upsert, CRS guessing, trusted-status/approach edits through ordinary properties or automatic application of unfamiliar GIS attributes. Use an established conversion library only if a separately justified CRS extension is approved.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js",
       "tests": [
         "tests/test_exchange_workflows.py",
@@ -1801,9 +1901,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 52,
@@ -1818,7 +1920,7 @@
       "priority": "P2",
       "Acceptance Target": "One URL's linked claims/readings are discoverable without double-counting evidence; unused overlay sources remain visible as unused, not deleted; updating source review creates explicit follow-up suggestions rather than auto-demoting all dependent sites.",
       "Scope Boundaries": "No automatic URL canonicalization, citation-network scraping, background fetching or blanket truth/reliability score. Start with read-side reconciliation rather than merging source namespaces destructively.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js",
       "tests": [
         "tests/test_source_navigation.py",
@@ -1836,9 +1938,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 53,
@@ -1853,7 +1957,7 @@
       "priority": "P3",
       "Acceptance Target": "One observation can be attributed to a visit without changing its original identity; skipped questions remain open; future plans cannot masquerade as completed observations; session membership/revisions/retention are private and explicit.",
       "Scope Boundaries": "No tracking trail, attendance analytics, inferred visited status, emergency/check-in service or automatic trust promotion. Planning a visit is not permission; support a visit without any routing-provider call.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/main.py, app/static/app.js",
       "tests": [
         "tests/test_observation_workflows.py",
@@ -1871,9 +1975,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 54,
@@ -1887,7 +1993,7 @@
       "priority": "P3",
       "Acceptance Target": "Not-found/inaccessible outcomes render their scope and limits; no extra information is guessed for legacy notes; amendments retain original context; lifecycle decisions require independent explicit review even after repeated negative observations.",
       "Scope Boundaries": "No search/entry instructions, invented searched polygons, automatic rejection/destruction decisions or conversion of lack of evidence into proof of absence.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/db.py, app/static/app.js",
       "tests": [
         "tests/test_observation_workflows.py",
@@ -1905,9 +2011,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 55,
@@ -1922,7 +2030,7 @@
       "priority": "P3",
       "Acceptance Target": "Start/end/order are bound to one draft and saved route; identical start/end does not become a duplicated catalogue stop; GPX and provider waypoints agree; changing endpoint invalidates results; legacy one-way routes remain readable.",
       "Scope Boundaries": "No stop optimizer, new destination site records, inferred access or guarantee of a complete traversable loop. Extra endpoints are user-selected routing inputs, not verified structure locations.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/routes.py, app/main.py, app/db.py, app/static/app.js",
       "tests": [
         "tests/test_route_endpoints.py",
@@ -1942,9 +2050,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 56,
@@ -1959,7 +2069,7 @@
       "priority": "P3",
       "Acceptance Target": "Leg totals reconcile within documented provider semantics; missing segments remain unavailable; travel versus visit time is distinct; budget changes do not make old geometry appear newly computed; no hidden provider request occurs during manual edits.",
       "Scope Boundaries": "No guessed per-leg division of aggregate time, deadline guarantee, accessibility/safety rating, realtime weather/transit integration or automatic route optimization. Visit duration is an intention, not recorded dwell time.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/routes.py, app/main.py, app/static/app.js",
       "tests": [
         "tests/test_route_endpoints.py",
@@ -1979,9 +2089,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 57,
@@ -2014,9 +2126,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner opt-in walking profile; hiking remains default; no live routing call verified.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 58,
@@ -2031,7 +2145,7 @@
       "priority": "P3",
       "Acceptance Target": "Permission failure/stale fix leaves the draft usable; epoch/draft generation blocks obsolete callbacks; instrument accuracy and adopted feature radius remain different fields; no position is saved before an explicit observation submission.",
       "Scope Boundaries": "No watchPosition trail, background tracking, automatic feature coordinates or zero-radius inference. A distant feature's uncertainty must not be filled from the observer's GPS accuracy.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js",
       "tests": [
         "tests/test_observation_workflows.py",
@@ -2049,9 +2163,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 59,
@@ -2067,7 +2183,7 @@
       "priority": "P3",
       "Acceptance Target": "A synthetic full export reconstructs equivalent effective content/history in an isolated compatible app; missing/wrong-version/tampered members fail before acceptance; conflicts are previewed; the original workspace is untouched and exclusions are visible.",
       "Scope Boundaries": "No replacement for operational stopped-writer backups, automatic merge into a live database or public distribution. Never include environment files/tokens; enumerate exclusions and personal-data retention consequences.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "scripts/export_workspace.py (new), scripts/import_workspace.py (new), app/main.py",
       "tests": [
         "tests/test_workspace_exchange.py",
@@ -2089,9 +2205,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 60,
@@ -2106,7 +2224,7 @@
       "priority": "P2",
       "Acceptance Target": "Disjoint new seed claims are visible as proposals, conflicting local edits stay intact, removed referenced sources require a decision, and failed reconciliation preserves the original override; receipt identifies reviewed versions and resulting revision.",
       "Scope Boundaries": "No automatic text merge, repinning to hide drift, silent deletion of unused sources or modification of trust/access during code deployment. Legacy overrides without a known base are labeled and reviewed conservatively.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/db.py, app/enrichment.py, app/main.py, app/static/app.js",
       "tests": [
         "tests/test_seed_reconciliation.py",
@@ -2124,9 +2242,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 61,
@@ -2143,7 +2263,7 @@
       "priority": "P2",
       "Acceptance Target": "Fixed seeds replay identically; injected guard/hash/evidence regressions are detected; shortened failing traces become ordinary tests; a declared bounded CI runtime is measured before expanding the corpus.",
       "Scope Boundaries": "No new fuzzing framework, huge nightly corpus or using the production catalogue. Do not derive the oracle entirely from the function under test; a passing sequence suite is engineering proof, not historical truth.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "tests/test_action_sequences.py (new), tests/fixtures/sequences/ (new)",
       "tests": [
         "tests/test_seeded_sequences.py"
@@ -2159,9 +2279,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 62,
@@ -2177,7 +2299,7 @@
       "priority": "P3",
       "Acceptance Target": "Fixtures prove each dimension counts only its own evidence; unknown/overdue values remain distinct; filtered and total denominators are stated; drill-down membership matches counts; no dashboard action changes trust without explicit review.",
       "Scope Boundaries": "No visitor analytics, universal truth score, fabricated completion target or ranking uncertain places as safe destinations. Avoid a new analytics service; use existing bounded queries and owner-defined labels.",
-      "status": "locally verified; final PR verification pending",
+      "status": "PR verified; integrated draft review pending",
       "files": "app/main.py, app/static/app.js",
       "tests": [
         "tests/test_catalogue_quality.py",
@@ -2195,9 +2317,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 63,
@@ -2230,9 +2354,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Actual owner geography descriptor and scope; two synthetic descriptors qualified.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 64,
@@ -2264,9 +2390,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "No licensed raster or independent calibration review supplied. Affine receipt calculation is a synthetic prototype; established georeferencing workflow and opacity/swipe renderer are not delivered. Actual raster comparison remains blocked, never accepted.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     },
     {
       "id": 65,
@@ -2304,9 +2432,11 @@
         ],
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner rights/threat model, original/derived retention and budgets; real photo/offsite/full deployment acceptance remain pending. Synthetic byte/reference restore/deletion qualified.",
-        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB."
+        "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
+        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
       },
-      "issue_closed": false
+      "issue_closed": false,
+      "implementation_pr": 81
     }
   ],
   "pull_requests": [
@@ -2478,7 +2608,16 @@
     "primary_checkout": "Preserved historical dirty checkout and all private SQLite/WAL/SHM residue.",
     "pilots": "All activation flags/default media policies disabled.",
     "deployment": "No production deployment, owner credential rotation, offsite operation or publication performed.",
-    "raster": "BK64 remains a partial prototype, not implemented/accepted licensed raster comparison."
+    "raster": "BK64 remains a partial prototype, not implemented/accepted licensed raster comparison.",
+    "integrated_suite": "507 passed, 1 Docker skip;133.36s, schema16, source33377810be8174ae80f241e388e075c71d0460ad",
+    "linux_ci": {
+      "head": "33377810be8174ae80f241e388e075c71d0460ad",
+      "run": 37135136915,
+      "status": "success"
+    },
+    "current_image": "sha256:ad14565b5d750823b8ff3af00ef6043a17f832bd0d74efdd5197e1099930856a;schema16 Python3.12.14;nonroot populatedrestore1pass4.90s",
+    "remaining_source_followups": "History-only session introspection and idempotent test-lifespan ownership; focused auth contracts pass, final core/CI qualification pending.",
+    "final_local_core": "449 passed,1 Docker skip19.88s after lifecycle/introspection follow-up"
   },
   "original_pr_dispositions": [
     {
@@ -2500,6 +2639,28 @@
     {
       "number": 12,
       "disposition": "open; current head7782f15426eb722c810b0b083640d702c0cbcf3f CI37126707965 success; exact source A/B pending. Concurrent-WIP A/B is discarded as qualification."
+    }
+  ],
+  "implementation_prs": [
+    {
+      "number": 78,
+      "head": "cdb1c25734f8ed51559a073ad974f40e3b954053",
+      "status": "draft; exact-head CI success"
+    },
+    {
+      "number": 79,
+      "head": "4f2b7274b03a82014f05d36102191ed60f5ab265",
+      "status": "draft; exact-head CI success"
+    },
+    {
+      "number": 80,
+      "head": "94c76b570dc9e6558fa74658d2c08bce73e4ac27",
+      "status": "draft; exact-head CI success"
+    },
+    {
+      "number": 81,
+      "head": "33377810be8174ae80f241e388e075c71d0460ad",
+      "status": "draft; exact-head CI success;finalscopeintrospection/receiptupdatepending"
     }
   ]
 }

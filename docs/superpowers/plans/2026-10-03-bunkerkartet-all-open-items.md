@@ -1000,7 +1000,9 @@ Each conditional issue has a technical path above. If the owner declines a pilot
 
 ## Completion ledger and closure rule
 
-The [initialized planning ledger](2026-10-03-bunkerkartet-all-open-items-ledger.json) contains all 65 issue tasks, five PR dispositions and the dependency-safe wave order; every entry remains planned. During execution, extend each item with branch/PR, base/head SHA, test/CI receipt, acceptance evidence, owner/manual gate, schema/rollback compatibility, final disposition and readback URL.
+Execution was authorized after this frozen planning snapshot. See [execution results](2026-10-03-bunkerkartet-execution-results.md) and the current ledger for implemented scope, exact verification and remaining acceptance gates; the original task checklists below are preserved as planning requirements.
+
+The [initialized planning ledger](2026-10-03-bunkerkartet-all-open-items-ledger.json) contains all 65 issue tasks, five PR dispositions and the dependency-safe wave order; the original entries began planned. During execution, extend each item with branch/PR, base/head SHA, test/CI receipt, acceptance evidence, owner/manual gate, schema/rollback compatibility, final disposition and readback URL.
 
 Status vocabulary: planned → implementing → locally verified → PR verified → integrated → owner/manual acceptance pending → accepted. PRs may instead resolve as superseded or policy-declined with an explicit rationale. “Merged” alone is not “accepted”; “healthy” is not “deployed requested behavior.”
 

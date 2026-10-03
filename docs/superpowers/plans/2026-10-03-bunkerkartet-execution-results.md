@@ -8,7 +8,7 @@ The implementation uses the isolated `codex/bunkerkartet-all-items` worktree. Th
 
 The earlier foundations/editor/research draft stack #78 → #79 → #80 has passing exact-head Linux CI. The integrated schema16 backend, browser workflows, complete media exchanges and deployment tooling are delivered as its next draft. Draft implementation and synthetic proof do not establish production rollout, factual source correctness, owner trial, rights, device acceptance or approved publication.
 
-Local backend: 447 passed, one Docker skip before final image. Focused frontend: 22 smoke +25 browser contract +3 static checks passed; workflow browser9 passed; curator browser4 passed. The final combined suite, exact-head CI and current-image non-root restore/readiness proof are appended after completion. Python dependency consistency, four frontend syntax checks and Ansible syntax pass.
+Local backend: 447 passed, one Docker skip before final image. Focused frontend: 22 smoke +25 browser contract +3 static checks passed; workflow browser9 passed; curator browser4 passed. The combined suite passed507 tests with one Docker skip in133.36s. Linux CI for PR81 head33377810be8174ae80f241e388e075c71d0460ad succeeded in run37135136915, including test/browser/build/non-root container steps. The local current schema16 image separately passed the populated online/WAL snapshot, UID10001 restore/transaction, exact-version ready response and missing-auth503 proof (one test,4.90s). Later final-head changes receive their own receipts below. Python dependency consistency, four frontend syntax checks and Ansible syntax pass.
 
 The catalogue benchmark uses fixed synthetic 100/1000-site databases with two observations each. The actual full listing changed from301/3001 SQL statements to3/7, with the same109,827/1,102,225-byte payloads. On this local macOS/arm64 Python3.12 sample, response times were29.698/202.802ms and traced peak allocations1,128,228/7,720,660bytes. Observation projection hashes are identical; batching increases peak allocation. Schema16 synthetic readiness scans measured4.246–5.978ms at100 sites and8.441–8.682ms at1000 sites. Neither benchmark is a production latency claim.
 
@@ -26,3 +26,11 @@ Independent integration review reproduced and fixed scoped-reader access to priv
 - BK65: owner rights/threat model, metadata/original-retention/storage policy and actual media/offsite/deployment acceptance. Bounded decode/re-encode, metadata canaries, full bytes/references restore and explicit approved-deletion recovery are qualified with synthetic images only.
 
 All ordinary engineering entries retain their own test mapping in the ledger. These gates are not silently treated as accepted, and real credentials, private catalogue contents, offsite archives and field data were not used.
+
+## Current-image receipt
+
+Image `bunkerkartet:all-items-schema16` has local image identity `sha256:ad14565b5d750823b8ff3af00ef6043a17f832bd0d74efdd5197e1099930856a`, Python3.12.14 and schema16; the build used execution source33377810be8174ae80f241e388e075c71d0460ad. The app snapshot differs from local Python3.12.13, and both runtimes passed their applicable checks. Container volumes were synthetic and removed by the test; the smoke image is retained, with no pruning of unrelated images/volumes. This is local engineering proof, not an installed production digest or offsite recovery result.
+
+## Final lifecycle/introspection follow-up
+
+A sites/history credential can discover its own role/scopes/expiry without receiving a catalogue scope it was not granted. History-only grants still fail catalogue and private route reads. A focused regression also proved that the StartedClient helper initialized lifespan twice inside a `with` block; its owned entry/exit is now idempotent and the regression requires exactly one initialization. Container proof takes the requested full source SHA (or CI checkout SHA), rather than always using a synthetic constant. The revised backend suite passed449 tests with one Docker skip in19.88s. These follow-up changes are separately requalified on the final PR head.

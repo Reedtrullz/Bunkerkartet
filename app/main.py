@@ -1329,7 +1329,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 with database.connect() as c: grant = authorize_reader(c,credentials.credentials,None)
                 scope = "history:read" if request.url.path.endswith(("/events","/history")) else "sites:read"
-                grant.require_scope(scope)
+                if request.url.path != "/api/session":grant.require_scope(scope)
                 return grant
             except PermissionError:raise HTTPException(403,"reader credential is expired, revoked, or lacks this read scope")
         _require_admin(settings, f"Bearer {credentials.credentials}" if credentials else None)
