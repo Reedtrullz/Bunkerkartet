@@ -12,6 +12,12 @@ from app.imports import validate_import_package
 from app.main import create_app
 
 
+def observed_revision(api, path, headers):
+    site_path = '/'.join(path.split('/')[:4])
+    response = api.get(site_path, headers=headers)
+    return response.json().get('revision', 1)
+
+
 def package(batch_id="batch-1", *, name="Leira bunker", external_key="forum:1"):
     return {
         "schema_version": "1.0",
@@ -281,7 +287,7 @@ def test_merge_rejects_duplicate_observation_request_ids_without_rewriting(tmp_p
     response = api.post(
         "/api/sites/1/review",
         headers=auth(),
-        json={"action": "merge", "target_site_id": 2},
+        json={"expected_revision": observed_revision(api, "/api/sites/1/review", auth()), "target_expected_revision": observed_revision(api, f"/api/sites/{2}", auth()), "action": "merge", "target_site_id": 2},
     )
 
     assert response.status_code == 409
@@ -301,7 +307,7 @@ def test_parallel_reviews_have_one_commit_and_one_conflict(tmp_path):
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         responses = list(pool.map(
-            lambda _: api.post("/api/sites/1/review", headers=auth(), json={"action": "accept"}), range(2)
+            lambda _: api.post("/api/sites/1/review", headers=auth(), json={"expected_revision": observed_revision(api, "/api/sites/1/review", auth()), "action": "accept"}), range(2)
         ))
 
     assert sorted(response.status_code for response in responses) == [200, 409]
@@ -562,7 +568,7 @@ def test_merge_preserves_evidence_after_v1_migration(tmp_path, shared_url):
     response = api.post(
         f"/api/sites/{sites[0]['id']}/review",
         headers=auth(),
-        json={"action": "merge", "target_site_id": sites[1]["id"]},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{sites[0]['id']}/review", auth()), "target_expected_revision": observed_revision(api, f"/api/sites/{sites[1]["id"]}", auth()), "action": "merge", "target_site_id": sites[1]["id"]},
     )
 
     assert response.status_code == 200
@@ -637,7 +643,7 @@ def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
 
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
     assert api.post(
-        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "research"}
+        f"/api/sites/{site_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "research"}
     ).status_code == 200
     assert api.post(
         f"/api/sites/{site_id}/observations",
@@ -651,10 +657,10 @@ def test_import_preserves_trusted_fields_and_attaches_new_evidence(tmp_path):
     assert api.post(
         f"/api/sites/{site_id}/review",
         headers=auth(),
-        json={"action": "field_verify"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "field_verify"},
     ).status_code == 200
     assert api.post(
-        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "confirm"}
+        f"/api/sites/{site_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "confirm"}
     ).status_code == 200
 
     edited = api.patch(
@@ -849,13 +855,13 @@ def test_candidate_review_accept_reject_restore_and_duplicate_warning(tmp_path):
     assert preview.json()["summary"]["warnings"] == 2
 
     assert api.post(
-        f"/api/sites/{first_id}/review", headers=auth(), json={"action": "accept"}
+        f"/api/sites/{first_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{first_id}/review", auth()), "action": "accept"}
     ).json()["site"]["status"] == "likely"
     assert api.post(
-        f"/api/sites/{first_id}/review", headers=auth(), json={"action": "reject"}
+        f"/api/sites/{first_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{first_id}/review", auth()), "action": "reject"}
     ).json()["site"]["status"] == "rejected"
     assert api.post(
-        f"/api/sites/{first_id}/review", headers=auth(), json={"action": "restore"}
+        f"/api/sites/{first_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{first_id}/review", auth()), "action": "restore"}
     ).json()["site"]["status"] == "candidate"
 
 
@@ -867,7 +873,7 @@ def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
     researched = api.post(
         f"/api/sites/{site_id}/review",
         headers=auth(),
-        json={"action": "research"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "research"},
     )
     assert researched.status_code == 200
     assert researched.json()["site"]["status"] == "likely"
@@ -896,7 +902,7 @@ def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
     field_verified = api.post(
         f"/api/sites/{site_id}/review",
         headers=auth(),
-        json={"action": "field_verify"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "field_verify"},
     )
     assert field_verified.status_code == 200
     assert field_verified.json()["site"]["status"] == "field-verified"
@@ -904,7 +910,7 @@ def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
     confirmed = api.post(
         f"/api/sites/{site_id}/review",
         headers=auth(),
-        json={"action": "confirm"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "confirm"},
     )
     assert confirmed.status_code == 200
     assert confirmed.json()["site"]["status"] == "trusted"
@@ -912,7 +918,7 @@ def test_review_lifecycle_and_field_observation_are_recorded(tmp_path):
     downgrade = api.post(
         f"/api/sites/{site_id}/review",
         headers=auth(),
-        json={"action": "research"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "research"},
     )
     assert downgrade.status_code == 409
 
@@ -925,7 +931,7 @@ def test_review_exposes_explicit_approximate_and_destroyed_transitions(tmp_path)
     approximate = api.post(
         f"/api/sites/{site_id}/review",
         headers=auth(),
-        json={"action": "mark_approximate"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "mark_approximate"},
     )
     assert approximate.status_code == 200
     assert approximate.json()["site"]["status"] == "approximate"
@@ -933,14 +939,14 @@ def test_review_exposes_explicit_approximate_and_destroyed_transitions(tmp_path)
     researched = api.post(
         f"/api/sites/{site_id}/review",
         headers=auth(),
-        json={"action": "research"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "research"},
     )
     assert researched.status_code == 200
 
     destroyed = api.post(
         f"/api/sites/{site_id}/review",
         headers=auth(),
-        json={"action": "mark_destroyed"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "mark_destroyed"},
     )
     assert destroyed.status_code == 200
     assert destroyed.json()["site"]["status"] == "destroyed-or-filled"
@@ -952,12 +958,12 @@ def test_field_verification_requires_an_observation(tmp_path):
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     assert api.post(
-        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "research"}
+        f"/api/sites/{site_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "research"}
     ).status_code == 200
     response = api.post(
         f"/api/sites/{site_id}/review",
         headers=auth(),
-        json={"action": "field_verify"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "field_verify"},
     )
 
     assert response.status_code == 409
@@ -970,7 +976,7 @@ def test_field_verification_requires_a_found_observation(tmp_path):
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
 
     assert api.post(
-        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "research"}
+        f"/api/sites/{site_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "research"}
     ).status_code == 200
     assert api.post(
         f"/api/sites/{site_id}/observations",
@@ -979,7 +985,7 @@ def test_field_verification_requires_a_found_observation(tmp_path):
     ).status_code == 201
 
     response = api.post(
-        f"/api/sites/{site_id}/review", headers=auth(), json={"action": "field_verify"}
+        f"/api/sites/{site_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "field_verify"}
     )
 
     assert response.status_code == 409
@@ -997,16 +1003,16 @@ def test_observations_are_rejected_for_rejected_or_merged_sites(tmp_path):
     second_id = next(site["id"] for site in sites if site["external_key"] == "forum:2")
 
     assert api.post(
-        f"/api/sites/{first_id}/review", headers=auth(), json={"action": "reject"}
+        f"/api/sites/{first_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{first_id}/review", auth()), "action": "reject"}
     ).status_code == 200
     observation = {"observed_at": "2026-09-14", "outcome": "found", "note": "A feature was seen."}
     assert api.post(f"/api/sites/{first_id}/observations", headers=auth(), json=observation).status_code == 409
 
     assert api.post(
-        f"/api/sites/{first_id}/review", headers=auth(), json={"action": "restore"}
+        f"/api/sites/{first_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{first_id}/review", auth()), "action": "restore"}
     ).status_code == 200
     assert api.post(
-        f"/api/sites/{second_id}/review", headers=auth(), json={"action": "merge", "target_site_id": first_id}
+        f"/api/sites/{second_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{second_id}/review", auth()), "target_expected_revision": observed_revision(api, f"/api/sites/{first_id}", auth()), "action": "merge", "target_site_id": first_id}
     ).status_code == 200
     assert api.post(f"/api/sites/{second_id}/observations", headers=auth(), json=observation).status_code == 409
 
@@ -1106,7 +1112,7 @@ def test_found_observation_coordinate_can_be_adopted_with_audit_event(tmp_path):
     adopted = api.post(
         f"/api/sites/{site_id}/observations/{observation_id}/adopt-location",
         headers=auth(),
-    )
+        json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/observations/{observation_id}/adopt-location", auth())})
 
     assert adopted.status_code == 200
     assert adopted.json()["site"]["latitude"] == 63.401
@@ -1133,15 +1139,15 @@ def test_adopting_new_feature_coordinate_on_trusted_site_requires_location_revie
     api = client(tmp_path)
     assert commit_previewed(api, package()).status_code == 200
     site_id = api.get("/api/sites", headers=auth()).json()[0]["id"]
-    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"action": "research"}).status_code == 200
+    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "research"}).status_code == 200
     baseline = api.post(
         f"/api/sites/{site_id}/observations", headers=auth(), json={
             "observed_at": "2026-09-14", "outcome": "found", "note": "Feature confirmed."
         }
     )
     assert baseline.status_code == 201
-    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"action": "field_verify"}).status_code == 200
-    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"action": "confirm"}).status_code == 200
+    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "field_verify"}).status_code == 200
+    assert api.post(f"/api/sites/{site_id}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/review", auth()), "action": "confirm"}).status_code == 200
     observation_id = api.post(
         f"/api/sites/{site_id}/observations", headers=auth(), json={
             "observed_at": "2026-09-14", "outcome": "found", "note": "New feature point.",
@@ -1151,13 +1157,13 @@ def test_adopting_new_feature_coordinate_on_trusted_site_requires_location_revie
 
     adopted = api.post(
         f"/api/sites/{site_id}/observations/{observation_id}/adopt-location", headers=auth()
-    )
+    , json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/observations/{observation_id}/adopt-location", auth())})
 
     assert adopted.status_code == 200
     assert adopted.json()["site"]["location_review_required"] == 1
     repeated = api.post(
         f"/api/sites/{site_id}/observations/{observation_id}/adopt-location", headers=auth()
-    )
+    , json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/observations/{observation_id}/adopt-location", auth())})
     assert repeated.status_code == 200
     assert repeated.json()["site"]["location_review_required"] == 1
 
@@ -1189,10 +1195,10 @@ def test_only_found_observation_with_coordinates_can_be_adopted(tmp_path):
 
     assert api.post(
         f"/api/sites/{site_id}/observations/{not_found}/adopt-location", headers=auth()
-    ).status_code == 409
+    , json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/observations/{not_found}/adopt-location", auth())}).status_code == 409
     assert api.post(
         f"/api/sites/{site_id}/observations/{no_coordinate}/adopt-location", headers=auth()
-    ).status_code == 409
+    , json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/observations/{no_coordinate}/adopt-location", auth())}).status_code == 409
 
 
 def test_adoption_requires_feature_role_and_explicit_radius(tmp_path):
@@ -1218,10 +1224,10 @@ def test_adoption_requires_feature_role_and_explicit_radius(tmp_path):
 
     assert api.post(
         f"/api/sites/{site_id}/observations/{missing_radius}/adopt-location", headers=auth()
-    ).status_code == 409
+    , json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/observations/{missing_radius}/adopt-location", auth())}).status_code == 409
     assert api.post(
         f"/api/sites/{site_id}/observations/{entrance}/adopt-location", headers=auth()
-    ).status_code == 409
+    , json={"expected_revision": observed_revision(api, f"/api/sites/{site_id}/observations/{entrance}/adopt-location", auth())}).status_code == 409
 
 
 def test_field_priority_returns_only_public_sites_in_research_order(tmp_path):
@@ -1405,7 +1411,7 @@ def test_merge_transfers_evidence_without_duplicate_failure(tmp_path):
     response = api.post(
         f"/api/sites/{sites[0]['id']}/review",
         headers=auth(),
-        json={"action": "merge", "target_site_id": sites[1]["id"]},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{sites[0]['id']}/review", auth()), "target_expected_revision": observed_revision(api, f"/api/sites/{sites[1]["id"]}", auth()), "action": "merge", "target_site_id": sites[1]["id"]},
     )
 
     assert response.status_code == 200
@@ -1426,19 +1432,19 @@ def test_merged_sites_cannot_be_reviewed_or_used_as_merge_targets(tmp_path):
     merged = api.post(
         f"/api/sites/{sites[0]['id']}/review",
         headers=auth(),
-        json={"action": "merge", "target_site_id": sites[1]["id"]},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{sites[0]['id']}/review", auth()), "target_expected_revision": observed_revision(api, f"/api/sites/{sites[1]["id"]}", auth()), "action": "merge", "target_site_id": sites[1]["id"]},
     )
     assert merged.status_code == 200
 
     cannot_review = api.post(
         f"/api/sites/{sites[0]['id']}/review",
         headers=auth(),
-        json={"action": "restore"},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{sites[0]['id']}/review", auth()), "action": "restore"},
     )
     assert cannot_review.status_code == 409
 
     target_rejected = api.post(
-        f"/api/sites/{sites[1]['id']}/review", headers=auth(), json={"action": "reject"}
+        f"/api/sites/{sites[1]['id']}/review", headers=auth(), json={"expected_revision": observed_revision(api, f"/api/sites/{sites[1]['id']}/review", auth()), "action": "reject"}
     )
     assert target_rejected.status_code == 200
 
@@ -1452,6 +1458,6 @@ def test_merged_sites_cannot_be_reviewed_or_used_as_merge_targets(tmp_path):
     cannot_merge = api.post(
         f"/api/sites/{third_id}/review",
         headers=auth(),
-        json={"action": "merge", "target_site_id": sites[1]["id"]},
+        json={"expected_revision": observed_revision(api, f"/api/sites/{third_id}/review", auth()), "target_expected_revision": observed_revision(api, f"/api/sites/{sites[1]["id"]}", auth()), "action": "merge", "target_site_id": sites[1]["id"]},
     )
     assert cannot_merge.status_code == 404

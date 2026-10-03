@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 from typing import Literal
@@ -92,7 +93,7 @@ def _claim_payload(claim: ResearchClaim, sources: dict[str, ResearchSource]) -> 
 def load_site_enrichment(path: Path = ENRICHMENT_PATH) -> dict[str, dict[str, object]]:
     try:
         raw = decode_json_strict(path.read_bytes(), max_bytes=2 * 1024 * 1024)
-        document = ResearchDocument.model_validate_json(__import__("json").dumps(raw))
+        document = ResearchDocument.model_validate_json(json.dumps(raw))
         if len({site.external_key for site in document.sites}) != len(document.sites):
             raise ValueError("site enrichment keys must be unique")
     except (OSError, ValueError) as error:
