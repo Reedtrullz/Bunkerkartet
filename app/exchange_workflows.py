@@ -823,6 +823,8 @@ def install_exchange_routes(
             proposed = _parse_geojson_point(edited.get("geometry"))
             old_geometry = original["geometry"]
             old = old_geometry["coordinates"] if isinstance(old_geometry, Mapping) else None
+            if old is not None and old[0] != old[1] and proposed == [old[1],old[0]]:
+                raise HTTPException(status_code=422,detail="GIS coordinate axes appear swapped; review longitude then latitude explicitly")
             if proposed is None and old is not None:
                 raise HTTPException(status_code=422, detail="GIS edits cannot silently remove a stored coordinate")
             if proposed != old:

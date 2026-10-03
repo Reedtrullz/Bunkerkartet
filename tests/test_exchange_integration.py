@@ -27,6 +27,10 @@ def test_gis_native_guard_is_atomic_stale_safe_and_unchanged_rows_do_not_write(t
     unchanged=api.post(path+'edit-previews',headers=auth(),json=body).json()
     assert api.post(path+'edit-commits',headers=auth(),json={**body,'preview_hash':unchanged['preview_hash']}).json()['updated']==0
     assert api.get('/api/sites/1',headers=auth()).json()['revision']==1
+    swapped=deepcopy(body);swapped['edited_features'][0]['geometry']['coordinates']=list(reversed(pack['features'][0]['geometry']['coordinates']))
+    rejected=api.post(path+'edit-previews',headers=auth(),json=swapped)
+    assert rejected.status_code==422 and 'swapped' in rejected.text
+    assert api.get('/api/sites/1',headers=auth()).json()['revision']==1
     body['edited_features'][0]['geometry']['coordinates']=[10.41,63.41]
     effect=api.post(path+'edit-previews',headers=auth(),json=body).json()
     applied=api.post(path+'edit-commits',headers=auth(),json={**body,'preview_hash':effect['preview_hash']})
