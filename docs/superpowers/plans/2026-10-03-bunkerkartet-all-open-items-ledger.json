@@ -125,7 +125,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -158,7 +158,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -191,7 +191,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -224,7 +224,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -259,7 +259,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -292,7 +292,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -327,7 +327,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -358,7 +358,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -391,7 +391,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -430,7 +430,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Real host preflight, exact image/backup/rollback coordinates and deployment remain unapplied.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -466,7 +466,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -502,7 +502,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -537,7 +537,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -577,7 +577,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -610,7 +610,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -647,7 +647,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner chooses freshness interval; default policy remains disabled.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -683,7 +683,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner applies actual source/field review criteria to real evidence.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -718,7 +718,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -754,7 +754,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -788,7 +788,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -821,7 +821,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -856,7 +856,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Manual screen-reader and physical mobile-device acceptance.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -892,7 +892,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -931,7 +931,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -968,7 +968,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Production restore/RTO under real host permissions remains unverified.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1003,7 +1003,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner chooses RPO/RTO, encryption/offsite destination, schedule/retention and approves a real offsite restore. No automatic deletion/offsite transfer enabled.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1038,7 +1038,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1074,7 +1074,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Proposed main governance rules are inactive; owner must approve/apply required review and bypass policy. Python3.12 retained.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1109,7 +1109,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1149,7 +1149,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Real-device IndexedDB exposure, field usability and erase policy; no tile caching.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1186,7 +1186,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Independently reviewed real attributed historical sample and useful navigation.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1228,7 +1228,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Actual reader scope/TTL and separate per-record publication rights/coordinate/membership approval. No publish/hosting action.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1261,7 +1261,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1294,7 +1294,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1329,7 +1329,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1366,7 +1366,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1401,7 +1401,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1436,7 +1436,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1471,7 +1471,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1504,7 +1504,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1538,7 +1538,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1571,7 +1571,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Actual owner token rotation and idle/hidden lock intervals remain unselected; restart rotation is synthetically tested.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1604,7 +1604,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Actual provider/egress/terms choice; default emits no tiles.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1638,7 +1638,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1678,7 +1678,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1715,7 +1715,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1750,7 +1750,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1786,7 +1786,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "execution_branch": "codex/bunkerkartet-all-items",
       "schema_version": 16,
@@ -1826,7 +1826,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1863,7 +1863,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1902,7 +1902,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1939,7 +1939,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -1976,7 +1976,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2012,7 +2012,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2051,7 +2051,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2090,7 +2090,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2127,7 +2127,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner opt-in walking profile; hiking remains default; no live routing call verified.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2164,7 +2164,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2206,7 +2206,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2243,7 +2243,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2280,7 +2280,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2318,7 +2318,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Final exact-head integrated CI and review; no automatic issue closure.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2355,7 +2355,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Actual owner geography descriptor and scope; two synthetic descriptors qualified.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2391,7 +2391,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "No licensed raster or independent calibration review supplied. Affine receipt calculation is a synthetic prototype; established georeferencing workflow and opacity/swipe renderer are not delivered. Actual raster comparison remains blocked, never accepted.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2433,7 +2433,7 @@
         "scope": "Synthetic local engineering evidence. Final exact-head CI and browser/container receipts recorded in execution delivery report.",
         "acceptance_pending": "Owner rights/threat model, original/derived retention and budgets; real photo/offsite/full deployment acceptance remain pending. Synthetic byte/reference restore/deletion qualified.",
         "rollback": "Schema16 requires a compatible prior database/image pair; old images must not be pointed at the migrated DB.",
-        "linux_ci": "PR81 head33377810be8174ae80f241e388e075c71d0460ad run37135136915 success; final followuphead requalification pending."
+        "linux_ci": "PR81 head36be1f086f587571b60cc11ed55e6604f41ef48e run37135841265 success; final dependency merge receives separate exact-head qualification."
       },
       "issue_closed": false,
       "implementation_pr": 81
@@ -2603,7 +2603,7 @@
     ]
   },
   "delivery": {
-    "backend_suite": "447 passed, 1 Docker skip (2026-10-03 local schema16)",
+    "backend_suite": "449 passed,1 Docker skip after lifecycle/introspection follow-up; subsequent upgraded dependency run also includes9 workflow browser tests.",
     "catalogue": "100/1000 sites: integrated listing 3/7 SQL statements vs301/3001 baseline; identical payloads; traced memory increase recorded.",
     "primary_checkout": "Preserved historical dirty checkout and all private SQLite/WAL/SHM residue.",
     "pilots": "All activation flags/default media policies disabled.",
@@ -2611,13 +2611,13 @@
     "raster": "BK64 remains a partial prototype, not implemented/accepted licensed raster comparison.",
     "integrated_suite": "507 passed, 1 Docker skip;133.36s, schema16, source33377810be8174ae80f241e388e075c71d0460ad",
     "linux_ci": {
-      "head": "33377810be8174ae80f241e388e075c71d0460ad",
-      "run": 37135136915,
-      "status": "success"
+      "head": "36be1f086f587571b60cc11ed55e6604f41ef48e",
+      "run": 37135841265,
+      "status": "success; subsequent dependency merge receives separate final-head qualification"
     },
     "current_image": "sha256:ad14565b5d750823b8ff3af00ef6043a17f832bd0d74efdd5197e1099930856a;schema16 Python3.12.14;nonroot populatedrestore1pass4.90s",
-    "remaining_source_followups": "History-only session introspection and idempotent test-lifespan ownership; focused auth contracts pass, final core/CI qualification pending.",
-    "final_local_core": "449 passed,1 Docker skip19.88s after lifecycle/introspection follow-up"
+    "remaining_source_followups": "No pending source follow-ups; final integrated dependency head CI and current-image receipts are required before handoff.",
+    "final_local_core": "458 passed,1 Docker skip38.01s at source0bc4665aa2ba20cdbf89025aeb341c83edc1de22 with httpx2/httpcore2 2.13.1, including9 workflow browser tests."
   },
   "original_pr_dispositions": [
     {
@@ -2638,7 +2638,7 @@
     },
     {
       "number": 12,
-      "disposition": "open; current head7782f15426eb722c810b0b083640d702c0cbcf3f CI37126707965 success; exact source A/B pending. Concurrent-WIP A/B is discarded as qualification."
+      "disposition": "merged36f8628a1b2e4382c2ec2250497e37903cc737e5; qualified exact PR head7782f15426eb722c810b0b083640d702c0cbcf3f CI37126707965 and isolated paired source archive. Both versions146 core pass, upgrade22 smoke pass twice; baseline-only intermittent timeout passed matched rerun."
     }
   ],
   "implementation_prs": [
@@ -2659,8 +2659,8 @@
     },
     {
       "number": 81,
-      "head": "33377810be8174ae80f241e388e075c71d0460ad",
-      "status": "draft; exact-head CI success;finalscopeintrospection/receiptupdatepending"
+      "head": "36be1f086f587571b60cc11ed55e6604f41ef48e",
+      "status": "draft; exact-head CI success, dependency merge receives separate final-head qualification recorded on PR and final receipt."
     }
   ]
 }

@@ -4,7 +4,7 @@ This execution covers all 65 original open issue identities BK01–BK65 (#13–7
 
 ## Delivery and verification
 
-The implementation uses the isolated `codex/bunkerkartet-all-items` worktree. The historical primary checkout, modified README and private SQLite/WAL/SHM residue are preserved. Existing dependency PRs #7, #9 and #11 are merged after head qualification; #1 is closed in favor of the retained Python3.12 runtime policy. PR12's current head has passing CI; final qualification uses an exact-source paired environment comparison, separately from discarded concurrent-WIP browser runs.
+The implementation uses the isolated `codex/bunkerkartet-all-items` worktree. The historical primary checkout, modified README and private SQLite/WAL/SHM residue are preserved. Existing dependency PRs #7, #9, #11 and #12 are merged after head qualification; #1 is closed in favor of the retained Python3.12 runtime policy. PR12 was merged only after exact-head CI and the isolated paired source comparison below, separately from discarded concurrent-WIP browser runs.
 
 The earlier foundations/editor/research draft stack #78 → #79 → #80 has passing exact-head Linux CI. The integrated schema16 backend, browser workflows, complete media exchanges and deployment tooling are delivered as its next draft. Draft implementation and synthetic proof do not establish production rollout, factual source correctness, owner trial, rights, device acceptance or approved publication.
 
@@ -34,3 +34,16 @@ Image `bunkerkartet:all-items-schema16` has local image identity `sha256:ad14565
 ## Final lifecycle/introspection follow-up
 
 A sites/history credential can discover its own role/scopes/expiry without receiving a catalogue scope it was not granted. History-only grants still fail catalogue and private route reads. A focused regression also proved that the StartedClient helper initialized lifespan twice inside a `with` block; its owned entry/exit is now idempotent and the regression requires exactly one initialization. Container proof takes the requested full source SHA (or CI checkout SHA), rather than always using a synthetic constant. The revised backend suite passed449 tests with one Docker skip in19.88s. These follow-up changes are separately requalified on the final PR head.
+
+## Final dependency and source qualification
+
+PR12 exact head7782f15426eb722c810b0b083640d702c0cbcf3f passed CI37126707965 and was merged as36f8628a1b2e4382c2ec2250497e37903cc737e5. The isolated read-only source archive had tree5aff8ab40843a5c84d902e0199d78246ea895027 and SHA2564839ac95ca470a59f7a6498715f3af89610ae83d70be73a09c7591256cb0c6e0. Python3.12.13, Playwright1.63.0/Chromium1243 and other resolved distributions matched; only httpx2 and its required matching httpcore2 pin differed. Both pip checks passed.
+
+| Package pair | Core | Smoke1 | Smoke2 | Matched operator-flow rerun |
+|---|---|---|---|---|
+|2.12.0|146 pass,4.22s|22 pass,42.01s|21 pass,1 timeout,74.86s|1 pass,6.12s|
+|2.13.1|146 pass,4.68s|22 pass,42.99s|22 pass,41.12s|1 pass,4.23s|
+
+The baseline-only timeout did not reproduce. These suites provide no reproducible upgrade regression; one intermittent baseline failure limits causal confidence. An initial core collection harness error from the read-only default data path was corrected by explicit isolated BUNKERKARTET_DATA_DIR. Prior concurrent-WIP comparisons are excluded. Run-owned archives/environments were cleaned and unrelated daemons preserved.
+
+Lifecycle/introspection source36be1f086f587571b60cc11ed55e6604f41ef48e passed Linux CI37135841265. After merging PR12, source0bc4665aa2ba20cdbf89025aeb341c83edc1de22 passed458 tests with one Docker skip in38.01s (449 core/static plus9 workflow browser tests) with httpx2/httpcore2 2.13.1, and pip check. Final exact-head CI and rebuilt-image receipts are linked from the published PR; this document records prior immutable source qualifications without a self-referencing commit hash.
