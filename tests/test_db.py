@@ -7,6 +7,34 @@ import app.db as db_module
 from app.db import CURRENT_SCHEMA_VERSION, SCHEMA, Database
 
 
+def test_connection_context_closes_after_commit_and_rollback(tmp_path):
+    database = Database(tmp_path / "owned.sqlite3")
+    database.initialize()
+    with database.connect() as committed:
+        committed.execute("CREATE TABLE ownership_probe (value TEXT)")
+        committed.execute("INSERT INTO ownership_probe VALUES ('committed')")
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        committed.execute("SELECT 1")
+    with pytest.raises(RuntimeError, match="rollback"):
+        with database.connect() as rolled_back:
+            rolled_back.execute("INSERT INTO ownership_probe VALUES ('rolled back')")
+            raise RuntimeError("rollback")
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        rolled_back.execute("SELECT 1")
+    with database.connect() as check:
+        assert [row[0] for row in check.execute("SELECT value FROM ownership_probe")] == ["committed"]
+
+
+def test_explicit_transaction_always_closes(tmp_path):
+    database = Database(tmp_path / "transaction.sqlite3")
+    database.initialize()
+    for _ in range(20):
+        with database.transaction() as connection:
+            assert connection.execute("SELECT 1").fetchone()[0] == 1
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connection.execute("SELECT 1")
+
+
 def test_database_initialization_creates_v1_tables(tmp_path):
     database = Database(tmp_path / "bunkerkartet.sqlite3")
     database.initialize()

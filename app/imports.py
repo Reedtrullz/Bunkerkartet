@@ -95,7 +95,7 @@ def safe_validation_errors(errors: list[dict[str, object]]) -> list[dict[str, ob
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
 
 
 class Geometry(StrictModel):
@@ -165,6 +165,13 @@ class ImportRecord(StrictModel):
     def limit_warning_length(cls, value: list[str]) -> list[str]:
         if any(len(warning) > 1000 for warning in value):
             raise ValueError("warnings must be at most 1000 characters each")
+        return value
+
+    @field_validator("related_site_keys")
+    @classmethod
+    def limit_related_keys(cls, value: list[str]) -> list[str]:
+        if any(not key.strip() or len(key) > 300 for key in value):
+            raise ValueError("related keys must be nonblank and at most 300 characters")
         return value
 
     @model_validator(mode="after")

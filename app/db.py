@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import math
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -189,17 +190,31 @@ def canonical_payload_hash(payload: dict[str, object]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+class OwnedConnection(sqlite3.Connection):
+    """A transaction context owns both completion and connection lifetime."""
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 class Database:
     def __init__(self, path: Path | str):
         self.path = Path(path)
 
     def connect(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.path, timeout=10)
+        connection = sqlite3.connect(self.path, timeout=10, factory=OwnedConnection)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA journal_mode = WAL")
         return connection
+
+    def transaction(self) -> sqlite3.Connection:
+        """Open a commit/rollback/close context; connect remains compatible."""
+        return self.connect()
 
     def initialize(self) -> None:
         if not self.path.exists() or self.path.stat().st_size == 0:
@@ -219,7 +234,7 @@ class Database:
             return
 
         try:
-            with sqlite3.connect(self.path, timeout=10) as connection:
+            with sqlite3.connect(self.path, timeout=10, factory=OwnedConnection) as connection:
                 connection.row_factory = sqlite3.Row
                 version = connection.execute("PRAGMA user_version").fetchone()[0]
                 if version > CURRENT_SCHEMA_VERSION:
@@ -277,7 +292,66 @@ def required_schema_errors(
             missing.discard("confidence")
         if missing:
             errors.append(table)
-    return errors
+    if errors:
+        return errors
+    unique_keys = {
+        "sites": [("external_key",)], "sources": [("url",)],
+        "evidence": [("site_id", "source_id", "role")],
+        "import_batches": [("batch_id",)], "import_records": [("batch_id", "external_key")],
+        "evidence_items": [("legacy_evidence_id",), ("import_record_id", "source_index")],
+        "site_relations": [("site_id", "related_external_key", "relation_kind")],
+    }
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    if version >= 8:
+        unique_keys["field_observations"] = [("site_id", "request_id")]
+    foreign_keys = {
+        "sites": [("merged_into_id", "sites", "id", "NO ACTION")],
+        "evidence": [("site_id", "sites", "id", "CASCADE"), ("source_id", "sources", "id", "CASCADE")],
+        "import_records": [("batch_id", "import_batches", "batch_id", "CASCADE"), ("site_id", "sites", "id", "SET NULL")],
+        "site_events": [("site_id", "sites", "id", "CASCADE")],
+        "field_observations": [("site_id", "sites", "id", "CASCADE")],
+        "evidence_items": [("site_id", "sites", "id", "CASCADE"), ("source_id", "sources", "id", "CASCADE"), ("import_record_id", "import_records", "id", "NO ACTION")],
+        "site_relations": [("site_id", "sites", "id", "CASCADE")],
+    }
+    if version >= 6:
+        foreign_keys["evidence_items"].append(("legacy_evidence_id", "evidence", "id", "SET NULL"))
+    for table in required_schema:
+        columns = list(connection.execute(f"PRAGMA table_info({table})"))
+        primary = [row for row in columns if row[5]]
+        if len(primary) != 1 or primary[0][1] != "id" or primary[0][2].upper() != "INTEGER":
+            errors.append(f"{table}:primary_key")
+        indexes = set()
+        for index in connection.execute(f"PRAGMA index_list({table})"):
+            if index[2] and not index[4]:
+                name = index[1].replace('"', '""')
+                indexes.add(tuple(row[2] for row in connection.execute(f'PRAGMA index_info("{name}")')))
+        for key in unique_keys.get(table, []):
+            if key not in indexes: errors.append(f"{table}:unique_key")
+        actual_fk = {(row[3], row[2], row[4], row[6].upper()) for row in connection.execute(f"PRAGMA foreign_key_list({table})")}
+        for key in foreign_keys.get(table, []):
+            if key not in actual_fk: errors.append(f"{table}:foreign_key")
+    # Old migration repair paths deliberately handle historical orphans; current
+    # workspaces must satisfy these invariants before being declared ready.
+    if version >= CURRENT_SCHEMA_VERSION:
+        if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            errors.append("records:foreign_key")
+        invalid_site = connection.execute("""
+            SELECT id FROM sites WHERE
+                (latitude IS NULL) != (longitude IS NULL) OR
+                latitude NOT BETWEEN -90 AND 90 OR longitude NOT BETWEEN -180 AND 180 OR
+                (approach_latitude IS NULL) != (approach_longitude IS NULL) OR
+                approach_latitude NOT BETWEEN -90 AND 90 OR approach_longitude NOT BETWEEN -180 AND 180 OR
+                typeof(revision) != 'integer' OR revision < 1 OR
+                status NOT IN ('candidate','approximate','likely','trusted','field-verified','destroyed-or-filled','rejected') OR
+                access NOT IN ('public','private','restricted','unknown','permission_required','dangerous','unsafe')
+            LIMIT 1
+        """).fetchone()
+        if invalid_site: errors.append(f"sites:{invalid_site[0]}:semantic")
+        invalid_observation = connection.execute("""SELECT id FROM field_observations WHERE
+            (latitude IS NULL) != (longitude IS NULL) OR latitude NOT BETWEEN -90 AND 90 OR
+            longitude NOT BETWEEN -180 AND 180 LIMIT 1""").fetchone()
+        if invalid_observation: errors.append(f"field_observations:{invalid_observation[0]}:semantic")
+    return list(dict.fromkeys(errors))
 
 
 def _migrate_v1(connection: sqlite3.Connection) -> None:
@@ -597,13 +671,42 @@ def load_json(value: str | None, default: object) -> object:
         return default
 
 
+def decode_stored_json(value: str | None, kind: str) -> tuple[object | None, str]:
+    """Decode a stored field without hiding corruption behind an empty default."""
+    if value is None: return None, "absent_legacy"
+    from app.json_input import decode_json_strict
+    try:
+        decoded = decode_json_strict(value.encode(), max_bytes=2 * 1024 * 1024)
+    except (UnicodeError, ValueError, AttributeError):
+        return None, "malformed"
+    def number(item):
+        return isinstance(item, (float, int)) and not isinstance(item, bool) and math.isfinite(item)
+    def point(item):
+        return isinstance(item, dict) and number(item.get("lat")) and number(item.get("lon")) and -90 <= item["lat"] <= 90 and -180 <= item["lon"] <= 180
+    valid = {
+        "strings": lambda: isinstance(decoded, list) and all(isinstance(item, str) for item in decoded),
+        "object": lambda: isinstance(decoded, dict),
+        "start": lambda: point(decoded),
+        "points": lambda: isinstance(decoded, list) and all(point(item) for item in decoded),
+        "stops": lambda: isinstance(decoded, list) and all(point(item) and isinstance(item.get("site_id"), int) and not isinstance(item.get("site_id"), bool) and isinstance(item.get("name"), str) and isinstance(item.get("warnings", []), list) for item in decoded),
+        "geometry": lambda: isinstance(decoded, list) and len(decoded) >= 2 and all(isinstance(item, list) and len(item) == 2 and number(item[0]) and number(item[1]) and -180 <= item[0] <= 180 and -90 <= item[1] <= 90 for item in decoded),
+    }
+    if kind not in valid: raise ValueError("unknown stored field contract")
+    if not valid[kind](): return None, "wrong_shape"
+    return decoded, "valid_empty" if not decoded else "valid"
+
+
 def site_from_row(row: sqlite3.Row) -> dict[str, object]:
     result = dict(row)
-    result["warnings"] = load_json(result.pop("warnings_json", None), [])
+    result["warnings"], status = decode_stored_json(result.pop("warnings_json", None), "strings")
+    result["stored_field_status"] = {"warnings": status}
+    result["data_status"] = "valid" if status in {"valid", "valid_empty"} else "unavailable"
     return result
 
 
 def observation_from_row(row: sqlite3.Row) -> dict[str, object]:
     result = dict(row)
-    result["photo_urls"] = load_json(result.pop("photo_urls_json", None), [])
+    result["photo_urls"], status = decode_stored_json(result.pop("photo_urls_json", None), "strings")
+    result["stored_field_status"] = {"photo_urls": status}
+    result["data_status"] = "valid" if status in {"valid", "valid_empty"} else "unavailable"
     return result

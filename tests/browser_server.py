@@ -27,104 +27,116 @@ settings = Settings(
 )
 app = create_app(settings)
 
-timestamp = now_iso()
-route_coordinates = [(10.3951, 63.4305), (10.4, 63.435)]
-gpx = build_gpx(
-    "Synthetic saved route",
-    route_coordinates,
-    [(10.3951, 63.4305, "Route start"), (10.4, 63.435, "Synthetic site")],
-)
-with app.state.database.connect() as connection:
-    connection.execute(
-        """
-        INSERT INTO sites
-            (external_key, name, site_kind, latitude, longitude, precision,
-             uncertainty_m, location_basis, status, access, confidence,
-            warnings_json, short_rationale, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "krigskart:413",
-            "Jonsvatnet, Trondheim, 3",
-            "bunker",
-            63.435,
-            10.4,
-            "approximate",
-            100,
-            "map_reference",
-            "candidate",
-            "unknown",
-            "medium",
-            dump_json(["Candidate point transcribed from a public map/source; coordinate, identity, condition, and access require independent verification."]),
-            "Coordinate copied from KrigsKart map marker #413; the source point is a starting area for review, not a field-verified entrance or footprint.",
-            timestamp,
-            timestamp,
-        ),
+def seed_browser_database():
+    timestamp = now_iso()
+    route_coordinates = [(10.3951, 63.4305), (10.4, 63.435)]
+    gpx = build_gpx(
+        "Synthetic saved route",
+        route_coordinates,
+        [(10.3951, 63.4305, "Route start"), (10.4, 63.435, "Synthetic site")],
     )
-    source_cursor = connection.execute(
-        """
-        INSERT INTO sources
-            (url, title, source_type, excerpt, accessed_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "https://example.com/browser-source",
-            "Synthetic source",
-            "test",
-            "Synthetic excerpt",
-            "2026-09-14",
-            timestamp,
-            timestamp,
-        ),
-    )
-    connection.execute(
-        "INSERT INTO evidence (site_id, source_id, role, created_at) VALUES (?, ?, ?, ?)",
-        (1, source_cursor.lastrowid, "source", timestamp),
-    )
-    connection.execute(
-        """
-        INSERT INTO sites
-            (external_key, name, site_kind, latitude, longitude, precision,
-            uncertainty_m, location_basis, status, access, confidence,
-            condition, warnings_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "browser:duplicate",
-            "Synthetic duplicate",
-            "bunker",
-            63.435,
-            10.4,
-            "approximate",
-            120,
-            "map_reference",
-            "candidate",
-            "unknown",
-            "low",
-            "delvis gjengrodd",
-            dump_json(["Registrert sikkerhetsvarsel fra testdata"]),
-            timestamp,
-            timestamp,
-        ),
-    )
-    connection.execute(
-        """
-        INSERT INTO route_plans
-            (name, start_json, waypoints_json, distance_m, duration_s,
-             geometry_json, gpx_text, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "Synthetic saved route",
-            dump_json({"lat": 63.4305, "lon": 10.3951}),
-            dump_json([{"lat": 63.435, "lon": 10.4}]),
-            1200,
-            900,
-            dump_json(route_coordinates),
-            gpx,
-            timestamp,
-        ),
-    )
+    with app.state.database.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO sites
+                (external_key, name, site_kind, latitude, longitude, precision,
+                 uncertainty_m, location_basis, status, access, confidence,
+                warnings_json, short_rationale, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "krigskart:413",
+                "Jonsvatnet, Trondheim, 3",
+                "bunker",
+                63.435,
+                10.4,
+                "approximate",
+                100,
+                "map_reference",
+                "candidate",
+                "unknown",
+                "medium",
+                dump_json(["Candidate point transcribed from a public map/source; coordinate, identity, condition, and access require independent verification."]),
+                "Coordinate copied from KrigsKart map marker #413; the source point is a starting area for review, not a field-verified entrance or footprint.",
+                timestamp,
+                timestamp,
+            ),
+        )
+        source_cursor = connection.execute(
+            """
+            INSERT INTO sources
+                (url, title, source_type, excerpt, accessed_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "https://example.com/browser-source",
+                "Synthetic source",
+                "test",
+                "Synthetic excerpt",
+                "2026-09-14",
+                timestamp,
+                timestamp,
+            ),
+        )
+        connection.execute(
+            "INSERT INTO evidence (site_id, source_id, role, created_at) VALUES (?, ?, ?, ?)",
+            (1, source_cursor.lastrowid, "source", timestamp),
+        )
+        connection.execute(
+            """
+            INSERT INTO sites
+                (external_key, name, site_kind, latitude, longitude, precision,
+                uncertainty_m, location_basis, status, access, confidence,
+                condition, warnings_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "browser:duplicate",
+                "Synthetic duplicate",
+                "bunker",
+                63.435,
+                10.4,
+                "approximate",
+                120,
+                "map_reference",
+                "candidate",
+                "unknown",
+                "low",
+                "delvis gjengrodd",
+                dump_json(["Registrert sikkerhetsvarsel fra testdata"]),
+                timestamp,
+                timestamp,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO route_plans
+                (name, start_json, waypoints_json, distance_m, duration_s,
+                 geometry_json, gpx_text, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "Synthetic saved route",
+                dump_json({"lat": 63.4305, "lon": 10.3951}),
+                dump_json([{"lat": 63.435, "lon": 10.4}]),
+                1200,
+                900,
+                dump_json(route_coordinates),
+                gpx,
+                timestamp,
+            ),
+        )
+
+from contextlib import asynccontextmanager
+startup_lifespan = app.router.lifespan_context
+
+@asynccontextmanager
+async def browser_lifespan(instance):
+    async with startup_lifespan(instance):
+        seed_browser_database()
+        yield
+
+app.router.lifespan_context = browser_lifespan
 
 
 if __name__ == "__main__":

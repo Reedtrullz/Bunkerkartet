@@ -18,7 +18,7 @@ class RouteResult:
     waypoint_indices: list[int] | None = None
 
 
-def normalize_ors_response(payload: dict) -> RouteResult:
+def normalize_ors_response(payload: dict, *, requested_waypoint_count: int | None = None) -> RouteResult:
     if not isinstance(payload, dict):
         raise ValueError("routing provider returned invalid JSON object")
     features = payload.get("features")
@@ -37,6 +37,8 @@ def normalize_ors_response(payload: dict) -> RouteResult:
     normalized: list[tuple[float, float]] = []
     for coordinate in coordinates:
         if not isinstance(coordinate, list) or len(coordinate) < 2:
+            raise ValueError("routing provider returned invalid coordinate")
+        if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in coordinate[:2]):
             raise ValueError("routing provider returned invalid coordinate")
         try:
             lon, lat = float(coordinate[0]), float(coordinate[1])
@@ -58,8 +60,17 @@ def normalize_ors_response(payload: dict) -> RouteResult:
                    for index in raw_waypoint_indices)
         ):
             raise ValueError("routing provider returned invalid waypoint indices")
+        if any(left >= right for left, right in zip(raw_waypoint_indices, raw_waypoint_indices[1:])):
+            raise ValueError("routing provider returned unordered waypoint indices")
+        if requested_waypoint_count is not None and len(raw_waypoint_indices) != requested_waypoint_count:
+            raise ValueError("routing provider returned an unexpected waypoint count")
         waypoint_indices = raw_waypoint_indices
     summary = properties.get("summary", {}) if isinstance(properties, dict) else {}
+    if not isinstance(summary, dict) or any(
+        isinstance(summary.get(key), bool) or not isinstance(summary.get(key), (int, float))
+        for key in ("distance", "duration")
+    ):
+        raise ValueError("routing provider returned invalid summary")
     try:
         distance_m = float(summary["distance"])
         duration_s = float(summary["duration"])
@@ -91,7 +102,7 @@ def fetch_openrouteservice(
         raw = response.read(2_000_001)
     if len(raw) > 2_000_000:
         raise ValueError("routing provider response is too large")
-    return normalize_ors_response(json.loads(raw))
+    return normalize_ors_response(json.loads(raw), requested_waypoint_count=len(coordinates))
 
 
 def build_gpx(

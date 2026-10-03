@@ -7,14 +7,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.db import CURRENT_SCHEMA_VERSION, REQUIRED_SCHEMA, required_schema_errors
+from app.db import CURRENT_SCHEMA_VERSION, REQUIRED_SCHEMA, OwnedConnection, required_schema_errors
 
 
 def verify(path: Path, expected_version: int) -> None:
     if not path.is_file():
         raise RuntimeError("database file is missing")
     uri = path.resolve().as_uri() + "?mode=ro"
-    with sqlite3.connect(uri, uri=True) as connection:
+    with sqlite3.connect(uri, uri=True, factory=OwnedConnection) as connection:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         if version != expected_version or version != CURRENT_SCHEMA_VERSION:
             raise RuntimeError("database schema version does not match expectation")

@@ -394,7 +394,8 @@ function siteById(id) {
 }
 
 function hasReviewedPublicApproach(site) {
-  return site.approach_latitude != null && site.approach_longitude != null &&
+  if (typeof site.route_eligible === "boolean") return site.route_eligible;
+  return !site.merged_into_id && site.status !== "rejected" && !site.location_review_required && site.approach_latitude != null && site.approach_longitude != null &&
     site.approach_access === "public" && site.approach_reviewed_at != null;
 }
 
@@ -643,13 +644,13 @@ async function refreshSitesAndDetail(siteId) {
   await loadDetail(siteId);
 }
 
-async function runReviewAction(id, action, targetSiteId = null) {
+async function runReviewAction(id, action, targetSiteId = null, targetRevision = null) {
   if (action === "reject" && !window.confirm("Avvise denne kandidaten?")) return;
   if (action === "mark_destroyed" && !window.confirm("Markere stedet som ødelagt eller fylt igjen?")) return;
   if (action === "merge" && !window.confirm("Slå sammen posten med det valgte stedet som skal bestå?")) return;
   try {
     const payload = { action };
-    if (targetSiteId) payload.target_site_id = targetSiteId;
+    if (targetSiteId) { payload.target_site_id = targetSiteId; payload.target_expected_revision = targetRevision; }
     const currentSite = state.siteCache.get(id);
     if (currentSite?.revision) payload.expected_revision = currentSite.revision;
     const result = await api(`/api/sites/${id}/review`, { method: "POST", body: JSON.stringify(payload) });
@@ -689,10 +690,10 @@ function renderLivssyklusActions(site, root) {
     if (targets.length) {
       const target = document.createElement("select");
       const placeholder = document.createElement("option"); placeholder.value = ""; text(placeholder, "Velg sted som skal bestå"); target.append(placeholder);
-      targets.forEach((candidate) => { const option = document.createElement("option"); option.value = candidate.id; text(option, `${candidate.name} — ${statusLabel(candidate.status)} (#${candidate.id})`); target.append(option); });
+      targets.forEach((candidate) => { const option = document.createElement("option"); option.value = candidate.id; option.dataset.revision = candidate.revision; text(option, `${candidate.name} — ${statusLabel(candidate.status)} (#${candidate.id})`); target.append(option); });
       const merge = document.createElement("button"); merge.className = "small danger"; merge.type = "button"; merge.disabled = true; text(merge, "Slå sammen med valgt");
       target.addEventListener("change", () => { merge.disabled = !target.value; });
-      merge.addEventListener("click", () => runReviewAction(site.id, "merge", Number(target.value)));
+      merge.addEventListener("click", () => runReviewAction(site.id, "merge", Number(target.value), Number(target.selectedOptions[0].dataset.revision)));
       section.append(labeledControl("Slå sammen duplikat med", target), merge);
     }
   }
@@ -1090,7 +1091,7 @@ async function loadCandidates() {
 function renderFieldPriority() {
   const list = $("field-priority-list"); list.replaceChildren();
   const sites = state.prioritySites;
-  text($("field-priority-summary"), `${sites.length} ${sites.length === 1 ? "offentlig sted" : "offentlige steder"} i feltutvalget.`);
+  text($("field-priority-summary"), `${sites.length} ${sites.length === 1 ? "offentlig sted" : "offentlige steder"} i forskningsutvalget.`);
   if (!sites.length) {
     const empty = document.createElement("div"); empty.className = "empty-state"; text(empty, "Ingen steder oppfyller feltlisten."); list.append(empty); return;
   }
@@ -1103,7 +1104,7 @@ function renderFieldPriority() {
     const meta = document.createElement("div"); meta.className = "site-meta"; text(meta, `${VALUE_LABELS[site.confidence] || "Ukjent"} | ${uncertainty} | ${accessLabel(site.access)}`); item.append(meta);
     const actions = document.createElement("div"); actions.className = "site-actions";
     const details = document.createElement("button"); details.className = "small"; details.type = "button"; markDetailControl(details, site.id, "field"); text(details, "Detaljer"); details.addEventListener("click", () => openDetail(site.id, "review", "field"));
-    const add = document.createElement("button"); add.className = "small"; add.type = "button"; text(add, state.routeSiteIds.includes(site.id) ? "Lagt til" : "Legg til rute"); add.disabled = state.routeSiteIds.includes(site.id); add.addEventListener("click", () => addRouteSite(site.id));
+    const add = document.createElement("button"); add.className = "small"; add.type = "button"; text(add, state.routeSiteIds.includes(site.id) ? "Lagt til" : "Legg til rute"); add.disabled = state.routeSiteIds.includes(site.id) || !hasReviewedPublicApproach(site); add.title = site.route_blocking_reason || ""; add.addEventListener("click", () => addRouteSite(site.id));
     actions.append(details, add); item.append(actions); list.append(item);
   });
 }

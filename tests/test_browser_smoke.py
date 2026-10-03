@@ -478,7 +478,7 @@ def test_site_detail_prioritizes_enrichment_and_folds_technical_metadata(page: P
     data_basis.locator("summary", has_text="Datagrunnlag").click()
     assert data_basis.get_by_text("Importnøkkel", exact=True).is_visible()
     assert data_basis.get_by_text("Jonsvatnet, Trondheim, 3", exact=True).is_visible()
-    assert data_basis.get_by_role("link", name="Synthetic source", exact=True).is_visible()
+    assert data_basis.get_by_role("link", name="https://example.com/browser-source", exact=True).is_visible()
     assert data_basis.get_by_text("Coordinate copied from KrigsKart map marker #413; the source point is a starting area for review, not a field-verified entrance or footprint.", exact=True).is_visible()
     assert data_basis.get_by_text("Candidate point transcribed from a public map/source; coordinate, identity, condition, and access require independent verification.", exact=True).is_visible()
 
