@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
+from started_client import StartedClient as TestClient
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 import pytest
@@ -112,6 +112,7 @@ def test_private_sites_api_requires_bearer_token(tmp_path):
 
 def test_site_detail_exposes_external_enrichment_without_changing_site_facts(tmp_path):
     app = create_app(Settings(data_dir=tmp_path, admin_token="admin"))
+    started = TestClient(app)
     with app.state.database.connect() as connection:
         connection.execute(
             """
@@ -138,6 +139,7 @@ def test_site_detail_exposes_external_enrichment_without_changing_site_facts(tmp
 
 def test_site_search_matches_enrichment_display_name_without_rewriting_db_name(tmp_path):
     app = create_app(Settings(data_dir=tmp_path, admin_token="admin"))
+    started = TestClient(app)
     with app.state.database.connect() as connection:
         connection.execute(
             """
@@ -160,6 +162,7 @@ def test_site_search_matches_enrichment_display_name_without_rewriting_db_name(t
 
 def test_first_wave_detail_keeps_access_conservative_and_canonical_facts(tmp_path):
     app = create_app(Settings(data_dir=tmp_path, admin_token="admin"))
+    started = TestClient(app)
     with app.state.database.connect() as connection:
         connection.execute(
             """

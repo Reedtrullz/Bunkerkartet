@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from fastapi.testclient import TestClient
+from started_client import StartedClient as TestClient
 from app.config import Settings
 from app.main import create_app
 

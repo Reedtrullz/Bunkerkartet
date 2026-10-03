@@ -4,7 +4,7 @@ from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from fastapi.testclient import TestClient
+from started_client import StartedClient as TestClient
 
 from app.config import Settings
 from app.db import SCHEMA

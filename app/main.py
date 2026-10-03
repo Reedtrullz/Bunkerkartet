@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 from html import escape as escape_html
 import hashlib
@@ -30,6 +31,7 @@ from app.db import (
     OwnedConnection,
     canonical_payload_hash,
     dump_json,
+    decode_stored_json,
     load_json,
     now_iso,
     observation_from_row,
@@ -324,6 +326,8 @@ def _route_warnings(
 
 
 def _route_site_error(row: sqlite3.Row, site_id: int) -> str | None:
+    if "warnings_json" in row.keys() and decode_stored_json(row["warnings_json"], "strings")[1] not in {"valid", "valid_empty"}:
+        return f"site {site_id} has unavailable stored safety information"
     if row["merged_into_id"] is not None:
         return f"site {site_id} is merged"
     if row["status"] == "rejected":
@@ -1012,32 +1016,32 @@ def _require_admin(settings: Settings, authorization: str | None) -> None:
 
 
 def _route_summary(row: sqlite3.Row) -> dict[str, object]:
-    route = {
-        "id": row["id"],
-        "name": row["name"],
-        "start": json.loads(row["start_json"]),
-        "waypoints": json.loads(row["waypoints_json"]),
-        "distance_m": row["distance_m"],
-        "duration_s": row["duration_s"],
-        "created_at": row["created_at"],
-    }
-    stops = load_json(row["stops_json"], None) if "stops_json" in row.keys() else None
-    stored_warnings = load_json(row["route_warnings_json"], None) if "route_warnings_json" in row.keys() else None
-    route["warnings"] = stored_warnings if isinstance(stored_warnings, list) else []
-    if isinstance(stops, list):
-        route["stops"] = stops
-        route["waypoints"] = [{"lat": stop["lat"], "lon": stop["lon"]} for stop in stops]
-        route["legacy_route"] = False
-    else:
-        route["stops"] = []
-        route["legacy_route"] = True
+    route = {key: row[key] for key in ("id", "name", "distance_m", "duration_s", "created_at")}
+    states = {}
+    for field, kind in (("start", "start"), ("waypoints", "points"), ("geometry", "geometry"), ("stops", "stops"), ("route_warnings", "strings")):
+        column = field + "_json"
+        value, status = decode_stored_json(row[column] if column in row.keys() else None, kind)
+        states[field] = status
+        route["warnings" if field == "route_warnings" else field] = value
+    route["stored_field_status"] = states
+    route["legacy_route"] = states["stops"] == "absent_legacy"
+    bad = any(status in {"malformed", "wrong_shape"} for status in states.values()) or any(states[field] == "absent_legacy" for field in ("start", "waypoints", "geometry"))
+    route["data_status"] = "unavailable" if bad else "valid"
+    route.pop("geometry")
+    if bad:
+        route.update(start=None, waypoints=[], stops=[], warnings=["Stored route is unavailable; review required."])
+        return route
+    route["warnings"] = route["warnings"] or []
+    route["stops"] = route["stops"] or []
+    if not route["legacy_route"]:
+        route["waypoints"] = [{"lat": stop["lat"], "lon": stop["lon"]} for stop in route["stops"]]
     return route
 
 
 def _safe_event_payload(event_type: str, payload_json: str) -> dict[str, object]:
-    payload = load_json(payload_json, {})
-    if not isinstance(payload, dict):
-        return {}
+    payload, status = decode_stored_json(payload_json, "object")
+    if status not in {"valid", "valid_empty"}:
+        return {"data_status": "unavailable", "stored_field_status": status}
     if event_type == "import":
         return {key: payload[key] for key in ("external_key", "action") if key in payload}
     allowed = {
@@ -1069,9 +1073,13 @@ def _safe_event_payload(event_type: str, payload_json: str) -> dict[str, object]
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     database = Database(settings.db_path)
-    database.initialize()
+    @asynccontextmanager
+    async def lifespan(app):
+        database.initialize()
+        yield
+
     static_dir = Path(__file__).parent / "static"
-    app = FastAPI(title="Bunkerkartet", version=settings.app_version)
+    app = FastAPI(title="Bunkerkartet", version=settings.app_version, lifespan=lifespan)
     app.state.settings = settings
     app.state.database = database
 
@@ -1412,6 +1420,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if site_from_row(row)["data_status"] != "valid":
+                raise HTTPException(409, {"code": "STORED_DATA_UNAVAILABLE", "message": "site requires stored-data review"})
             if row["revision"] != expected_revision:
                 raise HTTPException(409, {"code": "REVISION_MISMATCH", "message": "site revision is stale; reload before editing"})
             new_latitude = values.get("latitude", row["latitude"])
@@ -1480,6 +1490,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if site_from_row(row)["data_status"] != "valid":
+                raise HTTPException(409, {"code": "STORED_DATA_UNAVAILABLE", "message": "site requires stored-data review"})
             if row["merged_into_id"] is not None:
                 raise HTTPException(409, "merged site cannot set an approach")
             expected_revision = request.expected_revision
@@ -1514,6 +1526,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if site_from_row(row)["data_status"] != "valid":
+                raise HTTPException(409, {"code": "STORED_DATA_UNAVAILABLE", "message": "site requires stored-data review"})
             if row["merged_into_id"] is not None:
                 raise HTTPException(409, "merged site cannot review location")
             if row["revision"] != request.expected_revision:
@@ -1545,6 +1559,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if site_from_row(row)["data_status"] != "valid":
+                raise HTTPException(409, {"code": "STORED_DATA_UNAVAILABLE", "message": "site requires stored-data review"})
             existing = connection.execute(
                 "SELECT * FROM field_observations WHERE site_id = ? AND request_id = ?",
                 (site_id, request_id),
@@ -1621,6 +1637,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if site_from_row(row)["data_status"] != "valid":
+                raise HTTPException(409, {"code": "STORED_DATA_UNAVAILABLE", "message": "site requires stored-data review"})
             if row["merged_into_id"] is not None:
                 raise HTTPException(409, "merged site cannot adopt an observation coordinate")
             if row["status"] == "rejected":
@@ -1634,6 +1652,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ).fetchone()
             if observation is None:
                 raise HTTPException(404, "observation not found")
+            if observation_from_row(observation)["data_status"] != "valid":
+                raise HTTPException(409, {"code": "STORED_DATA_UNAVAILABLE", "message": "observation requires stored-data review"})
             if observation["outcome"] != "found":
                 raise HTTPException(409, "only a found observation can update the site coordinate")
             if observation["latitude"] is None or observation["longitude"] is None:
@@ -1715,6 +1735,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
+            if site_from_row(row)["data_status"] != "valid":
+                raise HTTPException(409, {"code": "STORED_DATA_UNAVAILABLE", "message": "site requires stored-data review"})
             if row["merged_into_id"] is not None:
                 raise HTTPException(409, "merged site cannot be reviewed")
             expected_revision = request.expected_revision
@@ -1724,12 +1746,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if request.target_site_id is None or request.target_site_id == site_id:
                     raise HTTPException(400, "merge requires a different target site")
                 target = connection.execute(
-                    "SELECT id, revision FROM sites WHERE id = ? AND id <> ? "
+                    "SELECT * FROM sites WHERE id = ? AND id <> ? "
                     "AND merged_into_id IS NULL AND status <> 'rejected'",
                     (request.target_site_id, site_id),
                 ).fetchone()
                 if target is None:
                     raise HTTPException(404, "merge target not found")
+                if site_from_row(target)["data_status"] != "valid":
+                    raise HTTPException(409, {"code": "STORED_DATA_UNAVAILABLE", "message": "target requires stored-data review"})
                 if request.target_expected_revision != target["revision"]:
                     raise HTTPException(409, {"code": "REVISION_MISMATCH", "message": "merge target revision is stale; reload before reviewing"})
                 collision = connection.execute(
@@ -1951,7 +1975,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def list_routes(limit: int = Query(default=20, ge=1, le=100)) -> list[dict[str, object]]:
         with database.connect() as connection:
             rows = connection.execute(
-                "SELECT id, name, start_json, waypoints_json, stops_json, route_warnings_json, distance_m, duration_s, created_at "
+                "SELECT id, name, start_json, waypoints_json, geometry_json, stops_json, route_warnings_json, distance_m, duration_s, created_at "
                 "FROM route_plans ORDER BY id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
@@ -1964,7 +1988,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if row is None:
                 raise HTTPException(404, "route not found")
             route = _route_summary(row)
-            route_coordinates = json.loads(row["geometry_json"])
+            if route["data_status"] != "valid":
+                return route
+            route_coordinates = decode_stored_json(row["geometry_json"], "geometry")[0]
             route["geometry"] = {"type": "LineString", "coordinates": route_coordinates}
             route["gpx"] = row["gpx_text"]
             if route["legacy_route"]:
