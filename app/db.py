@@ -177,8 +177,15 @@ V9_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V8_REQUIRED_SCHE
 V9_REQUIRED_SCHEMA["route_requests"] = {"id", "request_id", "payload_hash", "route_id", "expires_at"}
 V10_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V9_REQUIRED_SCHEMA.items()}
 V10_REQUIRED_SCHEMA["sites"].add("content_json")
-CURRENT_SCHEMA_VERSION = 10
-REQUIRED_SCHEMA = V10_REQUIRED_SCHEMA
+V11_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V10_REQUIRED_SCHEMA.items()}
+for _table, _columns in {
+    'research_questions': {'id','external_key','kind','state','payload_json','revision','created_at','updated_at'},
+    'question_events': {'id','question_id','payload_json','created_at'},
+    'identity_hypotheses': {'id','question_id','state','payload_json','revision','created_at','updated_at'},
+    'claim_assertions': {'id','external_key','target_external_key','claim_id','target_claim_id','relation','state','payload_json','revision','created_at','updated_at'},
+}.items(): V11_REQUIRED_SCHEMA[_table]=_columns
+CURRENT_SCHEMA_VERSION = 11
+REQUIRED_SCHEMA = V11_REQUIRED_SCHEMA
 
 
 def now_iso() -> str:
@@ -301,6 +308,8 @@ def required_schema_errors(
         "evidence_items": [("site_id", "sites", "id", "CASCADE"), ("source_id", "sources", "id", "CASCADE"), ("import_record_id", "import_records", "id", "NO ACTION")],
         "site_relations": [("site_id", "sites", "id", "CASCADE")],
         "route_requests": [("route_id", "route_plans", "id", "SET NULL")],
+        "question_events": [("question_id", "research_questions", "id", "CASCADE")],
+        "identity_hypotheses": [("question_id", "research_questions", "id", "CASCADE")],
     }
     if version >= 6:
         foreign_keys["evidence_items"].append(("legacy_evidence_id", "evidence", "id", "SET NULL"))
@@ -607,6 +616,12 @@ def _migrate_v9(connection: sqlite3.Connection) -> None:
 def _migrate_v10(connection: sqlite3.Connection) -> None:
     connection.execute("ALTER TABLE sites ADD COLUMN content_json TEXT")
     connection.execute("PRAGMA user_version=10")
+
+
+def _migrate_v11(connection: sqlite3.Connection) -> None:
+    from app.research import RESEARCH_SCHEMA
+    for statement in RESEARCH_SCHEMA: connection.execute(statement)
+    connection.execute("PRAGMA user_version=11")
 
 
 def _repair_evidence_item_fk(connection: sqlite3.Connection) -> None:

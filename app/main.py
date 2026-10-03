@@ -41,6 +41,7 @@ from app.db import (
 )
 from app.imports import (
     ImportPackage,
+    import_schema as versioned_import_schema,
     ImportRecord,
     safe_validation_errors,
     validate_import_package,
@@ -402,6 +403,8 @@ def _source_rows(connection: sqlite3.Connection, site_id: int) -> list[dict[str,
         source['title'] = citation.get('title') if citation else None
         source['source_type'] = citation.get('source_type') if citation else None
         source['citation_status'] = 'recorded_reading' if citation else 'historical_metadata_unknown'
+        for field, default in (("claim_ids", []), ("uncertainty_note", None), ("rights_status", "unknown"), ("rights_note", None)):
+            source[field] = citation.get(field, default) if citation else default
         try:
             source['url'] = validate_reference_url(source['url'])
         except ValueError:
@@ -744,17 +747,7 @@ def _preview_record(
     else:
         action = 'preserve_trusted'
         preserved_fields = list(_PREVIEW_FIELDS)
-    evidence = [
-        {
-            "url": str(source.url),
-            "title": source.title,
-            "source_type": source.source_type,
-            "excerpt": source.excerpt,
-            "publication_date": source.publication_date.isoformat() if source.publication_date else None,
-            "access_date": source.access_date.isoformat() if source.access_date else None,
-        }
-        for source in record.sources
-    ]
+    evidence = [source.model_dump(mode="json") for source in record.sources]
     return {
         "external_key": record.external_key,
         "name": record.name,
@@ -1007,7 +1000,7 @@ def _commit_package(
                     INSERT INTO evidence_items
                         (site_id, source_id, import_record_id, source_index, excerpt,
                          content_kind, role, published_at, accessed_at, provenance_status, created_at)
-                    VALUES (?, ?, ?, ?, ?, 'unknown', 'context', ?, ?, 'import_record', ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'import_record', ?)
                     """,
                     (
                         site_id,
@@ -1015,6 +1008,8 @@ def _commit_package(
                         import_record_id,
                         source_index,
                         source.excerpt,
+                        getattr(source, "content_kind", "unknown"),
+                        getattr(source, "role", "context"),
                         source.publication_date.isoformat() if source.publication_date else None,
                         source.access_date.isoformat() if source.access_date else None,
                         timestamp,
@@ -1210,7 +1205,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/imports/schema", dependencies=[Depends(admin_guard)])
     def import_schema() -> dict[str, object]:
-        return ImportPackage.model_json_schema()
+        return versioned_import_schema()
+
+    @app.get("/api/admin/imports", dependencies=[Depends(admin_guard)])
+    def list_import_receipts(limit: int = Query(default=20, ge=1, le=100), before: int | None = Query(default=None, gt=0)) -> dict[str, object]:
+        with database.connect() as connection:
+            rows = connection.execute("SELECT id,batch_id,schema_version,generated_at,committed_at,payload_hash FROM import_batches WHERE (? IS NULL OR id<?) ORDER BY id DESC LIMIT ?", (before, before, limit+1)).fetchall()
+            return {"items": [dict(row) for row in rows[:limit]], "next_cursor": rows[limit-1]["id"] if len(rows)>limit else None}
+
+    @app.get("/api/admin/imports/{batch_id}", dependencies=[Depends(admin_guard)])
+    def get_import_receipt(batch_id: str) -> dict[str, object]:
+        with database.connect() as connection:
+            batch = connection.execute("SELECT id,batch_id,schema_version,generated_at,committed_at,payload_hash FROM import_batches WHERE batch_id=?", (batch_id,)).fetchone()
+            if batch is None: raise HTTPException(404, "import batch not found")
+            records = connection.execute("SELECT id,external_key,site_id,action,created_at FROM import_records WHERE batch_id=? ORDER BY id", (batch_id,)).fetchall()
+            result = dict(batch); effects = []; readings = 0; links = set()
+            for record in records:
+                effect = dict(record)
+                evidence = connection.execute("SELECT id,site_id,source_id FROM evidence_items WHERE import_record_id=? ORDER BY id", (record["id"],)).fetchall()
+                effect["evidence_ids"] = [item["id"] for item in evidence]
+                original = connection.execute("SELECT id,merged_into_id FROM sites WHERE external_key=?", (record["external_key"],)).fetchone()
+                effect["original_site_id"] = original["id"] if original else None
+                effect["merged_into_id"] = original["merged_into_id"] if original else None
+                readings += len(evidence); links.update((record["id"], item["source_id"]) for item in evidence)
+                effects.append(effect)
+            result.update(records=effects, evidence_items=readings, source_links=len(links), receipt_status="recorded" if result["payload_hash"] else "legacy_hash_unavailable")
+            return result
 
     @app.post("/api/admin/imports/preview", dependencies=[Depends(admin_guard)])
     async def preview_import(request: Request) -> dict[str, object]:
@@ -2120,6 +2140,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     route["warnings"].append("A saved route stop's reviewed approach has changed; calculate the route again.")
             return route
 
+    from app.research import install_research_routes
+    install_research_routes(app, database, admin_guard, _effective_research_site)
     return app
 
 
