@@ -11,10 +11,12 @@ from app.db import CURRENT_SCHEMA_VERSION, REQUIRED_SCHEMA, OwnedConnection, req
 from app import db as schemas
 
 
-def verify(path: Path, expected_version: int) -> None:
+def verify(path: Path, expected_version: int, *, immutable: bool = False) -> None:
     if not path.is_file():
         raise RuntimeError("database file is missing")
     uri = path.resolve().as_uri() + "?mode=ro"
+    if immutable:
+        uri += "&immutable=1"
     with sqlite3.connect(uri, uri=True, factory=OwnedConnection) as connection:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         if version != expected_version or not 1 <= version <= CURRENT_SCHEMA_VERSION:

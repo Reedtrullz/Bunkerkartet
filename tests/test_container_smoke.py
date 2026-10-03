@@ -16,6 +16,35 @@ def _docker(*args, check=True):
     )
 
 
+def test_stopped_wal_candidate_is_verified_on_a_read_only_mount():
+    image = os.environ.get("BUNKERKARTET_SMOKE_IMAGE")
+    if not image or not shutil.which("docker"):
+        pytest.skip("CI supplies a built image and Docker; no container smoke requested locally")
+    volume = "bunkerkartet-readonly-" + uuid.uuid4().hex[:10]
+    _docker("volume", "create", volume)
+    try:
+        prepare = """import hashlib,json,os
+from pathlib import Path
+from app.db import Database,CURRENT_SCHEMA_VERSION
+p=Path('/candidate/bunkerkartet.sqlite3');Database(p).initialize()
+with Database(p).connect() as c:
+    c.execute("INSERT INTO sites(external_key,name,site_kind,precision,location_basis,created_at,updated_at) VALUES('synthetic:readonly','Readonly WAL canary','bunker','unknown','llm_inference','2026-10-03','2026-10-03')")
+assert p.read_bytes()[18:20]==bytes([2,2])
+assert not Path(str(p)+'-wal').exists() and not Path(str(p)+'-shm').exists()
+os.chown(p,10001,10001);os.chown(p.parent,10001,10001)
+print(json.dumps({'sha':hashlib.sha256(p.read_bytes()).hexdigest(),'size':p.stat().st_size,'schema':CURRENT_SCHEMA_VERSION}))
+"""
+        values = json.loads(_docker("run", "--rm", "--user", "0:0", "--volume", f"{volume}:/candidate", "--entrypoint", "python", image, "-c", prepare).stdout)
+        result = _docker("run", "--rm", "--read-only", "--volume", f"{volume}:/candidate:ro", "--entrypoint", "python", image,
+                         "/app/scripts/verify_candidate_volume.py", "--database", "/candidate/bunkerkartet.sqlite3",
+                         "--expected-sha256", values['sha'], "--expected-size", str(values['size']), "--expected-version", str(values['schema']), check=False)
+        assert result.returncode == 0, result.stderr
+        check = "import hashlib;from pathlib import Path;p=Path('/candidate/bunkerkartet.sqlite3');assert hashlib.sha256(p.read_bytes()).hexdigest()=='"+values['sha']+"';assert sorted(x.name for x in p.parent.iterdir())==['bunkerkartet.sqlite3']"
+        _docker("run", "--rm", "--read-only", "--volume", f"{volume}:/candidate:ro", "--entrypoint", "python", image, "-c", check)
+    finally:
+        _docker("volume", "rm", volume, check=False)
+
+
 def test_image_runs_nonroot_with_synthetic_volume_and_reports_exact_readiness():
     image = os.environ.get("BUNKERKARTET_SMOKE_IMAGE")
     if not image or not shutil.which("docker"):

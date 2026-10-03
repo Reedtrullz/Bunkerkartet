@@ -19,7 +19,10 @@ def verify_candidate(path,*,expected_sha256,expected_size,expected_version):
     with path.open('rb') as source:
         while chunk:=source.read(1024*1024):digest.update(chunk)
     if digest.hexdigest()!=expected_sha256:raise RuntimeError('candidate database differs from qualified bytes')
-    verify(path,expected_version)
+    # The stopped, exact-byte candidate has no active journal. Immutable mode
+    # lets SQLite validate WAL-mode headers without creating WAL/SHM sidecars
+    # on the read-only deployment mount. Live database checks retain mode=ro.
+    verify(path,expected_version,immutable=True)
 
 
 if __name__=='__main__':
