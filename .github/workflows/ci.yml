@@ -24,6 +24,17 @@ jobs:
         run: python -m venv .venv
       - name: Install dependencies
         run: .venv/bin/python -m pip install -r requirements-dev.txt
+      - name: Record resolved Python dependencies
+        run: |
+          .venv/bin/python -m pip freeze --all | sort > .venv/dependency-resolution.txt
+          {
+            echo "### Python 3.12 dependency resolution"
+            echo "Commit: $GITHUB_SHA"
+            echo "Receipt SHA256: $(sha256sum .venv/dependency-resolution.txt | cut -d ' ' -f 1)"
+            echo '```text'
+            cat .venv/dependency-resolution.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Install browser runtime
         run: .venv/bin/python -m playwright install --with-deps chromium
       - name: Test
@@ -31,9 +42,18 @@ jobs:
       - name: Browser smoke
         run: .venv/bin/python -m pytest -q tests/test_browser_smoke.py
       - name: Validate frontend syntax
-        run: node --check app/static/app.js
+        run: |
+          node --check app/static/app.js
+          node --check app/static/research-ui.js
+          node --check app/static/workflow-ui.js
+          node --check app/static/offline-notebook.js
       - name: Build image
         run: docker build --tag bunkerkartet:ci .
+
+      - name: Smoke test non-root container readiness
+        env:
+          BUNKERKARTET_SMOKE_IMAGE: bunkerkartet:ci
+        run: .venv/bin/python -m pytest -q tests/test_container_smoke.py
 
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -54,7 +74,7 @@ jobs:
         env:
           REPOSITORY: ${{ github.repository }}
         run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         id: publish
         with:
           context: .

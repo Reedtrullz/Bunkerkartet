@@ -8,7 +8,7 @@ services:
       BUNKERKARTET_DATA_DIR: /app/data
       APP_VERSION: {{ bunkerkartet_image_tag }}
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:{{ bunkerkartet_app_port | default(8000) }}:8000"
     volumes:
       - bunkerkartet-data:/app/data
     read_only: true
@@ -19,7 +19,7 @@ services:
     tmpfs:
       - /tmp
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -27,4 +27,4 @@ services:
 
 volumes:
   bunkerkartet-data:
-    name: bunkerkartet-data
+    name: {{ bunkerkartet_data_volume | default('bunkerkartet-data') }}
