@@ -24,7 +24,7 @@ from urllib.error import HTTPError, URLError
 
 from app.config import Settings
 from app.json_input import decode_json_strict
-from app.enrichment import load_site_enrichment
+from app.enrichment import ResearchSite, ResearchSource, ResearchClaim, load_site_documents, load_research_site, research_site_payload, load_site_enrichment
 from app.db import (
     CURRENT_SCHEMA_VERSION,
     REQUIRED_SCHEMA,
@@ -87,7 +87,8 @@ SECURITY_HEADERS = {
 MAX_IMPORT_BODY_BYTES = 2 * 1024 * 1024
 # ponytail: one process-wide semaphore is enough for the bounded provider quota; use a distributed limiter if scaling out.
 ORS_SEMAPHORE = threading.BoundedSemaphore(2)
-SITE_ENRICHMENT = load_site_enrichment()
+SITE_DOCUMENTS = load_site_documents()
+SITE_ENRICHMENT = {key: research_site_payload(value) for key, value in SITE_DOCUMENTS.items()}
 
 
 async def _read_import_json(request: Request) -> object:
@@ -164,6 +165,17 @@ class SitePatch(BaseModel):
                 self.latitude, self.longitude, self.precision, self.uncertainty_m, self.location_basis
             )
         return self
+
+
+class SiteContentPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    expected_revision: int = Field(gt=0)
+    display_name: str = Field(min_length=1, max_length=500)
+    kind_label: str = Field(min_length=1, max_length=200)
+    research_state: Literal["curated", "researched_pending", "identity_review"] = "curated"
+    reviewed_at: date
+    sources: list[ResearchSource] = Field(min_length=1, max_length=50)
+    claims: list[ResearchClaim] = Field(min_length=1, max_length=30)
 
 
 class FieldObservation(BaseModel):
@@ -328,6 +340,8 @@ def _route_warnings(
 
 
 def _route_site_error(row: sqlite3.Row, site_id: int) -> str | None:
+    if "external_key" in row.keys() and _effective_research_site(row)[1] == "unavailable":
+        return f"site {site_id} has unavailable stored content"
     if "warnings_json" in row.keys() and decode_stored_json(row["warnings_json"], "strings")[1] not in {"valid", "valid_empty"}:
         return f"site {site_id} has unavailable stored safety information"
     if row["merged_into_id"] is not None:
@@ -429,11 +443,29 @@ def _safe_observation(row: sqlite3.Row) -> dict[str, object]:
     return observation
 
 
+def _effective_research_site(row: sqlite3.Row) -> tuple[ResearchSite | None, str]:
+    stored = row["content_json"] if "content_json" in row.keys() else None
+    if stored is None:
+        return SITE_DOCUMENTS.get(row["external_key"]), "seed" if row["external_key"] in SITE_DOCUMENTS else "absent"
+    try:
+        return load_research_site(stored, row["external_key"]), "override"
+    except (ValueError, TypeError):
+        return None, "unavailable"
+
+
+def _effective_enrichment(row: sqlite3.Row) -> dict[str, object] | None:
+    content, status = _effective_research_site(row)
+    return research_site_payload(content) if content is not None else None
+
+
 def _site_summary(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
     site = site_from_row(row)
     site["route_blocking_reason"] = _route_site_error(row, int(row["id"]))
     site["route_eligible"] = site["route_blocking_reason"] is None
-    enrichment = SITE_ENRICHMENT.get(row["external_key"])
+    content, content_status = _effective_research_site(row)
+    site["content_status"] = content_status
+    if content_status == "unavailable": site["data_status"] = "unavailable"
+    enrichment = research_site_payload(content) if content else None
     if enrichment:
         site["enrichment"] = {
             key: enrichment[key]
@@ -469,7 +501,11 @@ def _site_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, 
     site = site_from_row(row)
     site["route_blocking_reason"] = _route_site_error(row, int(row["id"]))
     site["route_eligible"] = site["route_blocking_reason"] is None
-    site["enrichment"] = SITE_ENRICHMENT.get(row["external_key"])
+    content, content_status = _effective_research_site(row)
+    site["content_status"] = content_status
+    site["content_document"] = content.model_dump(mode="json", exclude_none=True) if content else None
+    site["enrichment"] = research_site_payload(content) if content else None
+    if content_status == "unavailable": site["data_status"] = "unavailable"
     site["relations"] = _site_relations(connection, int(row["id"]))
     site["sources"] = _source_rows(connection, int(row["id"]))
     observations = connection.execute(
@@ -1044,6 +1080,8 @@ def _safe_event_payload(event_type: str, payload_json: str) -> dict[str, object]
     payload, status = decode_stored_json(payload_json, "object")
     if status not in {"valid", "valid_empty"}:
         return {"data_status": "unavailable", "stored_field_status": status}
+    if event_type == "content_edit":
+        return {"before": payload.get("before"), "after": payload.get("after")}
     if event_type == "import":
         return {key: payload[key] for key in ("external_key", "action") if key in payload}
     allowed = {
@@ -1222,9 +1260,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             values.append(status)
         elif not include_rejected:
             conditions.append("status <> 'rejected'")
-        if site_kind and site_kind.strip():
-            conditions.append("lower(site_kind) LIKE lower(?)")
-            values.append(f"%{site_kind.strip()}%")
         if access:
             if access not in SITE_ACCESSES:
                 raise HTTPException(400, "invalid site access")
@@ -1235,38 +1270,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(400, "invalid site confidence")
             conditions.append("COALESCE(confidence, 'unknown') = ?")
             values.append(confidence)
-        if q and q.strip():
-            term = f"%{q.strip()}%"
-            searchable_fields = ("name", "site_kind", "short_rationale", "observed_location_text", "condition")
-            database_search = (
-                "(" + " OR ".join(
-                    f"lower(COALESCE({field}, '')) LIKE lower(?)" for field in searchable_fields
-                ) + " OR EXISTS ("
-                "SELECT 1 FROM evidence JOIN sources ON sources.id = evidence.source_id "
-                "WHERE evidence.site_id = sites.id AND ("
-                "lower(COALESCE(sources.title, '')) LIKE lower(?) OR "
-                "lower(COALESCE(sources.excerpt, '')) LIKE lower(?)"
-                ")))"
-            )
-            enrichment_keys = [
-                external_key
-                for external_key, enrichment in SITE_ENRICHMENT.items()
-                if q.strip().casefold() in " ".join(
-                    str(enrichment.get(field, ""))
-                    for field in ("display_name", "kind_label")
-                ).casefold()
-            ]
-            if enrichment_keys:
-                placeholders = ",".join("?" for _ in enrichment_keys)
-                conditions.append(f"({database_search} OR external_key IN ({placeholders}))")
-                values.extend([term] * (len(searchable_fields) + 2))
-                values.extend(enrichment_keys)
-            else:
-                conditions.append(database_search)
-                values.extend([term] * (len(searchable_fields) + 2))
         query = f"SELECT * FROM sites WHERE {' AND '.join(conditions)} ORDER BY name, id"
         with database.connect() as connection:
-            return [_site_summary(connection, row) for row in connection.execute(query, values).fetchall()]
+            result = []
+            for row in connection.execute(query, values).fetchall():
+                if site_kind and site_kind.strip().casefold() not in row["site_kind"].casefold(): continue
+                if q and q.strip():
+                    enrichment = _effective_enrichment(row) or {}
+                    texts = [str(row[field] or "") for field in ("name", "site_kind", "short_rationale", "observed_location_text", "condition")]
+                    texts.extend(str(enrichment.get(field, "")) for field in ("display_name", "kind_label"))
+                    texts.extend(claim["text"] for claim in enrichment.get("claims", []))
+                    for reading in _source_rows(connection, int(row["id"])):
+                        texts.extend(str(reading.get(field) or "") for field in ("title", "registry_title", "excerpt"))
+                    if not any(q.strip().casefold() in value.casefold() for value in texts): continue
+                result.append(_site_summary(connection, row))
+            return result
 
     @app.get("/api/sites.geojson", dependencies=[Depends(admin_guard)])
     def export_sites_geojson() -> JSONResponse:
@@ -1413,6 +1431,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if row is None:
                 raise HTTPException(404, "site not found")
             return _site_detail(connection, row)
+
+    @app.patch("/api/sites/{site_id}/content", dependencies=[Depends(admin_guard)])
+    def edit_site_content(site_id: int, patch: SiteContentPatch) -> dict[str, object]:
+        with database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT * FROM sites WHERE id=?", (site_id,)).fetchone()
+            if row is None: raise HTTPException(404, "site not found")
+            if row["merged_into_id"] is not None: raise HTTPException(409, "merged site cannot be edited")
+            if row["revision"] != patch.expected_revision:
+                raise HTTPException(409, {"code": "REVISION_MISMATCH", "message": "site revision is stale; reload before editing"})
+            before, status = _effective_research_site(row)
+            if status == "unavailable": raise HTTPException(409, {"code": "STORED_DATA_UNAVAILABLE", "message": "stored content requires review"})
+            try:
+                content = load_research_site({"external_key": row["external_key"], **patch.model_dump(mode="json", exclude={"expected_revision"})}, row["external_key"])
+            except ValidationError as error: raise HTTPException(422, detail=_validation_detail(error)) from error
+            except ValueError as error: raise HTTPException(422, "invalid content document") from error
+            after = content.model_dump(mode="json", exclude_none=True)
+            timestamp = now_iso()
+            cursor = connection.execute("UPDATE sites SET content_json=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?", (dump_json(after), timestamp, site_id, patch.expected_revision))
+            if cursor.rowcount != 1: raise HTTPException(409, {"code": "REVISION_MISMATCH", "message": "site changed"})
+            connection.execute("INSERT INTO site_events(site_id,event_type,payload_json,created_at) VALUES(?,'content_edit',?,?)", (site_id, dump_json({"before": before.model_dump(mode="json", exclude_none=True) if before else None, "after": after}), timestamp))
+            updated = connection.execute("SELECT * FROM sites WHERE id=?", (site_id,)).fetchone()
+            return _site_detail(connection, updated)
 
     @app.patch("/api/sites/{site_id}", dependencies=[Depends(admin_guard)])
     def edit_site(site_id: int, patch: SitePatch) -> dict[str, object]:

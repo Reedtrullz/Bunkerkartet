@@ -175,8 +175,10 @@ V8_REQUIRED_SCHEMA["sites"].add("revision")
 V8_REQUIRED_SCHEMA["field_observations"].update({"request_id", "payload_hash"})
 V9_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V8_REQUIRED_SCHEMA.items()}
 V9_REQUIRED_SCHEMA["route_requests"] = {"id", "request_id", "payload_hash", "route_id", "expires_at"}
-CURRENT_SCHEMA_VERSION = 9
-REQUIRED_SCHEMA = V9_REQUIRED_SCHEMA
+V10_REQUIRED_SCHEMA = {table: set(columns) for table, columns in V9_REQUIRED_SCHEMA.items()}
+V10_REQUIRED_SCHEMA["sites"].add("content_json")
+CURRENT_SCHEMA_VERSION = 10
+REQUIRED_SCHEMA = V10_REQUIRED_SCHEMA
 
 
 def now_iso() -> str:
@@ -602,6 +604,11 @@ def _migrate_v9(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA user_version=9")
 
 
+def _migrate_v10(connection: sqlite3.Connection) -> None:
+    connection.execute("ALTER TABLE sites ADD COLUMN content_json TEXT")
+    connection.execute("PRAGMA user_version=10")
+
+
 def _repair_evidence_item_fk(connection: sqlite3.Connection) -> None:
     foreign_keys = connection.execute("PRAGMA foreign_key_list(evidence_items)").fetchall()
     if any(
@@ -696,6 +703,7 @@ def decode_stored_json(value: str | None, kind: str) -> tuple[object | None, str
 
 def site_from_row(row: sqlite3.Row) -> dict[str, object]:
     result = dict(row)
+    result.pop("content_json", None)
     result["warnings"], status = decode_stored_json(result.pop("warnings_json", None), "strings")
     result["stored_field_status"] = {"warnings": status}
     result["data_status"] = "valid" if status in {"valid", "valid_empty"} else "unavailable"
