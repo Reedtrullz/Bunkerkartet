@@ -201,12 +201,13 @@ def _question_summary(connection, rows: list[sqlite3.Row]):
         for question in questions:
             entry = result[str(question["external_key"])]
             state = question["state"]
-            if state not in {"open", "deferred", "resolved"}:
+            payload, payload_status = decode_stored_json(question["payload_json"], "object")
+            unavailable = state not in {"open", "deferred", "resolved"} or payload_status not in {"valid", "valid_empty"}
+            if unavailable:
                 entry["unavailable"] += 1
-                continue
-            entry[state] += 1
-            if state != "resolved":
-                payload, payload_status = decode_stored_json(question["payload_json"], "object")
+            else:
+                entry[state] += 1
+            if state != "resolved" or unavailable:
                 entry["items"].append({
                     "id": int(question["id"]), "kind": question["kind"], "state": state,
                     "data_status": payload_status,
@@ -419,14 +420,14 @@ def install_quality_routes(
                     "open": sum(record["question_counts"]["open"] for record in all_records),
                     "deferred": sum(record["question_counts"]["deferred"] for record in all_records),
                     "resolved": sum(record["question_counts"]["resolved"] for record in all_records),
-                    "unavailable": sum(record["question_counts"]["unavailable"] for record in all_records),
+                    "unavailable_questions": sum(record["question_counts"]["unavailable"] for record in all_records),
                 },
                 "filtered": {
                     **_count_states(selected_records, "unresolved_questions"),
                     "open": sum(record["question_counts"]["open"] for record in selected_records),
                     "deferred": sum(record["question_counts"]["deferred"] for record in selected_records),
                     "resolved": sum(record["question_counts"]["resolved"] for record in selected_records),
-                    "unavailable": sum(record["question_counts"]["unavailable"] for record in selected_records),
+                    "unavailable_questions": sum(record["question_counts"]["unavailable"] for record in selected_records),
                 },
                 "total_denominator": len(all_records),
                 "filtered_denominator": len(selected_records),

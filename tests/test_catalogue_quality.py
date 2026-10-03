@@ -356,3 +356,13 @@ def test_500_record_import_effects_remain_idempotent_and_provenance_complete(tmp
             assert connection.execute("SELECT COUNT(*) FROM sites").fetchone()[0] == 500
             assert connection.execute("SELECT COUNT(*) FROM import_records").fetchone()[0] == 500
             assert connection.execute("SELECT COUNT(*) FROM evidence_items").fetchone()[0] == 500
+
+
+def test_unavailable_question_site_counts_do_not_use_question_row_denominator(quality_api):
+    api,database = quality_api
+    with database.connect() as c:
+        for _ in range(2):c.execute("INSERT INTO research_questions(external_key,kind,state,payload_json,created_at,updated_at) VALUES('quality:unknown','identity','open','[bad','2026-10-03','2026-10-03')")
+    result=api.get('/api/quality/coverage?dimension=unresolved_questions&state=unavailable',headers=ADMIN).json()
+    assert result['questions']['total']['unavailable']==1
+    assert result['questions']['total']['unavailable_questions']==2
+    assert result['drilldown']['membership_count']==1

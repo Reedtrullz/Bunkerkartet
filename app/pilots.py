@@ -197,7 +197,7 @@ class HistoricalPolicy:
             raise ValueError("historical pilot limits are outside the hard bounds")
 
 
-READ_SCOPES = frozenset({"sites:read", "history:read", "publication-preview:read"})
+READ_SCOPES = frozenset({"sites:read", "history:read"})
 
 
 @dataclass(frozen=True)

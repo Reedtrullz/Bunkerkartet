@@ -222,6 +222,11 @@ class FieldObservation(OptionalObservationContext):
         return self
 
 
+class OfflineSyncRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    expected_site_revision:int=Field(gt=0)
+
+
 class ReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
@@ -506,7 +511,7 @@ def _effective_safe_observation(connection, row):
     original = _safe_observation(row)
     try:
         result = effective_observation(connection,row)
-        result.update(id=row["id"],site_id=row["site_id"],observed_at=row["observed_at"],created_at=row["created_at"],data_status=original["data_status"])
+        result.update(id=row["id"],request_id=row["request_id"],site_id=row["site_id"],observed_at=row["observed_at"],created_at=row["created_at"],data_status=original["data_status"])
         safe=[]
         for url in result.get("photo_urls",[]):
             try:safe.append(validate_reference_url(url))
@@ -1888,8 +1893,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             current = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             return {"status": "location_reviewed", "site": site_detail(connection, current)}
 
-    @app.post("/api/sites/{site_id}/observations", dependencies=[Depends(admin_guard)])
-    def add_field_observation(site_id: int, observation: FieldObservation) -> dict[str, object]:
+    def record_field_observation(site_id: int, observation: FieldObservation, owned_connection=None):
         timestamp = now_iso()
         request_id = observation.request_id or str(uuid.uuid4())
         context_fields = set(OptionalObservationContext.model_fields) - {"point_role"}
@@ -1898,8 +1902,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if observation.captured_at is not None and observation.observed_at > date.today():
             raise HTTPException(422, "a planned visit is not a completed observation")
         payload_hash = _payload_digest(payload)
-        with database.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        from contextlib import nullcontext
+        with (database.connect() if owned_connection is None else nullcontext(owned_connection)) as connection:
+            if owned_connection is None:connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT * FROM sites WHERE id = ?", (site_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "site not found")
@@ -1971,6 +1976,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "idempotent": False,
                 },
             )
+
+    @app.post("/api/sites/{site_id}/observations", dependencies=[Depends(admin_guard)])
+    def add_field_observation(site_id:int,observation:FieldObservation):
+        return record_field_observation(site_id,observation)
+
+    @app.post('/api/pilots/offline/packs/{pack_id}/outbox/{original_request_id}/sync',dependencies=[Depends(admin_guard)])
+    def sync_offline_observation(pack_id:str,original_request_id:str,body:OfflineSyncRequest):
+        if not settings.pilot_offline_enabled:raise HTTPException(409,'offline notebook pilot is disabled')
+        from app.pilots import OfflinePolicy,inspect_offline_pack,PilotError
+        with database.connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            item=c.execute('SELECT * FROM pilot_offline_outbox WHERE pack_id=? AND original_request_id=?',(pack_id,original_request_id)).fetchone()
+            if item is None:raise HTTPException(404,'offline outbox item not found')
+            payload,status=decode_stored_json(item['payload_json'],'object')
+            if status not in {'valid','valid_empty'} or hashlib.sha256(item['payload_json'].encode()).hexdigest()!=item['payload_sha256']:raise HTTPException(409,'offline payload failed qualification')
+            if 'request_id' in payload:raise HTTPException(409,'original offline request identity cannot be replaced')
+            try:observation=FieldObservation.model_validate({**payload,'request_id':original_request_id})
+            except ValidationError as error:raise HTTPException(422,detail=_validation_detail(error))
+            if observation.observed_at>date.today():raise HTTPException(422,'a future plan cannot be synchronized as an observation')
+            site=c.execute('SELECT * FROM sites WHERE external_key=?',(item['site_key'],)).fetchone()
+            if site is None:raise HTTPException(409,'offline site no longer exists')
+            existing=c.execute('SELECT id FROM field_observations WHERE site_id=? AND request_id=?',(site['id'],original_request_id)).fetchone()
+            if existing is None:
+                try:pack=inspect_offline_pack(c,pack_id,OfflinePolicy(enabled=True))
+                except (PilotError,KeyError,ValueError):raise HTTPException(409,'offline pack requires review')
+                if pack['stale'] or item['state']!='approved_for_sync' or not item['reviewer_ref'] or item['reviewed_site_revision']!=body.expected_site_revision or site['revision']!=body.expected_site_revision or item['cached_site_revision']!=body.expected_site_revision:raise HTTPException(409,'approve the current site and pack before explicit synchronization')
+            result=record_field_observation(int(site['id']),observation,c)
+            response=json.loads(result.body) if isinstance(result,JSONResponse) else result
+            if not response['idempotent']:
+                c.execute("INSERT INTO site_events(site_id,event_type,payload_json,created_at) VALUES(?,'offline_synced',?,?)",(site['id'],dump_json({'original_request_id':original_request_id,'pack_id':pack_id,'observation_id':response['observation']['id'],'reviewer_ref':item['reviewer_ref'],'reviewed_site_revision':item['reviewed_site_revision']}),now_iso()))
+            return {**response,'synced':True,'original_request_id':original_request_id}
 
     @app.post(
         "/api/sites/{site_id}/observations/{observation_id}/adopt-location",
@@ -2400,7 +2436,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "created_at": timestamp,
         }
 
-    @app.get("/api/routes", dependencies=[Depends(read_guard)])
+    @app.get("/api/routes", dependencies=[Depends(admin_guard)])
     def list_routes(limit: int = Query(default=20, ge=1, le=100)) -> list[dict[str, object]]:
         with database.connect() as connection:
             rows = connection.execute(
@@ -2426,7 +2462,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except (TypeError, ValueError): raise HTTPException(422, "invalid itinerary budget")
             return {"route_id":route_id,"calculation_receipt":route.get("calculation_receipt"),"budget":budget,"stored_route_unchanged":True}
 
-    @app.get("/api/routes/{route_id}", dependencies=[Depends(read_guard)])
+    @app.get("/api/routes/{route_id}", dependencies=[Depends(admin_guard)])
     def get_route(route_id: int) -> dict[str, object]:
         with database.connect() as connection:
             if connection.execute("SELECT 1 FROM route_retention_receipts WHERE route_id=?",(route_id,)).fetchone():
