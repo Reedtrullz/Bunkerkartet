@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from app.db import Database, required_schema_errors
+from app.db import CURRENT_SCHEMA_VERSION, Database, required_schema_errors
 from scripts.verify_database import verify
 
 
@@ -13,7 +13,7 @@ def test_missing_request_index_fails_qualification_without_writes(tmp_path):
     with database.connect() as connection:
         connection.execute('DROP INDEX idx_field_observations_request')
     before = path.read_bytes()
-    with pytest.raises(RuntimeError): verify(path, 8)
+    with pytest.raises(RuntimeError): verify(path, CURRENT_SCHEMA_VERSION)
     assert path.read_bytes() == before
 
 

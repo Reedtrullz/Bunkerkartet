@@ -9,6 +9,7 @@ import json
 import math
 import sqlite3
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Literal
@@ -275,6 +276,7 @@ class RouteRequest(BaseModel):
     name: str = Field(default="Trondheim field route", min_length=1, max_length=200)
     start: RoutePoint
     site_ids: list[int] = Field(min_length=1, max_length=20)
+    request_id: str | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
 
     @model_validator(mode="after")
     def validate_site_ids(self) -> "RouteRequest":
@@ -1157,6 +1159,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         }
         return JSONResponse(status_code=200 if ready else 503, content=payload)
 
+    @app.get("/api/config")
+    def browser_config() -> dict[str, object]:
+        return {"idle_lock_seconds": settings.idle_lock_seconds,
+                "hidden_lock_seconds": settings.hidden_lock_seconds,
+                "enabled_map_providers": list(settings.map_providers),
+                "available_map_providers": ["kartverket", "esri"]}
+
     @app.get("/api/version")
     def version() -> dict[str, str]:
         return {"version": settings.app_version}
@@ -1859,6 +1868,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/routes", dependencies=[Depends(admin_guard)])
     def create_route(request: RouteRequest) -> dict[str, object]:
+        if not request.request_id:
+            return calculate_route(request)
+        payload_hash = _payload_digest(request.model_dump(exclude={"request_id"}))
+        with database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute("SELECT * FROM route_requests WHERE request_id=?", (request.request_id,)).fetchone()
+            if existing:
+                if existing["payload_hash"] != payload_hash:
+                    raise HTTPException(409, {"code": "IDEMPOTENCY_CONFLICT", "message": "request ID has different route inputs"})
+                if existing["route_id"] is not None:
+                    return get_route(existing["route_id"])
+                if existing["expires_at"] > time.time():
+                    raise HTTPException(409, {"code": "ROUTE_PENDING", "message": "route calculation is pending"}, headers={"Retry-After": "1"})
+                connection.execute("DELETE FROM route_requests WHERE id=?", (existing["id"],))
+            # Cap pending leases rather than accumulating abandoned calculations.
+            connection.execute("DELETE FROM route_requests WHERE route_id IS NULL AND expires_at < ?", (time.time(),))
+            pending = connection.execute("SELECT COUNT(*) FROM route_requests WHERE route_id IS NULL").fetchone()[0]
+            if pending >= 20:
+                raise HTTPException(429, "route calculations are busy", headers={"Retry-After": "1"})
+            reservation = connection.execute("INSERT INTO route_requests(request_id,payload_hash,expires_at) VALUES(?,?,?)", (request.request_id, payload_hash, time.time()+60)).lastrowid
+        try:
+            result = calculate_route(request, reservation)
+            with database.connect() as connection:
+                connection.execute("UPDATE route_requests SET route_id=? WHERE id=?", (result["id"], reservation))
+            result["request_id"] = request.request_id
+            return result
+        except BaseException:
+            with database.connect() as connection:
+                connection.execute("DELETE FROM route_requests WHERE id=? AND route_id IS NULL", (reservation,))
+            raise
+
+    def calculate_route(request: RouteRequest, reservation_id: int | None = None) -> dict[str, object]:
         if not settings.ors_api_key:
             raise HTTPException(503, "routing is not configured")
         with database.connect() as connection:
@@ -1921,6 +1962,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         timestamp = now_iso()
         with database.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            if reservation_id is not None:
+                lease = connection.execute("SELECT id FROM route_requests WHERE id=? AND request_id=? AND route_id IS NULL AND expires_at>?", (reservation_id, request.request_id, time.time())).fetchone()
+                if lease is None:
+                    raise HTTPException(409, {"code": "ROUTE_LEASE_EXPIRED", "message": "route calculation lease expired; reconcile before retry"})
             placeholders = ",".join("?" for _ in request.site_ids)
             current_rows = connection.execute(
                 f"SELECT * FROM sites WHERE id IN ({placeholders})", request.site_ids
@@ -1957,6 +2002,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
             )
             route_id = cursor.lastrowid
+            if reservation_id is not None:
+                connection.execute("UPDATE route_requests SET route_id=? WHERE id=?", (route_id, reservation_id))
         return {
             "id": route_id,
             "name": request.name,
