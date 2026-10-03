@@ -568,6 +568,19 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
     }
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(base_url)
+    # Keep the real confirmation response, but make its refresh visibly pending.
+    # Existing editor controls must not be mistaken for completed confirmation.
+    page.evaluate("""() => {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = async (url, options) => {
+            const response = await originalFetch(url, options);
+            if (String(url).endsWith('/review') && options?.body &&
+                JSON.parse(options.body).action === 'confirm') {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            return response;
+        };
+    }""")
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
     page.locator("#import-file").set_input_files({
@@ -588,6 +601,8 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
     evidence.check()
     promotion.get_by_label("Begrunnelse for vurderingen", exact=True).fill("Importert syntetisk kilde støtter identiteten; tilgang er fortsatt ukjent.")
     promotion.get_by_role("button", name="Lagre marker som kildegjennomgått", exact=True).click()
+    status_fact = page.locator("#site-detail .detail-fact").filter(has=page.get_by_text("Status", exact=True)).locator("dd")
+    expect(status_fact).to_have_text("Kildegjennomgått")
     page.locator("#detail-panel").get_by_role("button", name="Marker som feltverifisert", exact=True).wait_for()
     page.get_by_text("Feltobservasjoner", exact=True).click()
     observation = page.locator("details.observations-editor form.observation-form")
@@ -605,6 +620,7 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
     found_observation.check()
     field_review.get_by_label("Begrunnelse for vurderingen", exact=True).fill("En eksplisitt feltobservasjon med funnet utfall er gjennomgått.")
     field_review.get_by_role("button", name="Lagre marker som feltverifisert", exact=True).click()
+    expect(status_fact).to_have_text("Feltverifisert")
     page.locator("#detail-panel").get_by_role("button", name="Bekreft", exact=True).wait_for()
     page.get_by_role("button", name="Bekreft", exact=True).click()
     confirm = page.locator("#detail-panel .promotion-form")
@@ -612,6 +628,7 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
     confirm.locator("input[data-observation-id]").check()
     confirm.get_by_label("Begrunnelse for vurderingen", exact=True).fill("Feltobservasjonen er knyttet til identiteten; alle åpne spørsmål er avklart.")
     confirm.get_by_role("button", name="Lagre bekreft", exact=True).click()
+    expect(status_fact).to_have_text("Bekreftet")
     page.get_by_text("Rediger sted", exact=True).wait_for()
     page.get_by_text("Rediger sted", exact=True).click()
     editor = page.locator("details", has_text="Rediger sted")
