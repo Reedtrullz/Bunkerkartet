@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bunkerkartet</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body>
+<body data-session-role="anonymous">
   <header class="app-header">
     <div class="brand">
       <strong>Bunkerkartet</strong>
       <span>Trondheims feltkart</span>
+      <span id="session-role-status" class="session-role-status" role="status" aria-live="polite">Ikke innlogget</span>
     </div>
     <form id="auth-form" class="auth-bar">
       <label for="admin-token">Administratortoken</label>
@@ -26,7 +27,7 @@
   <nav class="surface-nav" aria-label="Arbeidsflater">
     <button id="surface-map" type="button" data-target="map-tools-panel" aria-pressed="true">Kart</button>
     <button id="surface-review" type="button" data-target="review-panel" aria-pressed="false">Vurdering</button>
-    <button id="surface-route" type="button" data-target="route-panel" aria-pressed="false">Tur</button>
+    <button id="surface-route" type="button" data-target="route-panel" aria-pressed="false" data-owner-only>Tur</button>
   </nav>
 
   <main class="layout">
@@ -36,10 +37,17 @@
           <h2 id="map-tools-heading">Kartverktøy</h2>
         </div>
         <div class="button-row">
-          <button id="pick-start" type="button">Velg start på kartet</button>
-          <button id="use-location" type="button">Bruk min posisjon</button>
+          <button id="pick-start" type="button" data-owner-only>Velg start på kartet</button>
+          <button id="use-location" type="button" data-owner-only>Bruk min posisjon</button>
         </div>
         <div id="location-status" class="site-meta" aria-live="polite">Posisjon brukes bare når du velger «Bruk min posisjon».</div>
+        <div id="geography-status" class="surface-read-status" aria-live="polite">Standardområde: Trondheim.</div>
+        <label for="map-provider">Eksternt kartlag
+          <select id="map-provider" aria-describedby="map-provider-status" disabled>
+            <option value="">Ingen eksterne kartlag</option>
+          </select>
+        </label>
+        <div id="map-provider-status" class="surface-read-status" aria-live="polite">Ingen kartleverandør valgt. Kartforespørsler er slått av.</div>
       </section>
 
       <section id="detail-panel" class="panel detail-panel surface-panel" data-surface="review" aria-labelledby="site-detail-heading">
@@ -62,6 +70,18 @@
               <option value="trusted">Bekreftet</option>
               <option value="field-verified">Feltverifisert</option>
               <option value="destroyed-or-filled">Ødelagt eller fylt igjen</option>
+              <option value="rejected">Avvist</option>
+            </select>
+          </label>
+          <label>Kategori
+            <select id="category-filter">
+              <option value="">Alle kategorier</option>
+              <option value="bunker">Bunker / militærstilling</option>
+              <option value="cave">Hule / tunnel</option>
+              <option value="pow">Krigsfangeleir</option>
+              <option value="grave">Krigsgrav</option>
+              <option value="memorial">Krigsminnesmerke</option>
+              <option value="other">Annet krigsminne</option>
             </select>
           </label>
           <label>Type
@@ -93,8 +113,10 @@
           </label>
         </div>
         <div class="button-row">
+          <button id="clear-filters" type="button">Nullstill filtre</button>
           <button id="download-geojson" type="button" disabled>Eksporter hele katalogen</button>
         </div>
+        <div id="site-read-status" class="surface-read-status" aria-live="polite"></div>
         <div id="site-list" class="site-list" aria-live="polite"></div>
       </section>
 
@@ -104,7 +126,7 @@
         <div id="overlap-list" class="overlap-list"></div>
       </section>
 
-      <section class="panel import-panel surface-panel" data-surface="map">
+      <section class="panel import-panel surface-panel" data-surface="map" data-owner-only>
         <div class="panel-heading"><h2>Importer JSON</h2></div>
         <label for="import-file">JSON-fil</label>
         <input id="import-file" type="file" accept="application/json,.json">
@@ -156,6 +178,7 @@
           </label>
         </div>
         <div id="candidate-summary" class="site-meta"></div>
+        <div id="candidate-read-status" class="surface-read-status" aria-live="polite"></div>
         <div id="candidate-list" class="candidate-list"></div>
       </section>
 
@@ -165,22 +188,48 @@
           <button id="refresh-field-priority">Oppdater</button>
         </div>
         <div id="field-priority-summary" class="site-meta"></div>
+        <div id="field-priority-read-status" class="surface-read-status" aria-live="polite"></div>
         <div id="field-priority-list" class="site-list"></div>
       </section>
 
-      <section class="panel route-panel surface-panel" data-surface="route">
+      <section class="panel route-panel surface-panel" data-surface="route" data-owner-only>
         <div class="panel-heading"><h2>Gå-rute</h2></div>
+        <div id="route-draft-controls" data-owner-only>
         <label>Rutenavn
           <input id="route-name" type="text" value="Feltur i Trondheim" maxlength="200">
         </label>
+        <div class="detail-grid route-options">
+          <label>Ruteform
+            <select id="route-mode">
+              <option value="one_way">Én vei</option>
+              <option value="return_to_start">Tur-retur start</option>
+              <option value="explicit_end">Eget sluttpunkt</option>
+            </select>
+          </label>
+          <label>Rutemodell
+            <select id="route-profile"><option value="foot-hiking">Til fots — tursti</option></select>
+          </label>
+          <label id="route-end-lat-label" hidden>Sluttpunkt breddegrad
+            <input id="route-end-lat" type="number" min="-90" max="90" step="0.000001">
+          </label>
+          <label id="route-end-lon-label" hidden>Sluttpunkt lengdegrad
+            <input id="route-end-lon" type="number" min="-180" max="180" step="0.000001">
+          </label>
+          <label>Budsjett for hele turen (minutter, valgfritt)
+            <input id="route-declared-budget" type="number" min="0" max="10080" step="1" inputmode="numeric">
+          </label>
+        </div>
+        <p class="site-meta">Rutemodell og stopp sendes til rutetjenesten når du beregner. Besøkstid er valgfri; tomt felt betyr ukjent.</p>
         <div id="route-start" class="route-start">Start: Standardstart i Trondheim</div>
         <p class="site-meta">Når du beregner ruten, sendes start og stopp til OpenRouteService. Startpunkt og rute lagres i din private rutehistorikk. Du kan velge start manuelt.</p>
         <ol id="route-stops" class="route-stops"></ol>
         <button id="create-route" class="primary" disabled>Beregn rute</button>
+        </div>
+        <div id="route-read-status" class="surface-read-status" aria-live="polite"></div>
         <div id="route-result" class="route-result" aria-live="polite"></div>
       </section>
 
-      <section class="panel saved-routes-panel surface-panel" data-surface="route">
+      <section class="panel saved-routes-panel surface-panel" data-surface="route" data-owner-only>
         <div class="panel-heading">
           <h2>Lagrede ruter</h2>
           <button id="refresh-routes" type="button">Oppdater</button>
@@ -190,7 +239,7 @@
       </section>
     </aside>
     <section class="map-shell">
-      <div id="map" aria-label="Kart over steder i Trondheim"></div>
+      <div id="map" role="region" aria-label="Kart over steder i Trondheim" aria-describedby="map-provider-status"></div>
       <details class="map-key" aria-label="Tegnforklaring">
         <summary>Tegnforklaring</summary>
         <strong>Stedstype</strong>
@@ -211,8 +260,10 @@
     </section>
   </main>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="/static/vendor/leaflet/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
   <script src="/static/app.js"></script>
+  <script defer src="/static/research-ui.js"></script>
+  <script defer src="/static/workflow-ui.js"></script>
 </body>
 </html>

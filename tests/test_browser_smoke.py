@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, expect, sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,9 +22,7 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-@pytest.fixture(scope="module")
-def base_url(tmp_path_factory: pytest.TempPathFactory) -> str:
-    data_dir = tmp_path_factory.mktemp("browser-data")
+def _start_browser_server(data_dir: Path) -> tuple[str, subprocess.Popen[str]]:
     port = _free_port()
     process = subprocess.Popen(
         [sys.executable, str(ROOT / "tests/browser_server.py")],
@@ -41,36 +39,71 @@ def base_url(tmp_path_factory: pytest.TempPathFactory) -> str:
         text=True,
     )
     url = f"http://127.0.0.1:{port}"
-    try:
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            try:
-                with urllib.request.urlopen(f"{url}/api/health", timeout=0.5) as response:
-                    if response.status == 200:
-                        break
-            except OSError:
-                time.sleep(0.1)
-        else:
-            stderr = process.stderr.read() if process.stderr else ""
-            raise RuntimeError(f"browser server did not start: {stderr}")
-        yield url
-    finally:
-        process.terminate()
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
         try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
+            with urllib.request.urlopen(f"{url}/api/health", timeout=0.5) as response:
+                if response.status == 200:
+                    return url, process
+        except OSError:
+            if process.poll() is not None:
+                break
+            time.sleep(0.1)
+    process.terminate()
+    try:
+        _, stderr = process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        _, stderr = process.communicate(timeout=5)
+    raise RuntimeError(f"browser server did not start: {stderr[-4000:]}")
+
+
+def _stop_browser_server(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
 
 
 @pytest.fixture
-def page():
+def base_url(tmp_path: Path) -> str:
+    url, process = _start_browser_server(tmp_path / "browser-data")
+    try:
+        yield url
+    finally:
+        _stop_browser_server(process)
+
+
+@pytest.fixture
+def page(tmp_path: Path):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        page = browser.new_page()
+        context = browser.new_context()
+        context.tracing.start(screenshots=True, snapshots=False, sources=False)
+        page = context.new_page()
         try:
             yield page
+        except Exception:
+            screenshot = tmp_path / "browser-failure.png"
+            trace = tmp_path / "browser-failure.zip"
+            page.screenshot(path=str(screenshot), full_page=False)
+            context.tracing.stop(path=str(trace))
+            if trace.stat().st_size > 4 * 1024 * 1024:
+                trace.unlink()
+            print(f"redacted synthetic browser artifacts: {screenshot}")
+            if trace.exists():
+                print(f"redacted synthetic browser trace: {trace}")
+            raise
         finally:
+            if context.tracing.stop:
+                try:
+                    context.tracing.stop()
+                except Exception:
+                    pass
             browser.close()
 
 
@@ -123,7 +156,7 @@ def test_delayed_geolocation_cannot_restore_route_start_after_lock(page: Page, b
     )
     page.wait_for_timeout(100)
 
-    assert page.locator("#route-start").inner_text() == "Start: ingen start valgt"
+    assert page.locator("#route-start").inner_text() == "Start: Standardstart i Trondheim"
     assert "Posisjon brukes bare" in page.locator("#location-status").inner_text()
 
 
@@ -249,8 +282,9 @@ def test_lock_discards_delayed_import_file_read(page: Page, base_url: str):
     page.evaluate(
         """() => {
             const file = new File(['{"batch_id":"stale"}'], 'stale.json', {type: 'application/json'});
-            Object.defineProperty(file, 'text', {value: () => new Promise(resolve =>
-                setTimeout(() => resolve('{"batch_id":"stale"}'), 500))});
+            const bytes = new TextEncoder().encode('{"batch_id":"stale"}');
+            Object.defineProperty(file, 'arrayBuffer', {value: () => new Promise(resolve =>
+                setTimeout(() => resolve(bytes.buffer), 500))});
             const transfer = new DataTransfer();
             transfer.items.add(file);
             const input = document.getElementById('import-file');
@@ -318,9 +352,11 @@ def test_new_file_read_clears_old_import_before_preview(page: Page, base_url: st
 
     page.evaluate(
         """() => {
-            const file = new File(['{"schema_version":"1.0","batch_id":"browser-file-b","generated_at":"2026-09-14T12:00:00Z","records":[]}'], 'b.json', {type: 'application/json'});
-            Object.defineProperty(file, 'text', {value: () => new Promise(resolve =>
-                setTimeout(() => resolve('{"schema_version":"1.0","batch_id":"browser-file-b","generated_at":"2026-09-14T12:00:00Z","records":[]}'), 500))});
+            const source = '{"schema_version":"1.0","batch_id":"browser-file-b","generated_at":"2026-09-14T12:00:00Z","records":[]}';
+            const file = new File([source], 'b.json', {type: 'application/json'});
+            const bytes = new TextEncoder().encode(source);
+            Object.defineProperty(file, 'arrayBuffer', {value: () => new Promise(resolve =>
+                setTimeout(() => resolve(bytes.buffer), 500))});
             const transfer = new DataTransfer();
             transfer.items.add(file);
             const input = document.getElementById('import-file');
@@ -466,7 +502,7 @@ def test_site_detail_prioritizes_enrichment_and_folds_technical_metadata(page: P
     for heading in ("Om stedet", "Hva finnes her i dag", "Besøk og tilgang", "Fysisk tilgjengelighet", "Adgangsregler"):
         assert page.get_by_role("heading", name=heading, exact=True).is_visible()
     assert page.get_by_text("Kildeunderlag kuratert", exact=True).is_visible()
-    assert page.get_by_text("KrigsKart knytter markør 413 til et Junkers Ju 88 A som gikk gjennom smeltende is på Jonsvatnet. Kilden oppgir 21. april 1940; vannet ble brukt som flyplass tidlig i krigen.", exact=True).is_visible()
+    assert page.locator("#site-detail .enrichment-claim p", has_text="KrigsKart knytter markør 413 til et Junkers Ju 88 A").is_visible()
     assert page.get_by_text("Uavklart", exact=True).count() >= 1
     assert page.get_by_text("Registrert beskrivelse: Coordinate copied from KrigsKart map marker #413; the source point is a starting area for review, not a field-verified entrance or footprint.", exact=True).count() == 0
     folded_warning = page.get_by_text("Candidate point transcribed from a public map/source; coordinate, identity, condition, and access require independent verification.", exact=True)
@@ -478,7 +514,12 @@ def test_site_detail_prioritizes_enrichment_and_folds_technical_metadata(page: P
     data_basis.locator("summary", has_text="Datagrunnlag").click()
     assert data_basis.get_by_text("Importnøkkel", exact=True).is_visible()
     assert data_basis.get_by_text("Jonsvatnet, Trondheim, 3", exact=True).is_visible()
-    assert data_basis.get_by_role("link", name="Synthetic source", exact=True).is_visible()
+    # The registry has a current title, but this legacy citation did not retain
+    # its historical title. Keep the citation label anchored to its URL and
+    # make the missing historical metadata explicit rather than backfilling it.
+    assert data_basis.get_by_role("link", name="https://example.com/browser-source", exact=True).is_visible()
+    assert data_basis.locator(".site-meta", has_text="registertittel: Synthetic source").is_visible()
+    assert data_basis.locator(".site-meta", has_text="Historisk tittel/type ukjent; registermetadata vises").is_visible()
     assert data_basis.get_by_text("Coordinate copied from KrigsKart map marker #413; the source point is a starting area for review, not a field-verified entrance or footprint.", exact=True).is_visible()
     assert data_basis.get_by_text("Candidate point transcribed from a public map/source; coordinate, identity, condition, and access require independent verification.", exact=True).is_visible()
 
@@ -520,6 +561,7 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
                 "title": "E2E-kilde",
                 "source_type": "test",
                 "excerpt": "Syntetisk testkilde.",
+                "access_date": "2026-09-14",
             }],
             "confidence": "medium",
         }],
@@ -539,6 +581,13 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
     candidate = page.locator(".candidate-item", has_text="E2E testbunker")
     candidate.get_by_role("button", name="Detaljer", exact=True).click()
     page.locator("#detail-panel").get_by_role("button", name="Marker som kildegjennomgått", exact=True).click()
+    promotion = page.locator("#detail-panel .promotion-form")
+    expect(promotion.get_by_role("button", name="Lagre marker som kildegjennomgått", exact=True)).to_be_disabled()
+    evidence = promotion.locator("input[data-evidence-id]")
+    expect(evidence).to_have_count(1)
+    evidence.check()
+    promotion.get_by_label("Begrunnelse for vurderingen", exact=True).fill("Importert syntetisk kilde støtter identiteten; tilgang er fortsatt ukjent.")
+    promotion.get_by_role("button", name="Lagre marker som kildegjennomgått", exact=True).click()
     page.locator("#detail-panel").get_by_role("button", name="Marker som feltverifisert", exact=True).wait_for()
     page.get_by_text("Feltobservasjoner", exact=True).click()
     observation = page.locator("details.observations-editor form.observation-form")
@@ -550,8 +599,19 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
     observation.get_by_role("button", name="Lagre observasjon", exact=True).click()
     page.locator(".observation-list").get_by_text("Syntetisk observasjon", exact=True).wait_for(state="attached")
     page.get_by_role("button", name="Marker som feltverifisert", exact=True).click()
+    field_review = page.locator("#detail-panel .promotion-form")
+    found_observation = field_review.locator("input[data-observation-id]")
+    expect(found_observation).to_have_count(1)
+    found_observation.check()
+    field_review.get_by_label("Begrunnelse for vurderingen", exact=True).fill("En eksplisitt feltobservasjon med funnet utfall er gjennomgått.")
+    field_review.get_by_role("button", name="Lagre marker som feltverifisert", exact=True).click()
     page.locator("#detail-panel").get_by_role("button", name="Bekreft", exact=True).wait_for()
     page.get_by_role("button", name="Bekreft", exact=True).click()
+    confirm = page.locator("#detail-panel .promotion-form")
+    expect(confirm.locator(".promotion-blockers")).to_contain_text("Ingen åpne")
+    confirm.locator("input[data-observation-id]").check()
+    confirm.get_by_label("Begrunnelse for vurderingen", exact=True).fill("Feltobservasjonen er knyttet til identiteten; alle åpne spørsmål er avklart.")
+    confirm.get_by_role("button", name="Lagre bekreft", exact=True).click()
     page.get_by_text("Rediger sted", exact=True).wait_for()
     page.get_by_text("Rediger sted", exact=True).click()
     editor = page.locator("details", has_text="Rediger sted")
@@ -570,8 +630,16 @@ def test_complete_synthetic_operator_flow_reaches_saved_gpx(page: Page, base_url
     item.get_by_role("button", name="Legg til rute", exact=True).click()
     page.get_by_role("button", name="Tur", exact=True).press("Enter")
     page.locator("#route-stops").get_by_text("E2E testbunker med svært langt navn som skal brytes trygt", exact=True).wait_for()
+    page.locator("#route-mode").select_option("one_way")
+    page.locator("#route-stops input[type=number]").fill("30")
+    page.get_by_label("Budsjett for hele turen (minutter, valgfritt)", exact=True).fill("120")
     assert not page.get_by_role("button", name="Beregn rute", exact=True).is_disabled()
-    page.get_by_role("button", name="Beregn rute", exact=True).click()
+    with page.expect_response(lambda response: response.request.method == "POST" and response.url.endswith("/api/routes")) as calculated:
+        page.get_by_role("button", name="Beregn rute", exact=True).click()
+    assert calculated.value.status == 200, calculated.value.text()
+    assert calculated.value.request.post_data_json["mode"] == "one_way"
+    assert calculated.value.request.post_data_json["visit_minutes"] == [30]
+    assert calculated.value.request.post_data_json["declared_budget_minutes"] == 120
     page.get_by_text("Last ned GPX", exact=True).wait_for()
     with page.expect_download() as download:
         page.get_by_text("Last ned GPX", exact=True).click()

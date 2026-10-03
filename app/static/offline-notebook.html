@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Frakoblet feltnotatbok · Bunkerkartet</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px/1.5 system-ui, sans-serif; }
+    body { max-width: 58rem; margin: 2rem auto; padding: 0 1rem; }
+    h1, h2 { line-height: 1.2; }
+    label { display: block; margin: .75rem 0; }
+    input, select, textarea, button { box-sizing: border-box; font: inherit; max-width: 100%; padding: .45rem; }
+    input, select, textarea { width: min(100%, 38rem); }
+    textarea { min-height: 7rem; }
+    button { margin: .3rem .35rem .3rem 0; }
+    article, fieldset, .notice { border: 1px solid #87919a; border-radius: .35rem; margin: 1rem 0; padding: .8rem; }
+    .notice { background: color-mix(in srgb, #e6ae36 20%, transparent); }
+    .stale { border-inline-start: .4rem solid #b84332; }
+    .changed { border-inline-start: .4rem solid #b7791f; }
+    .safe { overflow-wrap: anywhere; white-space: pre-wrap; }
+    [role="status"] { min-height: 1.5em; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  </style>
+</head>
+<body data-offline-notebook>
+  <header>
+    <h1>Frakoblet feltnotatbok</h1>
+    <p class="notice">Privat enhetslagring krever et uttrykkelig valgt og tidsbegrenset utvalg. Denne siden lagrer aldri bearer-token, kartfliser eller automatisk hele katalogen. Notater synkroniseres ikke automatisk.</p>
+  </header>
+  <main id="offline-notebook" aria-live="polite"></main>
+  <script src="/static/offline-notebook.js" defer></script>
+</body>
+</html>
