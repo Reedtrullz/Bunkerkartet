@@ -3,8 +3,21 @@ all:
     bunkerkartet:
       ansible_host: 203.0.113.10
       ansible_user: deploy
-      ansible_ssh_extra_args: -o IdentitiesOnly=yes
+      ansible_ssh_extra_args: -o IdentitiesOnly=yes -o IdentityAgent=none
       bunkerkartet_app_dir: /opt/bunkerkartet
       bunkerkartet_image_repository: ghcr.io/reedtrullz/bunkerkartet
       bunkerkartet_image_tag: REPLACE_WITH_COMMIT_SHA
       bunkerkartet_image_digest: sha256:REPLACE_WITH_PUBLISHED_IMAGE_DIGEST
+      bunkerkartet_expected_schema_version: REPLACE_WITH_CURRENT_SCHEMA_VERSION
+      bunkerkartet_app_port: 8000
+      bunkerkartet_data_volume: REPLACE_WITH_QUALIFIED_CANDIDATE_VOLUME
+      bunkerkartet_backup_archive_path: /srv/backups/bunkerkartet/REPLACE_WITH_ARCHIVE.tar.gz
+      bunkerkartet_backup_receipt_path: /srv/backups/bunkerkartet/REPLACE_WITH_ARCHIVE.tar.gz.receipt.json
+      bunkerkartet_backup_sha256: REPLACE_WITH_VERIFIED_SHA256
+      bunkerkartet_backup_schema_version: REPLACE_WITH_PREVIOUS_SCHEMA_VERSION
+      bunkerkartet_rollback_image_digest: sha256:REPLACE_WITH_ACTIVE_IMAGE_DIGEST
+      bunkerkartet_rollback_schema_version: REPLACE_WITH_PREVIOUS_SCHEMA_VERSION
+      bunkerkartet_rollback_data_volume: bunkerkartet-data
+      bunkerkartet_rollback_backup_sha256: REPLACE_WITH_VERIFIED_SHA256
+      # Required when candidate schema differs; produced by qualify_migration.py against the retained backup.
+      bunkerkartet_migration_qualification_path: REPLACE_WITH_REVIEWED_QUALIFICATION_JSON

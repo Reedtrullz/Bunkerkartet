@@ -26,11 +26,24 @@ def test_frontend_exposes_operational_controls_without_duplicate_auth_binding():
     assert "hasReviewedPublicApproach" in javascript
     assert "timeout: 10000" in javascript
     assert "accuracy" in javascript
-    assert "L.control.layers" in javascript
+    assert 'id="map-provider"' in html
+    assert "function configureMapChoices(config)" in javascript
+    assert "function selectMapProvider(provider)" in javascript
+    assert "state.config.enabled_map_providers" in javascript
+    assert "Kartforespørsler er slått av" in javascript
+    assert "L.control.layers" not in javascript
+    assert html.index('/static/research-ui.js') < html.index('/static/workflow-ui.js')
+    assert 'id="session-role-status"' in html
+    assert "function hasSessionRole(role)" in javascript
+    assert "function hasSessionScope(scope)" in javascript
+    assert "function applyGeographyDefaults({ force = false } = {})" in javascript
+    assert 'data-session-role="anonymous"' in html
+    assert 'id="geography-status"' in html
+    assert "enabled_map_providers: Array.isArray(config.enabled_map_providers)" in javascript
     assert "siteCache" in javascript
     assert "target_site_id" in javascript
     assert "Kopier koordinater" in javascript
-    assert "startMarker = L.circleMarker" in javascript
+    assert "L.circleMarker([point.lat, point.lon]" in javascript
     assert "Importnøkkel" in javascript
     assert "function locationCategory(siteKind)" in javascript
     assert "L.divIcon" in javascript

@@ -1,227 +1,90 @@
 # Deployment
 
-The live service is deployed from a published `main` image through the
-authorized Ansible deployment path. CI builds and publishes the immutable
-image; the intended runtime is a Docker Compose service on the VPS, with Caddy
-terminating public TLS and proxying to the app on `127.0.0.1:8000`. The
-repository also contains the Ansible path for manual or recovery deployment.
+The live service uses the published immutable `main` image through the
+authorized Ansible path. Docker Compose runs the app on a named data volume and
+binds its selected port to loopback; Caddy terminates TLS and proxies to the
+app. No DNS or Caddy configuration is managed by the playbook.
 
 ## Build and publish
 
-GitHub Actions runs tests and builds the image for pull requests and pushes to
-`main`. Only a push to `main` publishes to GHCR. The
-published image receives the full commit SHA tag and the workflow summary
-records its digest. Deploy both values; the Compose service runs by digest.
+GitHub Actions runs Python 3.12 tests, browser smoke, frontend syntax checks,
+and a non-root synthetic container smoke. A push to `main` publishes the
+image with the full commit SHA tag and records its digest in the workflow
+summary. Deploy the digest and SHA together. The digest is the runtime
+identity; never deploy `latest` or a mutable branch tag.
 
-```text
-ghcr.io/reedtrullz/bunkerkartet@sha256:0123456789abcdef...
-```
+## Runtime checks
 
-Do not use `latest` or a mutable branch tag. A commit SHA tag is used to find
-the published artifact; the digest is the enforced runtime identity.
+`/api/health` is liveness. `/api/ready` checks database integrity/schema,
+admin authentication configuration, and optional routing configuration; it
+returns `503` until the database and private API authentication are ready.
+`/api/version` reports the configured application version. The deployment
+playbook requires ready database/authentication and an exact full-SHA version
+match before producing its release receipt.
 
-## Runtime readiness and limits
+Import preview and commit reject request bodies over 2 MiB before JSON
+parsing, packages over 500 records, records with more than 20 sources, or more
+than 30 warnings of 1,000 characters each. Routing permits two concurrent
+OpenRouteService calls and returns `429` with `Retry-After` when both slots
+are occupied.
 
-`/api/health` remains the liveness and backwards-compatible deployment check.
-`/api/ready` is the readiness check: it reports database integrity/schema,
-admin authentication configuration, and whether optional routing is configured;
-it returns `503` until the database and private API authentication are ready.
+## Ansible deployment
 
-Import preview and commit reject request bodies over 2 MiB before JSON parsing,
-packages over 500 records, records with more than 20 sources, or more than 30
-warnings of 1,000 characters each. Routing permits two concurrent
-OpenRouteService calls and returns `429` with `Retry-After` when both slots are
-occupied; callers must retry rather than queue unbounded work.
+Copy `deploy/inventory.example.yml` to the ignored `deploy/inventory.yml` and
+fill in the exact commit SHA, image digest, and the schema version reported by
+that exact image's `app.db.CURRENT_SCHEMA_VERSION`; use the same value for the
+backup and rollback schema fields. Also provide the owner-only backup
+archive/receipt/checksum, selected loopback port, and current rollback image,
+schema, volume, and checksum. Prepare `.env` on the host with owner-only
+permissions and a nonempty `ADMIN_TOKEN`; the playbook checks its presence
+without displaying the token.
 
-CI runs the full Python suite, the Playwright browser smoke suite with a pinned
-Python 3.12 environment, frontend syntax validation, and the digest-pinned
-container build. GitHub Actions references remain full commit SHA pinned.
+The playbook verifies private environment-file permissions, image-tag digest,
+backup checksum and schema, and compatible rollback coordinates before
+Compose replacement. It uses the selected port for its readiness and exact
+version checks and writes a redacted release receipt after both pass. Failed
+preflight does not replace the running service. A failed post-start readiness
+check retains the old volume and backup for a reviewed rollback; the playbook
+does not overwrite data automatically.
 
-## Recommended GitHub policy
-
-For an authorized repository owner, require the CI workflow before merging to
-`main`, block force-pushes and branch deletion on protected branches, and keep
-the bypass path limited to named owners with an auditable reason. This is
-release guidance only; this repository change does not modify GitHub settings.
-
-## Ansible preparation
-
-Copy `deploy/inventory.example.yml` to an ignored `deploy/inventory.yml`, then
-replace the placeholder host, commit SHA, and published image digest. Public
-GHCR packages can be pulled anonymously. If the package is private, provide the
-server's GHCR username and read-only package token through an Ansible Vault file
-or another external secret source. Do not put registry credentials in the
-application `.env` or in Git.
-
-```bash
+```sh
 ansible-playbook -i deploy/inventory.yml deploy/site.yml
 ```
 
-The playbook requires a 40-character commit SHA and a `sha256:` digest. It
-optionally logs in, pulls the SHA tag, verifies that it resolves to the expected
-digest, writes the digest-pinned Compose file, and checks both `/api/health` and
-its reported version. It does not configure DNS, Caddy, or application
-credentials.
+The receipt is stored in `/srv/backups/bunkerkartet-releases/`. Keep the
+inventory private because it contains infrastructure coordinates; it must
+not contain credential values.
+
+## Backup, restore, and governance
+
+Use the bounded SQLite backup utility, staged restore procedure, UID `10001`
+write qualification, failure-retention checks, receipt format, and branch
+protection dry-run in [`operations/README.md`](operations/README.md). The
+existing read-only verifiers are called by the new utilities. Restore writes
+to a new staged path and never clears an active volume.
+
+Backup schedules, offsite transfer, encryption provider, RPO/RTO, retention,
+and route/observation deletion remain disabled pending owner decisions in
+[`operations/backup-policy.json`](operations/backup-policy.json). Branch
+protection remains inactive pending owner review in
+[`operations/release-governance.json`](operations/release-governance.json).
 
 ## Caddy
 
 Copy the block from `deploy/Caddyfile.example` into the host Caddy
 configuration and reload Caddy using the host's normal service manager. It is
-prepared for `bunker.reidar.tech`. Caddy is the only public entry point; Compose
-binds port 8000 to loopback. The named data volume is explicitly
-`bunkerkartet-data`, so backup commands do not depend on the Compose project
-directory. The example also enables one-year HSTS; only use it once the
-hostname is permanently HTTPS-only.
+prepared for `bunker.reidar.tech`. Compose binds the selected application port
+to loopback. The example enables one-year HSTS; use it only when the hostname
+is permanently HTTPS-only.
 
-## SQLite backup
+### Schema-changing releases
 
-Back up the named Compose volume while the service is stopped. This command
-fails if the expected volume does not exist or the archive is not created.
+A pre-migration backup and rollback image describe the **previous** schema. They must remain paired. Do not relabel a schema-8 backup as the candidate schema or mount a migrated volume in an older image. `scripts/verify_database.py --expected-version 8` now qualifies the actual supported historical structure read-only. `backup_database.py` records the actual source schema and refuses SQLite-only backups with active image references.
 
-```bash
-set -eu
-cd /opt/bunkerkartet
-VOLUME=bunkerkartet-data
-BACKUP_DIR=/srv/backups
-STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-BACKUP="$BACKUP_DIR/bunkerkartet-$STAMP.tar.gz"
+Before a schema-changing rollout, restore the retained archive to a new candidate staging directory with `scripts/qualify_migration.py --archive ARCHIVE --destination NEW_STAGE --source-version PREVIOUS_VERSION --candidate-data-volume NEW_VOLUME --rollback-data-volume OLD_VOLUME`. The command migrates only the staged copy, checks schema/integrity, verifies the rollback archive stayed unchanged, and writes `migration-qualification.json`. It does not prove runtime readiness. Populate the corresponding separate candidate volume, qualify the exact candidate image and private authentication there, and retain the old image/volume/archive pair. Supply the reviewed qualification file as `bunkerkartet_migration_qualification_path`; Ansible and the release receipt reject a schema-changing rollout without distinct volume identities and matching qualification. Port, deployment host and actual rollout remain owner-gated.
 
-docker volume inspect "$VOLUME" >/dev/null
-mkdir -p "$BACKUP_DIR"
-trap 'docker compose start bunkerkartet' EXIT
-docker compose stop bunkerkartet
-docker run --rm \
-  -v "$VOLUME:/data:ro" \
-  -v "$BACKUP_DIR:/backup" \
-  alpine:3.20 sh -c "tar -czf /backup/$(basename "$BACKUP") -C /data ."
-test -s "$BACKUP"
-docker compose start bunkerkartet
-trap - EXIT
-```
+Owned photos use the full media workspace format (`app.media_exchange`), which includes qualified derivatives, thumbnails, optional originals, receipts and database references. SQLite-only backup/export refuses active photo references. No real photos or retention job were enabled by this implementation.
 
-Store the archive outside the application directory and retain it according to
-the normal server backup policy.
+### Explicit private route erasure
 
-## Restore preflight
-
-Use a separate staging volume or directory for every restore exercise. Stop the
-writer before handling SQLite files; `bunkerkartet.sqlite3`, its `-wal`, and
-its `-shm` file are one consistency set. Never copy only the main file from a
-live WAL-mode database.
-
-Before stopping the service, reject archives containing absolute paths,
-`..` path components, symlinks, hardlinks, or any member other than the three
-SQLite files. This inspect-only check does not extract anything:
-
-```bash
-python3 - "$ARCHIVE" <<'PY'
-import sys
-import tarfile
-
-allowed = {"bunkerkartet.sqlite3", "bunkerkartet.sqlite3-wal", "bunkerkartet.sqlite3-shm"}
-seen = set()
-root_seen = False
-with tarfile.open(sys.argv[1], "r:gz") as archive:
-    members = archive.getmembers()
-    for member in members:
-        if member.name in {".", "./"}:
-            if root_seen or not member.isdir():
-                raise SystemExit("archive rejected")
-            root_seen = True
-            continue
-        name = member.name[2:] if member.name.startswith("./") else member.name
-        if (member.name.startswith("/") or ".." in name.split("/")
-                or name not in allowed or not member.isreg()
-                or member.issym() or member.islnk() or name in seen):
-            raise SystemExit("archive rejected")
-        seen.add(name)
-    if "bunkerkartet.sqlite3" not in seen:
-        raise SystemExit("archive rejected")
-PY
-```
-
-Extract into staging, then run the repository's read-only verifier against the
-staged database before replacing the volume. It must report the expected
-schema version, `integrity_check=ok`, an empty foreign-key check, and table
-counts. Keep the pre-restore archive until the application health check passes;
-that archive is the rollback point. Record the restore timestamp, expected
-version, archive hash, and whether any writes after the backup are outside the
-RPO.
-
-## SQLite restore
-
-Restore only during a maintenance window. Pass the archive path, exact
-deployed commit SHA, and schema version as arguments. The script validates the
-archive before stopping writes, confirms the stable volume, creates a
-pre-restore backup, extracts into a separate staging volume, verifies the
-staged database, and only then replaces the current volume contents. Any
-failed precondition exits before replacement and the trap starts the service.
-
-```bash
-set -eu
-cd /opt/bunkerkartet
-ARCHIVE="${1:?usage: $0 /srv/backups/file.tar.gz COMMIT_SHA SCHEMA_VERSION}"
-EXPECTED_VERSION="${2:?usage: $0 /srv/backups/file.tar.gz COMMIT_SHA SCHEMA_VERSION}"
-EXPECTED_SCHEMA_VERSION="${3:?usage: $0 /srv/backups/file.tar.gz COMMIT_SHA SCHEMA_VERSION}"
-VOLUME=bunkerkartet-data
-BACKUP_DIR=/srv/backups
-ARCHIVE_DIR=$(cd "$(dirname "$ARCHIVE")" && pwd)
-ARCHIVE_NAME=$(basename "$ARCHIVE")
-PRE_BACKUP="$BACKUP_DIR/bunkerkartet-pre-restore-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
-STAGING_VOLUME="bunkerkartet-restore-staging-$(date -u +%Y%m%dT%H%M%SZ)"
-
-test -s "$ARCHIVE"
-docker volume inspect "$VOLUME" >/dev/null
-python3 scripts/verify_restore_archive.py --archive "$ARCHIVE"
-mkdir -p "$BACKUP_DIR"
-docker volume create "$STAGING_VOLUME" >/dev/null
-trap 'rm -rf "${CHECK_DIR:-}"; docker volume rm "$STAGING_VOLUME" >/dev/null 2>&1 || true; docker compose start bunkerkartet' EXIT
-docker compose stop bunkerkartet
-
-docker run --rm \
-  -v "$VOLUME:/data:ro" \
-  -v "$BACKUP_DIR:/backup" \
-  alpine:3.20 sh -c "tar -czf /backup/$(basename "$PRE_BACKUP") -C /data ."
-test -s "$PRE_BACKUP"
-
-docker run --rm -e ARCHIVE_NAME="$ARCHIVE_NAME" \
-  -v "$STAGING_VOLUME:/stage" \
-  -v "$ARCHIVE_DIR:/archive:ro" \
-  alpine:3.20 sh -c '
-    set -eu
-    tar -xzf "/archive/$ARCHIVE_NAME" -C /stage
-    test -s /stage/bunkerkartet.sqlite3
-  '
-
-CHECK_DIR="$BACKUP_DIR/.bunkerkartet-restore-check-$(date -u +%Y%m%dT%H%M%SZ)"
-mkdir "$CHECK_DIR"
-docker run --rm \
-  -v "$STAGING_VOLUME:/stage:ro" \
-  -v "$CHECK_DIR:/check" \
-  alpine:3.20 sh -c 'cp /stage/bunkerkartet.sqlite3* /check/'
-python3 scripts/verify_database.py \
-  --database "$CHECK_DIR/bunkerkartet.sqlite3" \
-  --expected-version "$EXPECTED_SCHEMA_VERSION"
-rm -rf "$CHECK_DIR"
-
-docker run --rm \
-  -v "$VOLUME:/data" \
-  -v "$STAGING_VOLUME:/stage:ro" \
-  alpine:3.20 sh -c '
-    set -eu
-    find /data -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-    for name in bunkerkartet.sqlite3 bunkerkartet.sqlite3-wal bunkerkartet.sqlite3-shm; do
-      if [ -e "/stage/$name" ]; then cp "/stage/$name" "/data/$name"; fi
-    done
-  '
-
-docker volume rm "$STAGING_VOLUME" >/dev/null
-docker compose start bunkerkartet
-trap - EXIT
-health=$(curl --fail --silent http://127.0.0.1:8000/api/health)
-printf '%s' "$health" | grep -Fq '"status":"healthy"'
-printf '%s' "$health" | grep -Fq "\"version\":\"$EXPECTED_VERSION\""
-```
-
-The restore command intentionally stops writes and must never be run against a
-live app without the pre-restore backup step.
+The authenticated owner can preview exact route IDs with `POST /api/admin/retention/routes/preview` and commit the identical selection/reason with its `preview_hash` at `/commit`. No automatic schedule is active. The transaction clears names, starts, waypoints, stop snapshots, geometry, GPX, metrics and calculation details. Identity tombstones prevent SQLite ID reuse and make original request retries return HTTP 410 without recalculating. `/api/admin/retention/routes/receipts` retains the selection/reason/hash, without coordinate or name content. Site evidence is unchanged. The preview identifies visit snapshots that copied the selected route; these, exported files and pre-existing backups retain their own lifecycle and purge lag. This is logical erasure from app reads, not a claim of SQLite secure deletion or destruction of backups.

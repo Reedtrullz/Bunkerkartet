@@ -36,22 +36,33 @@ LLM- eller researchoppsett og lastes inn som et strengt JSON-format.
 
 ## Kjør lokalt
 
+Bruk en vedlikeholdt kildekasse og Python 3.12, samme runtime som CI og
+containeren. Hvis du starter fra en eldre eller skitten arbeidskopi, inspiser
+branch, commit og lokale endringer først; bruk en separat worktree for
+vedlikeholdt kilde og behold eksisterende data/WIP. Ikke bruk `reset` eller
+`clean` for å gjøre en gammel kopi klar. Kommandoene under bruker en tom,
+midlertidig datamappe og bare lokal autentisering.
+
 ```sh
-python3 -m venv .venv
+python3.12 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
-
-export ADMIN_TOKEN='bruk-et-lokalt-token'
-# Valgfritt: kreves for ruteforespørsler til OpenRouteService.
-export ORS_API_KEY='din-ors-nokkel'
-# Valgfritt: standard er ./data.
-export BUNKERKARTET_DATA_DIR="$PWD/data"
-
-.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Åpne <http://127.0.0.1:8000/> og skriv inn samme verdi som i `ADMIN_TOKEN`.
-Databasen er SQLite og opprettes som
-`$BUNKERKARTET_DATA_DIR/bunkerkartet.sqlite3`.
+Start den lokale testen i ett terminalvindu og la prosessen kjøre mens du
+prøver importen fra et annet. Avslutt med Ctrl-C; den midlertidige databasen
+fjernes når serverprosessen avsluttes.
+
+```sh
+set -eu
+DATA_DIR=$(mktemp -d)
+trap 'rm -rf "$DATA_DIR"' EXIT INT TERM
+ADMIN_TOKEN=synthetic-local-only \
+BUNKERKARTET_DATA_DIR="$DATA_DIR" \
+  .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8765
+```
+
+Åpne <http://127.0.0.1:8765/> og bruk tokenet `synthetic-local-only`.
+SQLite-databasen ligger i midlertidig `$DATA_DIR` og deles ikke med produksjon.
 
 ## Importer research
 
@@ -77,13 +88,14 @@ ligger i [`app/imports.py`](app/imports.py), og arbeidsflyten er beskrevet i
 Den samme forhåndsvisningen og innlastingen kan gjøres mot API-et:
 
 ```sh
-export BUNKERKARTET_URL=https://bunker.reidar.tech
-export ADMIN_TOKEN='bruk-tokenet-fra-en-hemmelighetsløsning'
+set -eu
+export BUNKERKARTET_URL="${BUNKERKARTET_URL:-http://127.0.0.1:8765}"
+export ADMIN_TOKEN='synthetic-local-only'
 
 PREVIEW=$(curl --fail-with-body -sS "$BUNKERKARTET_URL/api/admin/imports/preview" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
-  --data-binary @package.json
+  --data-binary @package.json)
 PREVIEW_HASH=$(printf '%s' "$PREVIEW" | python3 -c 'import json, sys; print(json.load(sys.stdin)["preview_hash"])')
 
 curl --fail-with-body -sS "$BUNKERKARTET_URL/api/admin/imports/commit" \
@@ -91,7 +103,22 @@ curl --fail-with-body -sS "$BUNKERKARTET_URL/api/admin/imports/commit" \
   -H "X-Import-Preview: $PREVIEW_HASH" \
   -H 'Content-Type: application/json' \
   --data-binary @package.json
+
+# Identisk retry bruker samme batch_id, pakke og preview-hash.
+curl --fail-with-body -sS "$BUNKERKARTET_URL/api/admin/imports/commit" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "X-Import-Preview: $PREVIEW_HASH" \
+  -H 'Content-Type: application/json' \
+  --data-binary @package.json
+
+# Readback fra den lokale katalogen etter commit.
+curl --fail-with-body -sS "$BUNKERKARTET_URL/api/sites" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
+
+Bruk bare en ekstern URL og produksjonstoken når du bevisst skal gjøre en
+autorisert operasjon mot den tjenesten. Eksempelet setter aldri en
+produksjons-URL som standard.
 
 JSON-kontrakten kan hentes fra
 `$BUNKERKARTET_URL/api/imports/schema` med samme bearer-token.

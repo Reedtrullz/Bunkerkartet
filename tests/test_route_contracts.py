@@ -44,3 +44,22 @@ def test_provider_rejects_ambiguous_numbers_and_waypoints(change):
     if change == 'nonfinite': feature['properties']['summary']['distance'] = float('inf')
     with pytest.raises(ValueError):
         normalize_ors_response(payload, requested_waypoint_count=3)
+
+
+def test_illegal_gpx_route_label_is_rejected_before_provider_call(tmp_path,monkeypatch):
+    api=TestClient(create_app(Settings(data_dir=tmp_path,admin_token='secret',ors_api_key='synthetic')))
+    site_id=seed_site(api)
+    def unexpected(*args):raise AssertionError('invalid export must not call provider')
+    monkeypatch.setattr('app.main.fetch_openrouteservice',unexpected)
+    response=api.post('/api/routes',headers={'Authorization':'Bearer secret'},json={'name':'Illegal\u0000name','start':{'lat':63.4,'lon':10.4},'site_ids':[site_id]})
+    assert response.status_code==422
+
+
+def test_unqualified_legacy_gpx_is_not_offered_as_download(tmp_path):
+    from app.db import dump_json,now_iso
+    api=TestClient(create_app(Settings(data_dir=tmp_path,admin_token='secret')))
+    with api.app.state.database.connect() as c:
+        id=c.execute("INSERT INTO route_plans(name,start_json,waypoints_json,distance_m,duration_s,geometry_json,gpx_text,created_at) VALUES(?,?,?,?,?,?,?,?)",('Historical',dump_json({'lat':63,'lon':10}),dump_json([{'lat':64,'lon':11}]),1,1,dump_json([[10,63],[11,64]]),'<gpx/>',now_iso())).lastrowid
+    result=api.get(f'/api/routes/{id}',headers={'Authorization':'Bearer secret'}).json()
+    assert 'gpx' not in result and result['gpx_status']=='unavailable_legacy'
+    with api.app.state.database.connect() as c:assert c.execute('SELECT gpx_text FROM route_plans WHERE id=?',(id,)).fetchone()[0]=='<gpx/>'

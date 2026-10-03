@@ -34,7 +34,7 @@ def test_merge_requires_target_snapshot_and_rejects_changed_target(tmp_path):
     assert missing.status_code == 422
     assert api.patch('/api/sites/2', json={'expected_revision': 1, 'name': 'Changed target'}, headers=auth()).status_code == 200
     events = api.get('/api/sites/1/events', headers=auth()).json()
-    stale = api.post('/api/sites/1/review', json={'action': 'merge', 'expected_revision': 1, 'target_site_id': 2, 'target_expected_revision': 1}, headers=auth())
+    stale = api.post('/api/sites/1/review', json={'action': 'merge', 'expected_revision': 1, 'target_site_id': 2, 'target_expected_revision': 1, 'reason':'Previously reviewed duplicate', 'merge_preview_hash':'0'*64}, headers=auth())
     assert stale.status_code == 409
     assert api.get('/api/sites/1/events', headers=auth()).json() == events
     assert api.get('/api/sites/1', headers=auth()).json()['merged_into_id'] is None

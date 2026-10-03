@@ -1,0 +1,16 @@
+{
+  "policy_version": 1,
+  "enabled": false,
+  "schedule": null,
+  "offsite": {
+    "enabled": false,
+    "provider": null,
+    "encryption": "owner decision pending"
+  },
+  "rpo_hours": null,
+  "rto_hours": null,
+  "retention_days": null,
+  "route_and_observation_deletion": "not configured",
+  "backup_purge_lag": "must be selected before retention is enabled",
+  "owner_decision": "pending"
+}

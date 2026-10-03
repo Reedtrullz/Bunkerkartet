@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db import CURRENT_SCHEMA_VERSION, REQUIRED_SCHEMA, OwnedConnection, required_schema_errors
+from app import db as schemas
 
 
 def verify(path: Path, expected_version: int) -> None:
@@ -16,17 +17,18 @@ def verify(path: Path, expected_version: int) -> None:
     uri = path.resolve().as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True, factory=OwnedConnection) as connection:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        if version != expected_version or version != CURRENT_SCHEMA_VERSION:
-            raise RuntimeError("database schema version does not match expectation")
+        if version != expected_version or not 1 <= version <= CURRENT_SCHEMA_VERSION:
+            raise RuntimeError("database schema version does not match a supported explicit expectation")
+        required = schemas.BASE_REQUIRED_SCHEMA if version == 1 else getattr(schemas,f"V{version}_REQUIRED_SCHEMA")
         if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise RuntimeError("database integrity check failed")
         if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
             raise RuntimeError("database foreign key check failed")
-        if required_schema_errors(connection):
+        if required_schema_errors(connection,required_schema=required):
             raise RuntimeError("database is missing required schema")
         counts = {
             table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            for table in REQUIRED_SCHEMA
+            for table in required
         }
     print(
         f"version={version} integrity_check=ok foreign_key_check=empty "

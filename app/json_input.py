@@ -1,5 +1,6 @@
 """Bounded, unambiguous JSON input shared by file and HTTP ingestion."""
 import json
+import math
 
 
 def decode_json_strict(raw: bytes, *, max_bytes: int, max_depth: int = 64) -> object:
@@ -36,4 +37,10 @@ def decode_json_strict(raw: bytes, *, max_bytes: int, max_depth: int = 64) -> ob
     def constant(_value):
         raise ValueError("JSON contains a nonstandard number")
 
-    return json.loads(text, object_pairs_hook=pairs, parse_constant=constant)
+    def finite_float(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("JSON contains a non-finite number")
+        return number
+
+    return json.loads(text, object_pairs_hook=pairs, parse_constant=constant, parse_float=finite_float)
