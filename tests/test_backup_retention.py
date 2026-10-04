@@ -111,14 +111,12 @@ def test_backup_api_captures_committed_wal_rows_before_writer_closes(tmp_path):
         assert restored.execute("SELECT name FROM sites WHERE external_key='synthetic:wal'").fetchone()[0] == "WAL site"
 
 
-def test_owner_policy_is_explicitly_disabled_without_deleting_any_backup():
-    policy_path = Path(__file__).resolve().parents[1] / "docs/operations/backup-policy.json"
-    policy = json.loads(policy_path.read_text())
-
-    assert policy["enabled"] is False
-    assert policy["schedule"] is None
-    assert policy["offsite"]["enabled"] is False
-    assert policy["rpo_hours"] is None
-    assert policy["rto_hours"] is None
-    assert policy["retention_days"] is None
-    assert policy["owner_decision"] == "pending"
+def test_selected_backup_policy_keeps_automatic_private_data_erasure_disabled():
+    policy = json.loads((Path(__file__).resolve().parents[1] / "docs/operations/backup-policy.json").read_text())
+    assert policy["enabled"] is True
+    assert policy["offsite"]["enabled"] is True
+    assert policy["rpo_hours"] == 24 and policy["rto_hours"] == 0.25
+    assert policy["retention_days"] >= 30
+    assert "no automatic erasure" in policy["retention_mode"]
+    assert "no automatic deletion" in policy["route_and_observation_deletion"]
+    assert policy["storage_limit_mib_per_host"] == 500

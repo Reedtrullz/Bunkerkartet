@@ -1,0 +1,9 @@
+[Unit]
+Description=Check Bunkerkartet local and verified off-host backup freshness
+OnFailure=bunkerkartet-backup-alert.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 /usr/local/lib/bunkerkartet/backup_operations.py status
+TimeoutStartSec=180

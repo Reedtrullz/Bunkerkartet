@@ -55,12 +55,14 @@ def test_dependabot_cannot_move_the_container_to_a_new_python_major():
     assert "FROM python:3.12-slim@sha256:" in dockerfile
 
 
-def test_release_governance_draft_is_explicitly_inactive():
+def test_selected_solo_owner_governance_requires_ci_without_bypass():
     import json
 
     governance = json.loads((ROOT / "docs/operations/release-governance.json").read_text())
-    assert governance["activation_authorized"] is False
-    assert governance["owner_decision"] == "pending"
+    assert governance["activation_authorized"] is True
+    assert governance["proposed_policy"]["required_approving_reviews"] == 0
+    assert governance["proposed_policy"]["enforce_for_administrators"] is True
+    assert governance["proposed_policy"]["require_branch_up_to_date"] is True
     assert governance["proposed_policy"]["required_status_checks"] == ["test"]
     assert governance["proposed_policy"]["bypass_actors"] == []
 

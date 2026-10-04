@@ -1,0 +1,6 @@
+[Unit]
+Description=Record actionable Bunkerkartet backup alert
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -p user.err -t bunkerkartet-backup Bunkerkartet backup/freshness check failed. Inspect bunkerkartet-backup.service and bunkerkartet-backup-check.service; retain recovery archives.

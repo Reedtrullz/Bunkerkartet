@@ -1,0 +1,9 @@
+[Unit]
+Description=Bunkerkartet encrypted consistent database snapshot
+OnFailure=bunkerkartet-backup-alert.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/flock -n /run/lock/bunkerkartet-backup.lock /usr/bin/python3 /usr/local/lib/bunkerkartet/backup_operations.py create
+TimeoutStartSec=300
