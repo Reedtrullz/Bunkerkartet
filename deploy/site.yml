@@ -148,18 +148,18 @@
           - --user
           - "0:0"
           - --volume
-          - "{{ bunkerkartet_backup_archive_path }}:/backup/archive.tar.gz:ro"
+          - "{{ bunkerkartet_backup_archive_path }}:/backup/{{ bunkerkartet_backup_archive_path | basename }}:ro"
           - --volume
-          - "{{ bunkerkartet_backup_receipt_path }}:/backup/archive.tar.gz.receipt.json:ro"
+          - "{{ bunkerkartet_backup_receipt_path }}:/backup/{{ bunkerkartet_backup_archive_path | basename }}.receipt.json:ro"
           - --entrypoint
           - python
           - "{{ bunkerkartet_image_repository }}@{{ bunkerkartet_image_digest }}"
           - /app/scripts/backup_database.py
           - verify
           - --archive
-          - /backup/archive.tar.gz
+          - /backup/{{ bunkerkartet_backup_archive_path | basename }}
           - --receipt
-          - /backup/archive.tar.gz.receipt.json
+          - /backup/{{ bunkerkartet_backup_archive_path | basename }}.receipt.json
           - --expected-schema-version
           - "{{ bunkerkartet_backup_schema_version }}"
       register: backup_verification
@@ -232,9 +232,9 @@
         status_code: 200
       register: readiness
       until: >-
-        readiness.json.status == 'ready'
-        and readiness.json.database == 'ready'
-        and readiness.json.authentication == 'configured'
+        (readiness.json | default({})).get('status') == 'ready'
+        and (readiness.json | default({})).get('database') == 'ready'
+        and (readiness.json | default({})).get('authentication') == 'configured'
       retries: 12
       delay: 5
 
@@ -244,7 +244,7 @@
         return_content: true
         status_code: 200
       register: deployed_version
-      until: deployed_version.json.version == bunkerkartet_image_tag
+      until: (deployed_version.json | default({})).get('version') == bunkerkartet_image_tag
       retries: 12
       delay: 5
 
@@ -285,9 +285,9 @@
           - --user
           - "0:0"
           - --volume
-          - "{{ bunkerkartet_backup_archive_path }}:/backup/archive.tar.gz:ro"
+          - "{{ bunkerkartet_backup_archive_path }}:/backup/{{ bunkerkartet_backup_archive_path | basename }}:ro"
           - --volume
-          - "{{ bunkerkartet_backup_receipt_path }}:/backup/archive.tar.gz.receipt.json:ro"
+          - "{{ bunkerkartet_backup_receipt_path }}:/backup/{{ bunkerkartet_backup_archive_path | basename }}.receipt.json:ro"
           - --volume
           - "{{ release_dir }}:/receipts"
           - --entrypoint
@@ -302,9 +302,9 @@
           - --database-schema-version
           - "{{ bunkerkartet_expected_schema_version }}"
           - --backup-archive
-          - /backup/archive.tar.gz
+          - /backup/{{ bunkerkartet_backup_archive_path | basename }}
           - --backup-receipt
-          - /backup/archive.tar.gz.receipt.json
+          - /backup/{{ bunkerkartet_backup_archive_path | basename }}.receipt.json
           - --selected-port
           - "{{ app_port }}"
           - --readiness-json
