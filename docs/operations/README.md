@@ -1,10 +1,11 @@
 # Operations preparation
 
 This page contains local and reviewable procedures for backup, restore,
-release receipts, and GitHub release governance. The tracked policy files keep
-backup scheduling, external transfer, retention/deletion, and branch-rule
-activation disabled until the owner chooses those values. No scheduled job or
-GitHub setting is enabled by these files.
+release receipts, and GitHub release governance. The tracked policy files record the 4 October selected defaults. See
+[SCHEDULED_RECOVERY.md](SCHEDULED_RECOVERY.md) for scheduled encrypted snapshots,
+verified off-host copies, targets, quotas and installation evidence. Policy
+files alone do not install jobs or change GitHub settings. Automatic erasure
+remains disabled.
 
 ## Backup a consistent SQLite snapshot
 
@@ -215,3 +216,12 @@ The synthetic rotation test stops the old app, starts the same workspace with a
 new token, proves the old bearer fails reads and writes, and reconciles an
 ambiguous observation send with its original request ID into exactly one record.
 Actual owner token rotation and offsite retention remain unapplied decisions.
+
+## Selected-policy follow-up — 4 October 2026
+
+The earlier commands above remain manual rehearsal examples. The current
+selected operations and governance policy is in [SCHEDULED_RECOVERY.md](SCHEDULED_RECOVERY.md).
+This supersedes the earlier pending-choice language for scheduling, destination,
+encryption, RPO/RTO, minimum retention and solo-owner merge rules. Actual token
+rotation, physical-device/screen-reader/field acceptance and private-data erasure
+are still separate operations.

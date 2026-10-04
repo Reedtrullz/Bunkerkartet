@@ -1,16 +1,22 @@
 {
-  "policy_version": 1,
-  "enabled": false,
-  "schedule": null,
+  "policy_version": 2,
+  "enabled": true,
+  "schedule": "03:40 and 15:40 UTC daily; persistent systemd timer, up to 5-minute jitter",
   "offsite": {
-    "enabled": false,
-    "provider": null,
-    "encryption": "owner decision pending"
+    "enabled": true,
+    "provider": "owner Mac via authenticated SSH; hourly launchd pull",
+    "encryption": "OpenSSL CMS AES-256-CBC; RSA4096 recipient certificate; private key only on FileVault-enabled Mac"
   },
-  "rpo_hours": null,
-  "rto_hours": null,
-  "retention_days": null,
-  "route_and_observation_deletion": "not configured",
-  "backup_purge_lag": "must be selected before retention is enabled",
-  "owner_decision": "pending"
+  "rpo_hours": 24,
+  "rto_hours": 0.25,
+  "retention_days": 30,
+  "route_and_observation_deletion": "owner-selected preview/commit only; no automatic deletion",
+  "backup_purge_lag": "indefinite until manual reviewed erasure; immutable rollback archives excluded",
+  "owner_decision": "defaults selected under user Execute authorization on2026-10-04",
+  "retention_mode": "minimum30 days; no automatic erasure; manual preview required",
+  "storage_limit_mib_per_host": 500,
+  "key_custody": "owner Mac mode0700/0600; separate key escrow not yet arranged",
+  "maximum_cipher_snapshot_mib": 8,
+  "maximum_receipt_kib": 64,
+  "retention_capacity_snapshots": 60
 }

@@ -63,11 +63,15 @@ protection dry-run in [`operations/README.md`](operations/README.md). The
 existing read-only verifiers are called by the new utilities. Restore writes
 to a new staged path and never clears an active volume.
 
-Backup schedules, offsite transfer, encryption provider, RPO/RTO, retention,
-and route/observation deletion remain disabled pending owner decisions in
-[`operations/backup-policy.json`](operations/backup-policy.json). Branch
-protection remains inactive pending owner review in
-[`operations/release-governance.json`](operations/release-governance.json).
+The 4 October execution selects twice-daily encrypted snapshots, hourly
+verified copies to the owner Mac, a 24-hour recovery-point target and a
+15-minute recovery-time target. See [scheduled recovery operations](operations/SCHEDULED_RECOVERY.md)
+and [`operations/backup-policy.json`](operations/backup-policy.json). These
+files are deployment inputs; host receipts establish actual installation.
+Automatic archive/private-record erasure stays disabled. Solo-owner governance
+requires up-to-date CI and PRs, administrator enforcement and no bypass,
+force-push or branch deletion; [`operations/release-governance.json`](operations/release-governance.json)
+records the selected policy and activation order.
 
 ## Caddy
 
