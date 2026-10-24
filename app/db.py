@@ -770,6 +770,7 @@ def load_json(value: str | None, default: object) -> object:
 def decode_stored_json(value: str | None, kind: str) -> tuple[object | None, str]:
     """Decode a stored field without hiding corruption behind an empty default."""
     if value is None: return None, "absent_legacy"
+    if value == "[]" and kind in ("strings", "points", "stops"): return [], "valid_empty"
     from app.json_input import decode_json_strict
     try:
         decoded = decode_json_strict(value.encode(), max_bytes=2 * 1024 * 1024)
