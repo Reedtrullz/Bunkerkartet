@@ -478,8 +478,9 @@ def _source_rows(connection: sqlite3.Connection, site_id: int) -> list[dict[str,
     return result
 
 
-def _observation_points(connection: sqlite3.Connection, site_id: int) -> list[dict[str, object]]:
-    rows = connection.execute("SELECT * FROM field_observations WHERE site_id=? ORDER BY observed_at DESC,id DESC",(site_id,)).fetchall()
+def _observation_points(connection: sqlite3.Connection, site_id: int, rows=None) -> list[dict[str, object]]:
+    if rows is None:
+        rows = connection.execute("SELECT * FROM field_observations WHERE site_id=? ORDER BY observed_at DESC,id DESC",(site_id,)).fetchall()
     result=[]
     for row in rows:
         observation=_effective_safe_observation(connection,row)
@@ -1508,9 +1509,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             rows = connection.execute(
                 "SELECT * FROM sites WHERE merged_into_id IS NULL AND status <> 'rejected' ORDER BY name, id"
             ).fetchall()
+            observation_rows: dict[int, list[sqlite3.Row]] = {int(row["id"]): [] for row in rows}
+            site_ids = list(observation_rows)
+            for offset in range(0, len(site_ids), 500):
+                chunk = site_ids[offset:offset + 500]
+                placeholders = ",".join("?" for _ in chunk)
+                for observation in connection.execute(
+                    f"SELECT * FROM field_observations WHERE site_id IN ({placeholders}) ORDER BY observed_at DESC,id DESC",
+                    chunk,
+                ):
+                    observation_rows[observation["site_id"]].append(observation)
             features: list[dict[str, object]] = []
             for row in rows:
-                site = site_summary(connection, row)
+                site = site_summary(connection, row, observation_points=_observation_points(connection, int(row["id"]), observation_rows[int(row["id"])]))
                 site_id = int(site["id"])
                 geometry = None
                 if site["latitude"] is not None and site["longitude"] is not None:
