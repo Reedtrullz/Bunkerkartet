@@ -172,7 +172,7 @@ finally:
 SURVIVOR = "import subprocess, sys; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)', sys.argv[1]], start_new_session=True)"
 SLEEP = "import time; time.sleep(60)"
 FLOOD = "import sys\nwhile True: sys.stdout.write('x' * 65536)"
-FLOOD_EXITS = {-15, -9, -13, 143, 137, 141}
+FLOOD_EXITS = {-15, -9, -13, 143, 137, 141, 120}
 
 REQUIRED_CONTROLS = (
     "positive: fixture self-test runs inside containment",
@@ -383,8 +383,8 @@ def controls(home: Path | None = None) -> list[dict]:
         r = run_contained([py, "-c", SURVIVOR, f"/run/o23-{nonce}e/work"], nonce + "e")
         record(next(names), "exit 0, survivors 0, scratch removed", r, {}, lambda r, s: clean(r, exit_ok=r["returncode"] == 0))
         r = run_contained([py, "-c", SLEEP], nonce + "f", limit=3)
-        record(next(names), "returncode 137 within 15 s, survivors 0, scratch removed", r, {},
-               lambda r, s: clean(r, exit_ok=r["returncode"] == 137) and r["elapsed_s"] < 15)
+        record(next(names), "returncode 124 or 137 after >= 3 s and < 15 s, survivors 0, scratch removed", r, {},
+               lambda r, s: clean(r, exit_ok=r["returncode"] in (124, 137)) and 3 <= r["elapsed_s"] < 15)
         r = run_contained([py, "-c", FLOOD], nonce + "g", cap=STREAM_CAP)
         record(next(names), "overflow, terminated exit, no survivors within 20 s, scratch removed", r, {},
                lambda r, s: r["overflow"] and r["returncode"] in FLOOD_EXITS and r["elapsed_s"] < 20

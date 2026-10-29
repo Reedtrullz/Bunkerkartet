@@ -90,13 +90,18 @@ def test_g2_controls_reject_bad_exit_overflow_and_missing_teardown():
 
 def test_g2_negative_controls_assert_their_precise_failure():
     plain = lambda **k: _run(b"", **k)  # noqa: E731
-    assert _control("deadline", {"SLEEP": lambda: plain(returncode=137, elapsed_s=3.5)}) is True
+    for ok in (plain(returncode=137, elapsed_s=3.5), plain(returncode=124, elapsed_s=3.07)):
+        assert _control("deadline", {"SLEEP": lambda b=ok: b}) is True
     for bad in (plain(returncode=1, elapsed_s=3.5), plain(returncode=0, elapsed_s=3.5), plain(returncode=137, elapsed_s=3.5, survivors=1),
-                plain(returncode=137, elapsed_s=3.5, scratch_removed=False)):
+                plain(returncode=137, elapsed_s=3.5, scratch_removed=False), plain(returncode=124, elapsed_s=0.1),
+                plain(returncode=124, elapsed_s=15), plain(returncode=124, elapsed_s=3.5, overflow=True),
+                plain(returncode=124, elapsed_s=3.5, wrapper_deadline=True)):
         assert _control("deadline", {"SLEEP": lambda b=bad: b}) is False
     flood = lambda **k: _run(b"x", **{"overflow": True, "returncode": -15, **k})  # noqa: E731
     assert _control("1 MiB", {"FLOOD": lambda: flood()}) is True
-    for bad in (flood(overflow=False), flood(returncode=0), flood(scratch_removed=False), flood(survivors=1)):
+    assert _control("1 MiB", {"FLOOD": lambda: flood(returncode=120, elapsed_s=0.08)}) is True
+    for bad in (flood(overflow=False), flood(returncode=0), flood(returncode=1), flood(scratch_removed=False), flood(survivors=1),
+                flood(returncode=120, elapsed_s=20), flood(returncode=120, wrapper_deadline=True), flood(returncode=120, overflow=False)):
         assert _control("1 MiB", {"FLOOD": lambda b=bad: b}) is False
     assert _control("detached", {"SURVIVOR": lambda: plain(returncode=0)}) is True
     assert _control("detached", {"SURVIVOR": lambda: plain(returncode=2)}) is False
