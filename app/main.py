@@ -1489,17 +1489,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             from app.catalogue_quality import batch_observation_points
             rows = connection.execute(query, values).fetchall()
             points = batch_observation_points(connection, [int(row["id"]) for row in rows])
+            site_kind_fold = site_kind.strip().casefold() if site_kind else ""
+            query_fold = q.strip().casefold() if q else ""
             result = []
             for row in rows:
-                if site_kind and site_kind.strip().casefold() not in row["site_kind"].casefold(): continue
-                if q and q.strip():
+                if site_kind and site_kind_fold not in row["site_kind"].casefold(): continue
+                if query_fold:
                     enrichment = effective_enrichment(row) or {}
                     texts = [str(row[field] or "") for field in ("name", "site_kind", "short_rationale", "observed_location_text", "condition")]
                     texts.extend(str(enrichment.get(field, "")) for field in ("display_name", "kind_label"))
                     texts.extend(claim["text"] for claim in enrichment.get("claims", []))
                     for reading in _source_rows(connection, int(row["id"])):
                         texts.extend(str(reading.get(field) or "") for field in ("title", "registry_title", "excerpt"))
-                    if not any(q.strip().casefold() in value.casefold() for value in texts): continue
+                    if not any(query_fold in value.casefold() for value in texts): continue
                 result.append(site_summary(connection, row, observation_points=points[int(row["id"])]))
             return result
 
