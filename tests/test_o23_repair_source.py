@@ -390,6 +390,120 @@ def test_browser_response_callback_is_a_python_handler_delivering_the_exact_obje
     assert session.requests == ["http://x/"] and session.page_errors == 1
 
 
+def test_persist_rejects_malformed_null_wrong_shape_and_wrong_id_bodies_even_when_equal_or_different():
+    ok = _resp_status({"id": 7, "points": [1]})
+    raw = lambda b: {"status": 200, "headers": {}, "raw": b}  # noqa: E731
+    cases = (("same malformed both sides", raw(b"{bad"), raw(b"{bad")),
+             ("different malformed", raw(b"{bad"), raw(b"[oops")),
+             ("null both", _resp_status(None), _resp_status(None)),
+             ("list both", _resp_status([7]), _resp_status([7])),
+             ("wrong id both", _resp_status({"id": 8}), _resp_status({"id": 8})),
+             ("malformed before only", raw(b"{bad"), ok),
+             ("valid then corrupt", ok, raw(b"{bad")))
+    for label, before, after in cases:
+        checks, _ = _persist(_FakeServer(before, after_restart=after))
+        assert not all(checks.values()), label
+    assert all(_persist(_FakeServer(ok))[0].values())  # unchanged valid detail still passes
+
+
+class _Resp:
+    def __init__(self, url, status):
+        self.url, self.status = url, status
+
+
+def test_load_map_selects_kart_surface_before_filling_search_and_still_reloads_nothing_extra():
+    log = []
+
+    class Loc:
+        def __init__(self, name):
+            self.name = name
+
+        def click(self):
+            log.append(("click", self.name))
+
+        def fill(self, value):
+            log.append(("fill", self.name))
+
+    class Ctx:
+        value = _Resp("http://s/api/sites?q=", 200)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+    class Page:
+        def get_by_role(self, role, name, exact):
+            assert role == "button" and exact is True
+            return Loc(name)
+
+        def get_by_label(self, name, exact):
+            return Loc(name)
+
+        def locator(self, selector):
+            return Loc(selector)
+
+        def expect_response(self, predicate):
+            assert predicate(_Resp("http://s/api/sites", 200))
+            return Ctx()
+
+        def wait_for_load_state(self, _s):
+            log.append(("wait", "networkidle"))
+
+    session = acc.BrowserSession.__new__(acc.BrowserSession)
+    session.page, session.server = Page(), type("S", (), {"base": "http://s"})()
+    session.load_map("tok", "q")
+    order = [entry for entry in log if entry[0] in ("click", "fill")]
+    assert order[0] == ("click", "Kart")
+    assert order.index(("click", "Kart")) < order.index(("fill", "#site-search"))
+    assert order[-1] == ("click", "Last inn kart")
+
+
+def test_map_load_response_predicate_accepts_sites_or_denied_session_only():
+    base = "http://s"
+    assert acc.session_or_sites(base, 200, base + "/api/sites?q=a")
+    assert acc.session_or_sites(base, 401, base + "/api/session")
+    assert acc.session_or_sites(base, 403, base + "/api/session")
+    assert not acc.session_or_sites(base, 200, base + "/api/session")  # successful session precedes /api/sites
+    assert not acc.session_or_sites(base, 500, base + "/api/session")
+    assert not acc.session_or_sites(base, 401, base + "/api/routes")
+    assert not acc.session_or_sites(base, 401, "http://evil/api/session")
+
+
+def test_denied_token_list_allows_placeholder_but_rejects_a_real_site_card_without_a_name():
+    placeholder = {"list_children": 1, "list_site_cards": 0, "list_has_site_name": False}
+    card_no_name = {"list_children": 1, "list_site_cards": 1, "list_has_site_name": False}
+    card_named = {"list_children": 1, "list_site_cards": 1, "list_has_site_name": True}
+    assert acc.denied_list_clean(placeholder)
+    assert not acc.denied_list_clean(card_no_name)
+    assert not acc.denied_list_clean(card_named)
+
+
+def test_observe_counts_real_site_item_cards_not_generic_children():
+    seen = {}
+
+    class Page:
+        def eval_on_selector(self, selector, js):
+            seen["js"] = js
+            return {"text": "Ingen steder passer filtrene.", "children": 1, "cards": 0}
+
+        def evaluate(self, *_a):
+            return {"storage": False, "cookie": False, "url": False}
+
+    class R(_Resp):
+        headers = {}
+
+        def body(self):
+            return b"[]"
+
+    session = acc.BrowserSession.__new__(acc.BrowserSession)
+    session.page, session.requests, session.blocked, session.page_errors = Page(), [], [], 0
+    record = session.observe(R("http://s/api/sites", 200), "tok")
+    assert ".site-item" in seen["js"]
+    assert record["list_children"] == 1 and record["list_site_cards"] == 0
+
+
 if __name__ == "__main__":
     failures = 0
     for name in sorted(n for n in dir(sys.modules[__name__]) if n.startswith("test_")):

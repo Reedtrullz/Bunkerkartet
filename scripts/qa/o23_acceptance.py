@@ -185,14 +185,36 @@ def case(case_id: str, run, emit=None) -> dict:
 def persist_roundtrip(server, route_id) -> tuple[dict, dict]:
     """GET the same detail endpoint before and after a real restart; full parsed body and status must match."""
     path = f"/api/routes/{route_id}"
-    full = lambda response: matrix.digest({"status": response["status"], "body": parsed(response)})  # noqa: E731
+
+    def strict(response):
+        """(valid, digest): invalid JSON keeps its own wire hash so two different malformed bodies never compare equal."""
+        try:
+            body = json.loads(decoded(response))
+        except ValueError:
+            return False, matrix.digest({"status": response["status"], "invalid_wire_sha256": sha(response["raw"])})
+        ok = response["status"] == 200 and isinstance(body, dict) and body.get("id") == route_id
+        return ok, matrix.digest({"status": response["status"], "body": body})
+
     before = request(server, "GET", path)
     server.stop()
     server.start()  # same data directory: persistence is the SQLite file, not process memory
     after = request(server, "GET", path)
+    (valid_before, digest_before), (valid_after, digest_after) = strict(before), strict(after)
     return ({"create_id_is_int": isinstance(route_id, int), "status_200_before": before["status"] == 200,
-             "status_200_after": after["status"] == 200, "identical_after_restart": full(before) == full(after)},
+             "status_200_after": after["status"] == 200, "detail_valid_before": valid_before,
+             "detail_valid_after": valid_after, "identical_after_restart": digest_before == digest_after},
             summary(after))
+
+
+def session_or_sites(base: str, status: int, url: str) -> bool:
+    """The map load ends at /api/sites, or at a denied /api/session; a successful session 200 is only a step on the way."""
+    path = urlsplit(url).path
+    return url.startswith(base + "/api/sites") or (url.startswith(base + "/") and path == "/api/session" and status in (401, 403))
+
+
+def denied_list_clean(record: dict) -> bool:
+    """Denied token: no real site card rendered (the benign .empty-state placeholder is allowed) and no site names."""
+    return record["list_site_cards"] == 0 and not record["list_has_site_name"]
 
 
 def ids_of(response: dict) -> list[int]:
@@ -355,9 +377,10 @@ class BrowserSession:
 
     def load_map(self, token: str, query: str | None = None):
         page = self.page
+        page.get_by_role("button", name="Kart", exact=True).click()  # a reload can keep surface=route; #site-search lives on the map surface
         page.get_by_label("Administratortoken", exact=True).fill(token)
         page.locator("#site-search").fill(query or "")
-        with page.expect_response(lambda r: r.url.startswith(self.server.base + "/api/sites")) as info:
+        with page.expect_response(lambda r: session_or_sites(self.server.base, r.status, r.url)) as info:
             page.get_by_role("button", name="Last inn kart", exact=True).click()
         response = info.value
         page.wait_for_load_state("networkidle")
@@ -365,12 +388,14 @@ class BrowserSession:
 
     def observe(self, response, token: str) -> dict:
         page = self.page
-        listing = page.eval_on_selector(SITE_LIST, "e => ({text: e.innerText, children: e.children.length})")
+        listing = page.eval_on_selector(
+            SITE_LIST, "e => ({text: e.innerText, children: e.children.length, cards: e.querySelectorAll('.site-item').length})")
         privacy = page.evaluate(PRIVACY_JS, token)
         query = parse_qs(urlsplit(response.url).query)
         return {"status": response.status, "query": query, "content_encoding": response.headers.get("content-encoding", "identity"),
                 "content_length": response.headers.get("content-length"),
                 "decoded_body_sha256": sha(response.body()), "list_children": listing["children"],
+                "list_site_cards": listing["cards"],
                 "list_text_sha256": sha(listing["text"].encode()), "list_has_site_name": "Synthetic site" in listing["text"],
                 "privacy": privacy, "token_in_any_request_url": any(token in u for u in self.requests),
                 "egress_attempts_blocked": sorted(set(self.blocked)), "page_errors": self.page_errors}
@@ -479,8 +504,9 @@ def adverse_unit(scratch: Path) -> list[dict]:
         main.start()
         def bad_token(session):
             record = session.observe(session.load_map("wrong-token"), "wrong-token")
-            return ({"denied": record["status"] in (401, 403), "list_empty": record["list_children"] == 0,
-                     "no_site_names": not record["list_has_site_name"], "privacy_clean": privacy_clean(record)}, record)
+            return ({"denied": record["status"] in (401, 403), "no_site_cards": record["list_site_cards"] == 0,
+                     "no_site_names": not record["list_has_site_name"], "privacy_clean": privacy_clean(record),
+                     "list_clean": denied_list_clean(record)}, record)
         browse(main, "invalid-token-browser", "token", bad_token)
         def denied_storage(session):
             record = session.observe(session.load_map(TOKEN), TOKEN)
