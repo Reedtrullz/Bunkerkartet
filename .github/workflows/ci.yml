@@ -46,6 +46,17 @@ jobs:
         run: .venv/bin/python -m pytest -q --ignore=tests/test_browser_smoke.py
       - name: Browser smoke
         run: .venv/bin/python -m pytest -q tests/test_browser_smoke.py
+      - name: O23 acceptance fixture (frozen Linux native admission)
+        if: github.event_name == 'pull_request'
+        run: .venv/bin/python scripts/qa/o23_linux_admission.py --ci --out-dir "$RUNNER_TEMP/o23-acceptance"
+      - name: Upload O23 acceptance artifacts
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: o23-acceptance-${{ github.sha }}
+          path: ${{ runner.temp }}/o23-acceptance
+          if-no-files-found: warn
+          retention-days: 14
       - name: Validate frontend syntax
         run: |
           node --check app/static/app.js
