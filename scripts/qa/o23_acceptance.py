@@ -9,6 +9,7 @@ protocol. It is meant to run inside o23_linux_admission.py; --self-test is pure 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import gzip
 import hashlib
 import http.client
@@ -68,6 +69,38 @@ def log_tail(path: Path, size: int = 4096) -> str:
             return handle.read().decode("utf-8", "replace")
     except OSError as error:
         return f"unreadable log: {type(error).__name__}"
+
+
+def fs_usage(phase: str, path: Path) -> None:
+    """One phase-tagged occupancy sample of the scratch filesystem, as diagnostics only; it never raises."""
+    try:
+        s = os.statvfs(path)
+        detail = (f"phase={phase} frsize={s.f_frsize} total={s.f_blocks * s.f_frsize} free={s.f_bfree * s.f_frsize} "
+                  f"avail={s.f_bavail * s.f_frsize} inodes_free={s.f_ffree}/{s.f_files}")
+    except Exception as error:  # noqa: BLE001 - diagnostics must not change the outcome
+        detail = f"phase={phase} unavailable={type(error).__name__}"
+    try:
+        diag("fs-usage", detail)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@contextlib.contextmanager
+def playwright_with_browser_log():
+    """sync_playwright() whose driver, started with DEBUG=pw:browser, relays Chromium's stderr; DEBUG is restored right after start."""
+    from playwright.sync_api import sync_playwright  # noqa: PLC0415
+
+    prior = os.environ.get("DEBUG")
+    with contextlib.ExitStack() as stack:
+        os.environ["DEBUG"] = "pw:browser"
+        try:
+            pw = stack.enter_context(sync_playwright())
+        finally:
+            if prior is None:
+                os.environ.pop("DEBUG", None)
+            else:
+                os.environ["DEBUG"] = prior
+        yield pw
 
 
 class Server:
@@ -421,18 +454,18 @@ def privacy_clean(record: dict) -> bool:
 
 
 def browser_unit(size: str, scratch: Path) -> list[dict]:
-    from playwright.sync_api import sync_playwright  # noqa: PLC0415
-
     count = matrix.SIZES[size]
     server = Server(scratch / "data", count, scratch / "server.log")
     got: dict[str, dict] = {}
     try:
         server.start()
         seeded = request(server, "POST", "/api/routes", body={**ROUTE, "request_id": "o23-browser-route"})
-        with sync_playwright() as pw:
+        with playwright_with_browser_log() as pw:
+            fs_usage("before-launch", scratch)
             session = BrowserSession(pw, server, scratch / "profile", scratch / "cache")
             try:
                 session.page.goto(server.base)
+                fs_usage("after-launch", scratch)
                 def listed(name, query=None, expect_q=None, fewer=False):
                     def run():
                         record = session.observe(session.load_map(TOKEN, query), TOKEN)
@@ -452,12 +485,17 @@ def browser_unit(size: str, scratch: Path) -> list[dict]:
                     return case(f"browser.{size}.{name}", run)
                 got["cold-load"] = listed("cold-load")
                 got["route-view-cold"] = routed("route-view-cold")
+                fs_usage("before-reload-1", scratch)
                 session.page.reload()  # same profile and context: the warm revisit
                 got["warm-reload"] = listed("warm-reload")
                 got["route-view-warm"] = routed("route-view-warm")
+                fs_usage("before-reload-2", scratch)
                 session.page.reload()
                 got["filter-sparse"] = listed("filter-sparse", "0003", "0003", fewer=True)
                 got["filter-dense"] = listed("filter-dense", "synthetic", "synthetic")
+            except BaseException:
+                fs_usage("failure", scratch)  # never raises; the original exception continues
+                raise
             finally:
                 session.close()
     finally:

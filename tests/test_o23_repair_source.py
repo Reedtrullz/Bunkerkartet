@@ -5,10 +5,12 @@ O23_QA_DIR may point at another copy of scripts/qa (used to replay these checks 
 """
 import contextlib
 import importlib
+import io
 import json
 import os
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 QA = Path(os.environ.get("O23_QA_DIR") or Path(__file__).resolve().parents[1] / "scripts/qa")
@@ -502,6 +504,86 @@ def test_observe_counts_real_site_item_cards_not_generic_children():
     record = session.observe(R("http://s/api/sites", 200), "tok")
     assert ".site-item" in seen["js"]
     assert record["list_children"] == 1 and record["list_site_cards"] == 0
+
+def test_browser_unit_logs_chromium_stderr_channel_and_scratch_usage_without_masking_a_crash():
+    seen = {}
+
+    class Playwright:
+        def start(self):
+            seen["debug_at_start"] = os.environ.get("DEBUG")
+            return "pw"
+
+        def stop(self):
+            seen["stopped"] = True
+
+        def __enter__(self):
+            return self.start()
+
+        def __exit__(self, *_exc):
+            self.stop()
+
+    class Page:
+        def goto(self, _url):
+            pass
+
+        def reload(self):
+            raise RuntimeError("Page.reload: Page crashed")
+
+    class Session:
+        def __init__(self, *_args):
+            self.page = Page()
+
+        def close(self):
+            seen["closed"] = True
+
+    class Server:
+        base = "http://127.0.0.1:1"
+
+        def __init__(self, *_args):
+            pass
+
+        start = stop = lambda self: None
+
+    module = types.ModuleType("playwright.sync_api")
+    module.sync_playwright = Playwright
+    saved = {k: sys.modules.get(k) for k in ("playwright", "playwright.sync_api")}
+    sys.modules["playwright"], sys.modules["playwright.sync_api"] = types.ModuleType("playwright"), module
+    originals = (acc.Server, acc.request, acc.BrowserSession)
+    acc.Server, acc.request, acc.BrowserSession = Server, lambda *a, **k: {"status": 200}, Session
+    prior = os.environ.pop("DEBUG", None)
+    os.environ["DEBUG"] = "pw:api"  # a pre-existing value must come back untouched
+    err = io.StringIO()
+    try:
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(err):
+            try:
+                acc.browser_unit("large", Path(tmp))
+            except RuntimeError as error:
+                assert str(error) == "Page.reload: Page crashed"  # the original failure, not a diagnostic one
+            else:
+                raise AssertionError("crash was swallowed")
+            real = os.statvfs(tmp)
+        assert os.environ["DEBUG"] == "pw:api"
+    finally:
+        acc.Server, acc.request, acc.BrowserSession = originals
+        os.environ.pop("DEBUG", None)
+        if prior is not None:
+            os.environ["DEBUG"] = prior
+        for key, value in saved.items():
+            sys.modules.pop(key, None)
+            if value is not None:
+                sys.modules[key] = value
+    assert seen["debug_at_start"] == "pw:browser" and seen["stopped"] and seen["closed"]
+    lines = [line for line in err.getvalue().splitlines() if line.startswith("o23-diag fs-usage")]
+    assert len(lines) >= 3 and "phase=failure" in lines[-1]
+    assert f"total={real.f_blocks * real.f_frsize}" in lines[-1] and f"frsize={real.f_frsize}" in lines[-1]
+
+
+def test_fs_usage_reports_unreadable_path_as_data_and_never_raises():
+    err = io.StringIO()
+    with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(err):
+        acc.fs_usage("probe", Path(tmp) / "missing")
+    assert "phase=probe unavailable=FileNotFoundError" in err.getvalue() and "missing" not in err.getvalue()
+
 
 
 if __name__ == "__main__":
