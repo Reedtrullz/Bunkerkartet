@@ -182,6 +182,19 @@ def case(case_id: str, run, emit=None) -> dict:
 
 # ---- API unit -------------------------------------------------------------------------------
 
+def persist_roundtrip(server, route_id) -> tuple[dict, dict]:
+    """GET the same detail endpoint before and after a real restart; full parsed body and status must match."""
+    path = f"/api/routes/{route_id}"
+    full = lambda response: matrix.digest({"status": response["status"], "body": parsed(response)})  # noqa: E731
+    before = request(server, "GET", path)
+    server.stop()
+    server.start()  # same data directory: persistence is the SQLite file, not process memory
+    after = request(server, "GET", path)
+    return ({"create_id_is_int": isinstance(route_id, int), "status_200_before": before["status"] == 200,
+             "status_200_after": after["status"] == 200, "identical_after_restart": full(before) == full(after)},
+            summary(after))
+
+
 def ids_of(response: dict) -> list[int]:
     body = parsed(response)
     return [item["id"] for item in body] if isinstance(body, list) else []
@@ -228,12 +241,7 @@ def api_unit(size: str, scratch: Path) -> list[dict]:
         results[f"api.{size}.route.create"] = case(f"api.{size}.route.create", create)
 
         def persist():
-            server.stop()
-            server.start()  # same data directory: persistence is the SQLite file, not process memory
-            response = request(server, "GET", f"/api/routes/{state['route_id']}")
-            return ({"status_200": response["status"] == 200,
-                     "identical_after_restart": matrix.digest(parsed(response)) == state["route_sha"]},
-                    summary(response))
+            return persist_roundtrip(server, state["route_id"])
         results[f"api.{size}.route.persist-restart"] = case(f"api.{size}.route.persist-restart", persist)
 
         def listing():
@@ -334,7 +342,7 @@ class BrowserSession:
         self.context.route("**/*", self._gate)
         self.page = self.context.new_page()
         self.page.on("request", lambda r: self.requests.append(r.url))
-        self.page.on("response", self.responses.append)
+        self.page.on("response", lambda r: self.responses.append(r))  # Playwright needs a Python function, not a builtin
         self.page.on("pageerror", lambda _e: setattr(self, "page_errors", self.page_errors + 1))
 
     def _gate(self, route):

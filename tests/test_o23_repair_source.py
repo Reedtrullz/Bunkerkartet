@@ -300,6 +300,96 @@ def test_outer_argv_uid_gid_are_scalar_for_default_and_override_paths():
         adm.uid_gid = original
 
 
+def _resp_status(body, status=200):
+    return {"status": status, "headers": {}, "raw": json.dumps(body).encode()}
+
+
+class _FakeServer:
+    """Stands in for the app server: stop/start optionally mutate what the detail GET returns."""
+
+    def __init__(self, detail, after_restart=None):
+        self.detail, self.after_restart, self.events = detail, after_restart, []
+
+    def stop(self):
+        self.events.append("stop")
+
+    def start(self):
+        self.events.append("start")
+        if self.after_restart is not None:
+            self.detail = self.after_restart
+
+
+def _persist(server, route_id=7):
+    """Run the fixture's persist step with a fake request(); returns (checks, requested paths)."""
+    seen, original = [], acc.request
+    acc.request = lambda srv, method, path, **kw: (seen.append((method, path)), srv.detail)[1]
+    try:
+        checks, _record = acc.persist_roundtrip(server, route_id)
+    finally:
+        acc.request = original
+    return checks, seen
+
+
+def test_persist_passes_on_stable_detail_even_though_create_shape_differs():
+    detail = _resp_status({"id": 7, "points": [1, 2], "created_at": "2026-01-01T00:00:00+00:00", "extra": "only-in-detail"})
+    server = _FakeServer(detail)
+    checks, seen = _persist(server)
+    assert all(checks.values()), checks
+    assert server.events == ["stop", "start"]  # the real restart is retained
+    assert seen == [("GET", "/api/routes/7")] * 2  # same endpoint before and after
+
+
+def test_persist_fails_on_mutated_detail_after_restart():
+    detail = _resp_status({"id": 7, "points": [1, 2]})
+    for label, mutated in (("changed field", _resp_status({"id": 7, "points": [1, 3]})),
+                           ("reordered list", _resp_status({"id": 7, "points": [2, 1]})),
+                           ("dropped field", _resp_status({"id": 7})),
+                           ("added field", _resp_status({"id": 7, "points": [1, 2], "x": 1})),
+                           ("status", _resp_status({"id": 7, "points": [1, 2]}, status=404)),
+                           ("malformed body", {"status": 200, "headers": {}, "raw": b"{not json"})):
+        checks, _ = _persist(_FakeServer(detail, after_restart=mutated))
+        assert not all(checks.values()), label
+
+
+def test_persist_fails_on_bad_status_before_restart_and_non_integer_id():
+    bad = _resp_status({"id": 7}, status=500)
+    checks, _ = _persist(_FakeServer(bad))  # identical before/after, but not HTTP 200
+    assert checks["identical_after_restart"] and not all(checks.values())
+    assert not all(_persist(_FakeServer(_resp_status({"id": 7})), route_id=None)[0].values())
+
+
+def test_browser_response_callback_is_a_python_handler_delivering_the_exact_object():
+    class FakePage:
+        def __init__(self):
+            self.handlers = {}
+
+        def on(self, event, handler):
+            self.handlers[event] = handler
+
+    class FakeContext:
+        def set_default_timeout(self, _ms):
+            pass
+
+        def route(self, *_a):
+            pass
+
+        def new_page(self):
+            return page
+
+    page = FakePage()
+    playwright = type("P", (), {"chromium": type("C", (), {"launch_persistent_context": lambda *_a, **_k: FakeContext()})()})()
+    session = acc.BrowserSession(playwright, object(), Path("/fake/profile"), Path("/fake/cache"))
+    assert set(page.handlers) == {"request", "response", "pageerror"}  # every existing capture stays registered
+    handler = page.handlers["response"]
+    assert type(handler).__name__ == "function"  # Playwright rejects builtin_function_or_method
+    marker, request_marker = object(), type("R", (), {"url": "http://x/"})()
+    handler(marker)
+    assert session.responses == [marker] and session.responses[0] is marker
+    page.handlers["request"](request_marker)
+    page.handlers["pageerror"](RuntimeError("boom"))
+    assert session.requests == ["http://x/"] and session.page_errors == 1
+
+
 if __name__ == "__main__":
     failures = 0
     for name in sorted(n for n in dir(sys.modules[__name__]) if n.startswith("test_")):
