@@ -478,12 +478,12 @@ def _source_rows(connection: sqlite3.Connection, site_id: int) -> list[dict[str,
     return result
 
 
-def _observation_points(connection: sqlite3.Connection, site_id: int, rows=None) -> list[dict[str, object]]:
+def _observation_points(connection: sqlite3.Connection, site_id: int, rows=None, amendments=None) -> list[dict[str, object]]:
     if rows is None:
         rows = connection.execute("SELECT * FROM field_observations WHERE site_id=? ORDER BY observed_at DESC,id DESC",(site_id,)).fetchall()
     result=[]
     for row in rows:
-        observation=_effective_safe_observation(connection,row)
+        observation=_effective_safe_observation(connection,row,None if amendments is None else amendments.get(int(row["id"])))
         if observation.get("data_status") == "unavailable" or observation.get("withdrawn") or observation.get("latitude") is None or observation.get("longitude") is None: continue
         result.append({key:observation[key] for key in ("id","observed_at","outcome","latitude","longitude","point_role","uncertainty_m")})
     return result
@@ -508,10 +508,10 @@ def _safe_observation(row: sqlite3.Row) -> dict[str, object]:
     return observation
 
 
-def _effective_safe_observation(connection, row):
+def _effective_safe_observation(connection, row, amendments=None):
     original = _safe_observation(row)
     try:
-        result = effective_observation(connection,row)
+        result = effective_observation(connection,row,amendments=amendments)
         result.update(id=row["id"],request_id=row["request_id"],site_id=row["site_id"],observed_at=row["observed_at"],created_at=row["created_at"],data_status=original["data_status"])
         safe=[]
         for url in result.get("photo_urls",[]):
@@ -1519,9 +1519,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     chunk,
                 ):
                     observation_rows[observation["site_id"]].append(observation)
+            amendment_rows: dict[int, list[sqlite3.Row]] = {}
+            observation_ids = [int(observation["id"]) for observations in observation_rows.values() for observation in observations]
+            for offset in range(0, len(observation_ids), 500):
+                chunk = observation_ids[offset:offset + 500]
+                placeholders = ",".join("?" for _ in chunk)
+                try:
+                    batch = connection.execute(
+                        f"SELECT * FROM observation_amendments WHERE observation_id IN ({placeholders}) ORDER BY observation_id,revision,id",
+                        chunk,
+                    ).fetchall()
+                except sqlite3.DatabaseError:
+                    continue
+                for observation_id in chunk: amendment_rows.setdefault(observation_id, [])
+                for amendment in batch:
+                    amendment_rows.setdefault(int(amendment["observation_id"]), []).append(amendment)
             features: list[dict[str, object]] = []
             for row in rows:
-                site = site_summary(connection, row, observation_points=_observation_points(connection, int(row["id"]), observation_rows[int(row["id"])]))
+                site = site_summary(connection, row, observation_points=_observation_points(connection, int(row["id"]), observation_rows[int(row["id"])], amendment_rows))
                 site_id = int(site["id"])
                 geometry = None
                 if site["latitude"] is not None and site["longitude"] is not None:
