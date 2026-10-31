@@ -399,6 +399,12 @@ class BrowserSession:
         self.page.on("request", lambda r: self.requests.append(r.url))
         self.page.on("response", lambda r: self.responses.append(r))  # Playwright needs a Python function, not a builtin
         self.page.on("pageerror", lambda _e: setattr(self, "page_errors", self.page_errors + 1))
+        crash_events = self.context.browser.new_browser_cdp_session()
+        def target_crashed(event) -> None:
+            diag("renderer-crash", f"status={event.get('status')} errorCode={event.get('errorCode')}")
+            fs_usage("renderer-crash", profile.parent)
+        crash_events.on("Target.targetCrashed", target_crashed)
+        crash_events.send("Target.setDiscoverTargets", {"discover": True})
 
     def _gate(self, route):
         url = route.request.url
@@ -466,8 +472,11 @@ def browser_unit(size: str, scratch: Path) -> list[dict]:
             try:
                 session.page.goto(server.base)
                 fs_usage("after-launch", scratch)
-                def listed(name, query=None, expect_q=None, fewer=False):
+                def listed(name, query=None, expect_q=None, fewer=False, reload_phase=None):
                     def run():
+                        if reload_phase:
+                            fs_usage(reload_phase, scratch)
+                            session.page.reload()  # navigation failure belongs to this case, not the entire unit
                         record = session.observe(session.load_map(TOKEN, query), TOKEN)
                         checks = {"status_200": record["status"] == 200, "list_nonempty": record["list_children"] > 0,
                                   "privacy_clean": privacy_clean(record)}
@@ -485,13 +494,9 @@ def browser_unit(size: str, scratch: Path) -> list[dict]:
                     return case(f"browser.{size}.{name}", run)
                 got["cold-load"] = listed("cold-load")
                 got["route-view-cold"] = routed("route-view-cold")
-                fs_usage("before-reload-1", scratch)
-                session.page.reload()  # same profile and context: the warm revisit
-                got["warm-reload"] = listed("warm-reload")
+                got["warm-reload"] = listed("warm-reload", reload_phase="before-reload-1")
                 got["route-view-warm"] = routed("route-view-warm")
-                fs_usage("before-reload-2", scratch)
-                session.page.reload()
-                got["filter-sparse"] = listed("filter-sparse", "0003", "0003", fewer=True)
+                got["filter-sparse"] = listed("filter-sparse", "0003", "0003", fewer=True, reload_phase="before-reload-2")
                 got["filter-dense"] = listed("filter-dense", "synthetic", "synthetic")
             except BaseException:
                 fs_usage("failure", scratch)  # never raises; the original exception continues

@@ -8,6 +8,7 @@ import importlib
 import io
 import json
 import os
+import signal
 import sys
 import tempfile
 import types
@@ -369,6 +370,15 @@ def test_browser_response_callback_is_a_python_handler_delivering_the_exact_obje
             self.handlers[event] = handler
 
     class FakeContext:
+        def __init__(self):
+            self.browser = types.SimpleNamespace(new_browser_cdp_session=lambda: self)
+
+        def on(self, event, handler):
+            self.crash_handler = handler
+
+        def send(self, method, params):
+            assert method == "Target.setDiscoverTargets" and params == {"discover": True}
+
         def set_default_timeout(self, _ms):
             pass
 
@@ -390,6 +400,11 @@ def test_browser_response_callback_is_a_python_handler_delivering_the_exact_obje
     page.handlers["request"](request_marker)
     page.handlers["pageerror"](RuntimeError("boom"))
     assert session.requests == ["http://x/"] and session.page_errors == 1
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        session.context.crash_handler({"status": "crashed", "errorCode": 7, "targetId": "private-target", "url": "private-url"})
+    assert "renderer-crash status=crashed errorCode=7" in err.getvalue()
+    assert "private-target" not in err.getvalue() and "private-url" not in err.getvalue()
 
 
 def test_persist_rejects_malformed_null_wrong_shape_and_wrong_id_bodies_even_when_equal_or_different():
@@ -505,7 +520,7 @@ def test_observe_counts_real_site_item_cards_not_generic_children():
     assert ".site-item" in seen["js"]
     assert record["list_children"] == 1 and record["list_site_cards"] == 0
 
-def test_browser_unit_logs_chromium_stderr_channel_and_scratch_usage_without_masking_a_crash():
+def test_browser_unit_preserves_six_records_and_prior_passes_after_reload_crash():
     seen = {}
 
     class Playwright:
@@ -523,15 +538,32 @@ def test_browser_unit_logs_chromium_stderr_channel_and_scratch_usage_without_mas
             self.stop()
 
     class Page:
+        crashed = False
+
         def goto(self, _url):
             pass
 
         def reload(self):
+            seen["reloads"] = seen.get("reloads", 0) + 1
+            self.crashed = True
             raise RuntimeError("Page.reload: Page crashed")
 
     class Session:
         def __init__(self, *_args):
             self.page = Page()
+            self.requests = []
+
+        def load_map(self, *_args):
+            if self.page.crashed:
+                raise RuntimeError("Page crashed")
+
+        def observe(self, *_args):
+            return {"status": 200, "list_children": 1000, "privacy": {"storage": False, "cookie": False, "url": False}}
+
+        def route_view(self, *_args):
+            if self.page.crashed:
+                raise RuntimeError("Page crashed")
+            return {"status": 200, "privacy": {"storage": False, "cookie": False, "url": False}}
 
         def close(self):
             seen["closed"] = True
@@ -555,12 +587,21 @@ def test_browser_unit_logs_chromium_stderr_channel_and_scratch_usage_without_mas
     err = io.StringIO()
     try:
         with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(err):
-            try:
-                acc.browser_unit("large", Path(tmp))
-            except RuntimeError as error:
-                assert str(error) == "Page.reload: Page crashed"  # the original failure, not a diagnostic one
-            else:
-                raise AssertionError("crash was swallowed")
+            results = acc.browser_unit("large", Path(tmp))
+            document = _doc("browser-large")
+            data = json.loads(document)
+            data["cases"] = results
+            raw = json.dumps(data).encode()
+            matrix.validate_result(raw, "browser-large")
+            by_id = {c["id"]: c for c in results}
+            assert len(by_id) == 6
+            assert by_id["browser.large.cold-load"]["status"] == "PASS"
+            assert by_id["browser.large.route-view-cold"]["status"] == "PASS"
+            for name in ("warm-reload", "route-view-warm", "filter-sparse", "filter-dense"):
+                failed = by_id[f"browser.large.{name}"]
+                assert failed["status"] == "FAIL" and failed["record"] == {"error": "RuntimeError"}
+            with _stub(lambda *_args: _run(raw + b"\n", returncode=1)):
+                assert adm.run_unit("browser-large", Path(tmp))["status"] == "FAIL"
             real = os.statvfs(tmp)
         assert os.environ["DEBUG"] == "pw:api"
     finally:
@@ -574,7 +615,8 @@ def test_browser_unit_logs_chromium_stderr_channel_and_scratch_usage_without_mas
                 sys.modules[key] = value
     assert seen["debug_at_start"] == "pw:browser" and seen["stopped"] and seen["closed"]
     lines = [line for line in err.getvalue().splitlines() if line.startswith("o23-diag fs-usage")]
-    assert len(lines) >= 3 and "phase=failure" in lines[-1]
+    assert seen["reloads"] == 2
+    assert len(lines) >= 4 and "phase=before-reload-2" in lines[-1]
     assert f"total={real.f_blocks * real.f_frsize}" in lines[-1] and f"frsize={real.f_frsize}" in lines[-1]
 
 
@@ -583,6 +625,37 @@ def test_fs_usage_reports_unreadable_path_as_data_and_never_raises():
     with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(err):
         acc.fs_usage("probe", Path(tmp) / "missing")
     assert "phase=probe unavailable=FileNotFoundError" in err.getvalue() and "missing" not in err.getvalue()
+
+
+def test_failed_browser_cli_emits_all_cases_and_returns_nonzero():
+    original = acc.browser_unit
+    results = json.loads(_doc("browser-large", status="FAIL"))["cases"]
+    acc.browser_unit = lambda *_args: results
+    out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+    signals = {s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM, signal.SIGALRM)}
+    try:
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(out):
+            status = acc.main(["--unit", "browser-large", "--scratch", tmp])
+        out.flush()
+        raw = out.buffer.getvalue()
+        matrix.validate_result(raw, "browser-large")
+        assert status == 1 and json.loads(raw)["cases"] == results
+    finally:
+        signal.alarm(0)
+        for signum, handler in signals.items():
+            signal.signal(signum, handler)
+        acc.browser_unit = original
+        out.close()
+
+
+def test_case_does_not_convert_interrupt_or_deadline_to_a_result():
+    for error in (KeyboardInterrupt(), SystemExit(143), SystemExit(142)):
+        try:
+            acc.case("interrupted", lambda: (_ for _ in ()).throw(error))
+        except (KeyboardInterrupt, SystemExit) as caught:
+            assert caught is error
+        else:
+            raise AssertionError("interrupt was swallowed")
 
 
 
