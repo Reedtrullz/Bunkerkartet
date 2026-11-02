@@ -12,6 +12,30 @@ def test_stored_string_list_states(raw,state):
     if state in ('malformed','wrong_shape'): assert value is None
 
 
+@pytest.mark.parametrize('kind,state', [('strings','valid_empty'),('points','valid_empty'),('stops','valid_empty'),('object','wrong_shape'),('start','wrong_shape'),('geometry','wrong_shape')])
+def test_canonical_empty_list_per_kind(kind,state):
+    value, status = decode_stored_json('[]', kind)
+    assert status == state
+    assert value == ([] if state == 'valid_empty' else None)
+
+
+@pytest.mark.parametrize('kind', ['strings','points','stops'])
+def test_empty_list_results_are_independent(kind):
+    first, _ = decode_stored_json('[]', kind)
+    first.append('changed')
+    assert decode_stored_json('[]', kind)[0] == []
+
+
+@pytest.mark.parametrize('raw,state', [(b'[]','malformed'),(' []','valid_empty'),('[ ]','valid_empty'),('[]x','malformed'),('','malformed'),('[[]]','wrong_shape')])
+def test_near_empty_values_keep_strict_decoding(raw,state):
+    assert decode_stored_json(raw, 'strings')[1] == state
+
+
+def test_unknown_kind_still_rejected_for_empty_list():
+    with pytest.raises(ValueError):
+        decode_stored_json('[]', 'unknown')
+
+
 def test_one_corrupt_route_does_not_hide_healthy_routes_or_export_gpx(tmp_path,monkeypatch):
     from app.routes import RouteResult
     api = client(tmp_path)
