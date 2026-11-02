@@ -407,6 +407,34 @@ def test_browser_response_callback_is_a_python_handler_delivering_the_exact_obje
     assert "private-target" not in err.getvalue() and "private-url" not in err.getvalue()
 
 
+def test_large_browser_capture_enables_chromium_child_logs_without_changing_other_units():
+    seen = []
+
+    class Context:
+        browser = types.SimpleNamespace(new_browser_cdp_session=lambda: types.SimpleNamespace(
+            on=lambda *_a: None, send=lambda *_a: None))
+
+        def set_default_timeout(self, _ms):
+            pass
+
+        def route(self, *_a):
+            pass
+
+        def new_page(self):
+            return types.SimpleNamespace(on=lambda *_a: None)
+
+    class Chromium:
+        def launch_persistent_context(self, _profile, **options):
+            seen.append(options["args"])
+            return Context()
+
+    playwright = type("P", (), {"chromium": Chromium()})()
+    acc.BrowserSession(playwright, object(), Path("/fake/profile"), Path("/fake/cache"))
+    acc.BrowserSession(playwright, object(), Path("/fake/profile"), Path("/fake/cache"), diagnose=True)
+    assert seen[0] == ["--disk-cache-dir=/fake/cache"]
+    assert seen[1] == ["--disk-cache-dir=/fake/cache", "--enable-logging=stderr"]
+
+
 def test_persist_rejects_malformed_null_wrong_shape_and_wrong_id_bodies_even_when_equal_or_different():
     ok = _resp_status({"id": 7, "points": [1]})
     raw = lambda b: {"status": 200, "headers": {}, "raw": b}  # noqa: E731
@@ -539,17 +567,23 @@ def test_browser_unit_preserves_six_records_and_prior_passes_after_reload_crash(
 
     class Page:
         crashed = False
+        after_reload = False
+
+        def metrics(self):
+            return {"Documents": 1, "JSEventListeners": 9, "JSHeapTotalSize": 10000,
+                    "JSHeapUsedSize": 5678, "Nodes": 1234}
 
         def goto(self, _url):
             pass
 
         def reload(self):
             seen["reloads"] = seen.get("reloads", 0) + 1
-            self.crashed = True
-            raise RuntimeError("Page.reload: Page crashed")
+            self.after_reload = True
 
     class Session:
-        def __init__(self, *_args):
+        diagnose = True
+
+        def __init__(self, *_args, **_kwargs):
             self.page = Page()
             self.requests = []
 
@@ -558,6 +592,9 @@ def test_browser_unit_preserves_six_records_and_prior_passes_after_reload_crash(
                 raise RuntimeError("Page crashed")
 
         def observe(self, *_args):
+            if self.page.after_reload and not self.page.crashed:
+                self.page.crashed = True
+                raise RuntimeError("Page.eval_on_selector: Target crashed")
             return {"status": 200, "list_children": 1000, "privacy": {"storage": False, "cookie": False, "url": False}}
 
         def route_view(self, *_args):
@@ -618,6 +655,11 @@ def test_browser_unit_preserves_six_records_and_prior_passes_after_reload_crash(
     assert seen["reloads"] == 2
     assert len(lines) >= 4 and "phase=before-reload-2" in lines[-1]
     assert f"total={real.f_blocks * real.f_frsize}" in lines[-1] and f"frsize={real.f_frsize}" in lines[-1]
+    state = [line for line in err.getvalue().splitlines() if line.startswith("o23-diag browser-state")]
+    by_phase = {line.split("phase=", 1)[1].split(" ", 1)[0]: line for line in state}
+    assert "before-reload-1" in by_phase and "warm-reload-before-observe" in by_phase
+    assert "Nodes=1234" in by_phase["warm-reload-before-observe"]
+    assert "JSHeapUsedSize=5678" in by_phase["warm-reload-before-observe"]
 
 
 def test_fs_usage_reports_unreadable_path_as_data_and_never_raises():
@@ -625,6 +667,59 @@ def test_fs_usage_reports_unreadable_path_as_data_and_never_raises():
     with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stderr(err):
         acc.fs_usage("probe", Path(tmp) / "missing")
     assert "phase=probe unavailable=FileNotFoundError" in err.getvalue() and "missing" not in err.getvalue()
+
+
+def test_browser_state_records_metrics_and_bounded_scratch_usage():
+    class Page:
+        def metrics(self):
+            return {"Documents": 1, "Frames": 1, "JSEventListeners": 9, "Nodes": 1234,
+                    "JSHeapTotalSize": 10000, "JSHeapUsedSize": 5678}
+
+    class BrokenPage:
+        def metrics(self):
+            raise RuntimeError("private path")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "data").mkdir()
+        (root / "data" / "catalogue.db").write_bytes(b"x" * 17)
+        (root / "profile" / "Default").mkdir(parents=True)
+        (root / "profile" / "Default" / "Cache").write_bytes(b"y" * 23)
+        (root / "cache").mkdir()
+        (root / "cache" / "data_0").write_bytes(b"z" * 5)
+        (root / "server.log").write_bytes(b"log")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            acc.browser_state("before-reload-1", root, Page())
+            acc.browser_state("crashed", root, BrokenPage())
+        lines = err.getvalue().splitlines()
+    assert lines[0].startswith("o23-diag browser-state phase=before-reload-1 ")
+    assert "Nodes=1234" in lines[0] and "JSHeapUsedSize=5678" in lines[0]
+    assert "data=17b/1f" in lines[0] and "profile=23b/1f" in lines[0]
+    assert "cache=5b/1f" in lines[0] and "server.log=3b" in lines[0]
+    assert str(root) not in err.getvalue() and "private path" not in err.getvalue()
+    assert "phase=crashed" in lines[1] and "metrics=unavailable:RuntimeError" in lines[1]
+
+
+def test_admission_one_unit_runs_only_the_selected_unit():
+    originals = (adm.admit, adm.run_unit)
+    calls = []
+
+    def run_unit(unit, out_dir):
+        calls.append(unit)
+        return {"unit": unit, "status": "FAIL", "returncode": 1, "elapsed_s": 1.0, "overflow": False,
+                "survivors": 0, "scratch_removed": True, "detail": None, "problems": ["exit"],
+                "failed_cases": ["browser.large.warm-reload"], "result_sha256": "x"}
+
+    adm.admit, adm.run_unit = lambda _out: None, run_unit
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            status = adm.one_unit("browser-large", Path(tmp))
+            units = json.loads((Path(tmp) / "units.json").read_text())
+    finally:
+        adm.admit, adm.run_unit = originals
+    assert status == 1 and calls == ["browser-large"]
+    assert [unit["unit"] for unit in units] == ["browser-large"]
 
 
 def test_failed_browser_cli_emits_all_cases_and_returns_nonzero():

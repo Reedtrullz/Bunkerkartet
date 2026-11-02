@@ -85,6 +85,52 @@ def fs_usage(phase: str, path: Path) -> None:
         pass
 
 
+BROWSER_METRICS = ("Documents", "Frames", "JSEventListeners", "Nodes", "JSHeapUsedSize", "JSHeapTotalSize")
+
+
+def _tree_usage(path: Path) -> tuple[int, int]:
+    total = files = 0
+    try:
+        with os.scandir(path) as entries:
+            for entry in entries:
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        size, count = _tree_usage(Path(entry.path))
+                        total, files = total + size, files + count
+                    elif entry.is_file(follow_symlinks=False):
+                        total, files = total + entry.stat(follow_symlinks=False).st_size, files + 1
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    return total, files
+
+
+def browser_state(phase: str, scratch: Path, page=None) -> None:
+    """Bounded crash-phase state: renderer metrics and scratch writers, never an outcome input."""
+    parts = []
+    if page is not None:
+        try:
+            metrics = page.metrics() or {}
+            parts.append("metrics=" + ",".join(f"{key}={int(metrics.get(key, 0))}" for key in BROWSER_METRICS))
+        except Exception as error:  # noqa: BLE001 - diagnostics must not change the outcome
+            parts.append(f"metrics=unavailable:{type(error).__name__}")
+    try:
+        entries = sorted(scratch.iterdir(), key=lambda entry: entry.name)[:12]
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False):
+                size, count = _tree_usage(entry)
+                parts.append(f"{entry.name}={size}b/{count}f")
+            elif entry.is_file(follow_symlinks=False):
+                parts.append(f"{entry.name}={entry.stat(follow_symlinks=False).st_size}b")
+    except OSError as error:
+        parts.append(f"tree=unavailable:{type(error).__name__}")
+    try:
+        diag("browser-state", f"phase={phase} " + " ".join(parts))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 @contextlib.contextmanager
 def playwright_with_browser_log():
     """sync_playwright() whose driver, started with DEBUG=pw:browser, relays Chromium's stderr; DEBUG is restored right after start."""
@@ -386,11 +432,16 @@ if (window.indexedDB) indexedDB.open = () => { throw new DOMException('denied', 
 
 
 class BrowserSession:
-    def __init__(self, playwright, server: Server, profile: Path, cache: Path, init_script: str | None = None):
+    def __init__(self, playwright, server: Server, profile: Path, cache: Path, init_script: str | None = None,
+                 diagnose: bool = False):
         self.server, self.requests, self.blocked, self.responses, self.page_errors = server, [], [], [], 0
+        self.diagnose = diagnose
+        args = [f"--disk-cache-dir={cache}"]
+        if diagnose:
+            args.append("--enable-logging=stderr")
         self.context = playwright.chromium.launch_persistent_context(
             str(profile), headless=True, viewport={"width": 1280, "height": 720},
-            args=[f"--disk-cache-dir={cache}"], accept_downloads=False)
+            args=args, accept_downloads=False)
         self.context.set_default_timeout(15000)
         if init_script:
             self.context.add_init_script(init_script)
@@ -403,6 +454,8 @@ class BrowserSession:
         def target_crashed(event) -> None:
             diag("renderer-crash", f"status={event.get('status')} errorCode={event.get('errorCode')}")
             fs_usage("renderer-crash", profile.parent)
+            if diagnose:
+                browser_state("renderer-crash", profile.parent)
         crash_events.on("Target.targetCrashed", target_crashed)
         crash_events.send("Target.setDiscoverTargets", {"discover": True})
 
@@ -468,7 +521,7 @@ def browser_unit(size: str, scratch: Path) -> list[dict]:
         seeded = request(server, "POST", "/api/routes", body={**ROUTE, "request_id": "o23-browser-route"})
         with playwright_with_browser_log() as pw:
             fs_usage("before-launch", scratch)
-            session = BrowserSession(pw, server, scratch / "profile", scratch / "cache")
+            session = BrowserSession(pw, server, scratch / "profile", scratch / "cache", diagnose=size == "large")
             try:
                 session.page.goto(server.base)
                 fs_usage("after-launch", scratch)
@@ -476,8 +529,13 @@ def browser_unit(size: str, scratch: Path) -> list[dict]:
                     def run():
                         if reload_phase:
                             fs_usage(reload_phase, scratch)
+                            if getattr(session, "diagnose", False):
+                                browser_state(reload_phase, scratch, session.page)
                             session.page.reload()  # navigation failure belongs to this case, not the entire unit
-                        record = session.observe(session.load_map(TOKEN, query), TOKEN)
+                        response = session.load_map(TOKEN, query)
+                        if getattr(session, "diagnose", False):
+                            browser_state(f"{name}-before-observe", scratch, session.page)
+                        record = session.observe(response, TOKEN)
                         checks = {"status_200": record["status"] == 200, "list_nonempty": record["list_children"] > 0,
                                   "privacy_clean": privacy_clean(record)}
                         if expect_q is not None:

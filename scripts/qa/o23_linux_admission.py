@@ -421,6 +421,19 @@ def run_unit(unit: str, out_dir: Path) -> dict:
             "result_sha256": hashlib.sha256((out_dir / f"{unit}.json").read_bytes()).hexdigest() if (out_dir / f"{unit}.json").exists() else None}
 
 
+def one_unit(unit: str, out_dir: Path) -> int:
+    """Admission controls followed by exactly one selected unit; no other unit runs."""
+    blocked = admit(out_dir)
+    if blocked is not None:
+        return blocked
+    result = run_unit(unit, out_dir)
+    (out_dir / "units.json").write_text(json.dumps([result], indent=1))
+    if not artifacts_within_budget(out_dir):
+        print("FAIL: artifacts exceed the reserved", ARTIFACT_BYTES, "bytes")
+        return 1
+    return 0 if result["status"] == "PASS" else 1
+
+
 def artifacts_within_budget(out_dir: Path) -> bool:
     return sum(p.stat().st_size for p in out_dir.rglob("*") if p.is_file()) <= ARTIFACT_BYTES
 
@@ -483,6 +496,7 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--print-plan", action="store_true", help="print the frozen argv per unit; executes nothing")
     group.add_argument("--preflight", action="store_true")
     group.add_argument("--controls", action="store_true", help="preflight + the ten admission controls only (hosted Linux)")
+    group.add_argument("--unit", choices=matrix.UNITS, help="preflight, controls, then exactly one selected unit")
     group.add_argument("--ci", action="store_true", help="preflight, controls, then every unit (hosted Linux only)")
     parser.add_argument("--out-dir", type=Path)
     args = parser.parse_args(argv)
@@ -494,6 +508,10 @@ def main(argv: list[str] | None = None) -> int:
         gate = preflight()
         print(json.dumps(gate, indent=1))
         return 0 if gate["ready"] else 3
+    elif args.unit:
+        if args.out_dir is None:
+            parser.error("--unit needs --out-dir")
+        return one_unit(args.unit, args.out_dir)
     else:
         if args.out_dir is None:
             parser.error("--ci/--controls need --out-dir")
