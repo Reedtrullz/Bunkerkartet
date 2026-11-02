@@ -14,6 +14,7 @@ import gzip
 import hashlib
 import http.client
 import json
+import math
 import os
 import re
 import signal
@@ -110,19 +111,39 @@ def browser_state(phase: str, scratch: Path, page=None) -> None:
     """Bounded crash-phase state: renderer metrics and scratch writers, never an outcome input."""
     parts = []
     if page is not None:
+        cdp = None
         try:
-            metrics = page.metrics() or {}
-            parts.append("metrics=" + ",".join(f"{key}={int(metrics.get(key, 0))}" for key in BROWSER_METRICS))
+            cdp = page.context.new_cdp_session(page)
+            cdp.send("Performance.enable")
+            response = cdp.send("Performance.getMetrics")
+            rows = response.get("metrics") if isinstance(response, dict) else None
+            values = {}
+            for row in rows if isinstance(rows, list) else ():
+                if isinstance(row, dict) and row.get("name") in BROWSER_METRICS:
+                    value = row.get("value")
+                    if type(value) in (int, float) and math.isfinite(value):
+                        values[row["name"]] = int(value)
+            rendered = [f"{key}={values[key]}" for key in BROWSER_METRICS if key in values]
+            missing = [key for key in BROWSER_METRICS if key not in values]
+            if missing:
+                rendered.append("missing=" + ",".join(missing))
+            parts.append("metrics=" + ",".join(rendered))
         except Exception as error:  # noqa: BLE001 - diagnostics must not change the outcome
             parts.append(f"metrics=unavailable:{type(error).__name__}")
+        finally:
+            if cdp is not None:
+                try:
+                    cdp.detach()
+                except Exception:  # noqa: BLE001
+                    pass
     try:
-        entries = sorted(scratch.iterdir(), key=lambda entry: entry.name)[:12]
-        for entry in entries:
-            if entry.is_dir(follow_symlinks=False):
-                size, count = _tree_usage(entry)
-                parts.append(f"{entry.name}={size}b/{count}f")
-            elif entry.is_file(follow_symlinks=False):
-                parts.append(f"{entry.name}={entry.stat(follow_symlinks=False).st_size}b")
+        with os.scandir(scratch) as entries:
+            for entry in sorted(entries, key=lambda item: item.name)[:12]:
+                if entry.is_dir(follow_symlinks=False):
+                    size, count = _tree_usage(Path(entry.path))
+                    parts.append(f"{entry.name}={size}b/{count}f")
+                elif entry.is_file(follow_symlinks=False):
+                    parts.append(f"{entry.name}={entry.stat(follow_symlinks=False).st_size}b")
     except OSError as error:
         parts.append(f"tree=unavailable:{type(error).__name__}")
     try:

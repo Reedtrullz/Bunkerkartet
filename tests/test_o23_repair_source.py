@@ -569,9 +569,23 @@ def test_browser_unit_preserves_six_records_and_prior_passes_after_reload_crash(
         crashed = False
         after_reload = False
 
-        def metrics(self):
-            return {"Documents": 1, "JSEventListeners": 9, "JSHeapTotalSize": 10000,
-                    "JSHeapUsedSize": 5678, "Nodes": 1234}
+        class Context:
+            def new_cdp_session(self, _page):
+                class CDP:
+                    def send(self, method, params=None):
+                        seen.setdefault("cdp", []).append(method)
+                        if method == "Performance.getMetrics":
+                            return {"metrics": [{"name": name, "value": value} for name, value in (
+                                ("Documents", 1), ("Frames", 1), ("JSEventListeners", 9),
+                                ("Nodes", 1234), ("JSHeapUsedSize", 5678), ("JSHeapTotalSize", 10000))]}
+                        return {}
+
+                    def detach(self):
+                        seen["detached"] = seen.get("detached", 0) + 1
+
+                return CDP()
+
+        context = Context()
 
         def goto(self, _url):
             pass
@@ -660,6 +674,7 @@ def test_browser_unit_preserves_six_records_and_prior_passes_after_reload_crash(
     assert "before-reload-1" in by_phase and "warm-reload-before-observe" in by_phase
     assert "Nodes=1234" in by_phase["warm-reload-before-observe"]
     assert "JSHeapUsedSize=5678" in by_phase["warm-reload-before-observe"]
+    assert {"Performance.enable", "Performance.getMetrics"} <= set(seen["cdp"]) and seen["detached"] >= 4
 
 
 def test_fs_usage_reports_unreadable_path_as_data_and_never_raises():
@@ -671,13 +686,32 @@ def test_fs_usage_reports_unreadable_path_as_data_and_never_raises():
 
 def test_browser_state_records_metrics_and_bounded_scratch_usage():
     class Page:
-        def metrics(self):
-            return {"Documents": 1, "Frames": 1, "JSEventListeners": 9, "Nodes": 1234,
-                    "JSHeapTotalSize": 10000, "JSHeapUsedSize": 5678}
+        class Context:
+            def new_cdp_session(self, _page):
+                class CDP:
+                    sent = []
+
+                    def send(self, method, params=None):
+                        self.sent.append(method)
+                        if method == "Performance.getMetrics":
+                            return {"metrics": [{"name": name, "value": value} for name, value in (
+                                ("Documents", 1), ("Frames", 1), ("JSEventListeners", 9),
+                                ("Nodes", 1234), ("JSHeapTotalSize", 10000), ("JSHeapUsedSize", 5678))]}
+                        return {}
+
+                    def detach(self):
+                        self.sent.append("detach")
+
+                return CDP()
+
+        context = Context()
 
     class BrokenPage:
-        def metrics(self):
-            raise RuntimeError("private path")
+        class Context:
+            def new_cdp_session(self, _page):
+                raise RuntimeError("private path")
+
+        context = Context()
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -688,6 +722,7 @@ def test_browser_state_records_metrics_and_bounded_scratch_usage():
         (root / "cache").mkdir()
         (root / "cache" / "data_0").write_bytes(b"z" * 5)
         (root / "server.log").write_bytes(b"log")
+        (root / "linked").symlink_to("/etc/hosts")
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             acc.browser_state("before-reload-1", root, Page())
@@ -697,8 +732,56 @@ def test_browser_state_records_metrics_and_bounded_scratch_usage():
     assert "Nodes=1234" in lines[0] and "JSHeapUsedSize=5678" in lines[0]
     assert "data=17b/1f" in lines[0] and "profile=23b/1f" in lines[0]
     assert "cache=5b/1f" in lines[0] and "server.log=3b" in lines[0]
+    assert "linked=" not in lines[0]
     assert str(root) not in err.getvalue() and "private path" not in err.getvalue()
     assert "phase=crashed" in lines[1] and "metrics=unavailable:RuntimeError" in lines[1]
+
+
+def test_browser_state_never_invents_missing_or_nonfinite_metrics():
+    class Page:
+        class Context:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def new_cdp_session(self, _page):
+                rows = self.rows
+
+                class CDP:
+                    def send(self, method, params=None):
+                        return {"metrics": rows} if method == "Performance.getMetrics" else {}
+
+                    def detach(self):
+                        pass
+
+                return CDP()
+
+        def __init__(self, rows):
+            self.context = self.Context(rows)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            acc.browser_state("partial", Path(tmp), Page([
+                {"name": "Documents", "value": 2},
+                {"name": "Frames", "value": float("nan")},
+                {"name": "JSEventListeners", "value": "9"},
+            ]))
+            acc.browser_state("empty", Path(tmp), Page([]))
+    lines = err.getvalue().splitlines()
+    assert "Documents=2" in lines[0]
+    for missing in ("Frames", "JSEventListeners", "Nodes", "JSHeapUsedSize", "JSHeapTotalSize"):
+        assert f"{missing}=0" not in lines[0]
+    assert lines[0].endswith("missing=Frames,JSEventListeners,Nodes,JSHeapUsedSize,JSHeapTotalSize")
+    assert "missing=Documents,Frames,JSEventListeners,Nodes,JSHeapUsedSize,JSHeapTotalSize" in lines[1]
+
+
+def test_ci_selects_one_browser_large_unit_only_for_the_diagnostic_branch():
+    workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml").read_text()
+    assert workflow.count("--unit browser-large") == 1
+    assert '\"$O23_HEAD_REF\" = \"codex/bunker-o23-recovery-20261102\"' in workflow
+    assert "scripts/qa/o23_linux_admission.py --ci --out-dir" in workflow
+    assert "if: github.event_name == 'pull_request' && always()" in workflow
+    assert "if: github.event_name == 'push' && github.ref == 'refs/heads/main'" in workflow
 
 
 def test_admission_one_unit_runs_only_the_selected_unit():
