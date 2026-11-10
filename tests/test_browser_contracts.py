@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from playwright.sync_api import expect
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, Route, sync_playwright
 
 from test_browser_smoke import _start_browser_server, _stop_browser_server
 
@@ -700,21 +700,11 @@ def test_slow_superseded_list_read_cannot_replace_newer_filter(page: Page, base_
 
 
 def test_route_result_stays_bound_to_original_submission_snapshot(page: Page, base_url: str):
-    posted: list[dict[str, object]] = []
+    pending: list[Route] = []
 
     page.route("**/api/config", lambda route: _config(route, profiles=["foot-hiking", "foot-walking"]))
 
-    def delayed_route(route):
-        posted.append(route.request.post_data_json)
-        time.sleep(0.4)
-        route.fulfill(status=200, content_type="application/json", body=json.dumps({
-            "id": 501, "name": posted[0]["name"], "distance_m": 1200, "duration_s": 900,
-            "geometry": {"type": "LineString", "coordinates": [[10.3951, 63.4305], [10.4, 63.435]]},
-            "gpx": "<gpx/>", "stops": [{"site_id": 1, "name": "Synthetic site", "warnings": []}],
-            "warnings": [], "data_status": "valid",
-        }))
-
-    page.route("**/api/routes", lambda route: delayed_route(route) if route.request.method == "POST" else route.continue_())
+    page.route("**/api/routes", lambda route: pending.append(route) if route.request.method == "POST" else route.continue_())
     page.goto(base_url)
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
@@ -733,19 +723,34 @@ def test_route_result_stays_bound_to_original_submission_snapshot(page: Page, ba
     page.locator("#route-profile").select_option("foot-walking")
     page.locator("#route-stops input[type=number]").fill("25")
     page.get_by_label("Budsjett for hele turen (minutter, valgfritt)", exact=True).fill("75")
-    page.get_by_role("button", name="Beregn rute", exact=True).click()
-    page.get_by_label("Rutenavn", exact=True).fill("Edited after calculation began")
-    page.locator("#route-mode").select_option("return_to_start")
+    with page.expect_request(lambda request: request.method == "POST" and urlsplit(request.url).path == "/api/routes"):
+        page.get_by_role("button", name="Beregn rute", exact=True).click()
+    name = page.get_by_label("Rutenavn", exact=True)
+    mode = page.locator("#route-mode")
+    name.fill("Edited after calculation began")
+    mode.select_option("return_to_start")
+    # Keep the response blocked until the edits have reached the browser.
+    assert pending, "The route POST was not intercepted"
+    posted = pending[0].request.post_data_json
+    assert isinstance(posted, dict)
+    pending[0].fulfill(status=200, json={
+        "id": 501, "name": posted["name"], "distance_m": 1200, "duration_s": 900,
+        "geometry": {"type": "LineString", "coordinates": [[10.3951, 63.4305], [10.4, 63.435]]},
+        "gpx": "<gpx/>", "stops": [{"site_id": 1, "name": "Synthetic site", "warnings": []}],
+        "warnings": [], "data_status": "valid",
+    })
     expect(page.locator("#map-status")).to_contain_text("tidligere ruten")
-    assert len(posted) == 1
-    assert posted[0]["name"] == "Feltur i Trondheim"
-    assert posted[0]["request_id"]
-    assert posted[0]["mode"] == "explicit_end"
-    assert posted[0]["end"] == {"lat": 63.44, "lon": 10.42}
-    assert posted[0]["profile"] == "foot-walking"
-    assert posted[0]["visit_minutes"] == [25]
-    assert posted[0]["declared_budget_minutes"] == 75
+    assert len(pending) == 1
+    assert posted["name"] == "Feltur i Trondheim"
+    assert posted["request_id"]
+    assert posted["mode"] == "explicit_end"
+    assert posted["end"] == {"lat": 63.44, "lon": 10.42}
+    assert posted["profile"] == "foot-walking"
+    assert posted["visit_minutes"] == [25]
+    assert posted["declared_budget_minutes"] == 75
     assert page.get_by_text("Last ned GPX", exact=True).count() == 0
+    expect(name).to_have_value("Edited after calculation began")
+    expect(mode).to_have_value("return_to_start")
 
 
 def test_saved_route_budget_preview_uses_only_stored_legs(page: Page, base_url: str):
