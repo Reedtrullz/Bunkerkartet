@@ -704,17 +704,21 @@ def test_route_result_stays_bound_to_original_submission_snapshot(page: Page, ba
 
     page.route("**/api/config", lambda route: _config(route, profiles=["foot-hiking", "foot-walking"]))
 
-    def delayed_route(route):
+    held = []
+
+    def held_route(route):
         posted.append(route.request.post_data_json)
-        time.sleep(0.4)
-        route.fulfill(status=200, content_type="application/json", body=json.dumps({
+        held.append(route)
+
+    def release_route():
+        held[0].fulfill(status=200, content_type="application/json", body=json.dumps({
             "id": 501, "name": posted[0]["name"], "distance_m": 1200, "duration_s": 900,
             "geometry": {"type": "LineString", "coordinates": [[10.3951, 63.4305], [10.4, 63.435]]},
             "gpx": "<gpx/>", "stops": [{"site_id": 1, "name": "Synthetic site", "warnings": []}],
             "warnings": [], "data_status": "valid",
         }))
 
-    page.route("**/api/routes", lambda route: delayed_route(route) if route.request.method == "POST" else route.continue_())
+    page.route("**/api/routes", lambda route: held_route(route) if route.request.method == "POST" else route.continue_())
     page.goto(base_url)
     page.get_by_label("Administratortoken", exact=True).fill("audit-only")
     page.get_by_role("button", name="Last inn kart", exact=True).click()
@@ -734,8 +738,15 @@ def test_route_result_stays_bound_to_original_submission_snapshot(page: Page, ba
     page.locator("#route-stops input[type=number]").fill("25")
     page.get_by_label("Budsjett for hele turen (minutter, valgfritt)", exact=True).fill("75")
     page.get_by_role("button", name="Beregn rute", exact=True).click()
+    for _ in range(100):
+        if held:
+            break
+        page.wait_for_timeout(50)
+    assert len(held) == 1
     page.get_by_label("Rutenavn", exact=True).fill("Edited after calculation began")
     page.locator("#route-mode").select_option("return_to_start")
+    assert len(held) == 1 and len(posted) == 1
+    release_route()
     expect(page.locator("#map-status")).to_contain_text("tidligere ruten")
     assert len(posted) == 1
     assert posted[0]["name"] == "Feltur i Trondheim"
