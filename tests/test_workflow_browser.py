@@ -32,7 +32,7 @@ def _create_offline_test_note(page: Page, base_url: str, pack_id: str) -> tuple[
     section = page.locator('[data-detail-section="offline-notebook"]')
     section.locator("summary").click()
     page.evaluate("navigator.storage.persist = async () => true")
-    pack = {"schema": "bunkerkartet-offline-pack-v1", "pack_id": pack_id, "created_at": "2026-10-03T12:00:00Z", "expires_at": "2026-10-10T12:00:00Z", "selected_fields": ["external_key", "name", "revision"], "records": [{"external_key": "krigskart:413", "name": "Synthetic site", "revision": 3}]}
+    pack = {"schema": "bunkerkartet-offline-pack-v1", "pack_id": pack_id, "created_at": "2026-10-03T12:00:00Z", "expires_at": "2099-10-10T12:00:00Z", "selected_fields": ["external_key", "name", "revision"], "records": [{"external_key": "krigskart:413", "name": "Synthetic site", "revision": 3}]}
     payload_json = json.dumps(pack)
     payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
     page.route("**/api/pilots/offline/packs", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps({"pack_id": pack_id, "payload_json": payload_json, "sha256": payload_hash, "created_at": pack["created_at"], "expires_at": pack["expires_at"], "site_count": 1, "stale": False, "tile_cache_included": False, "bearer_token_included": False})))
@@ -264,7 +264,7 @@ def test_offline_notebook_requires_device_consent_uses_ephemeral_token_and_clear
     expect(section).to_contain_text("Ingen automatisk synkronisering")
     expect(section.get_by_role("button", name="Lagre valgt pakke på denne enheten", exact=True)).to_be_disabled()
     page.evaluate("navigator.storage.persist = async () => true")
-    pack = {"schema": "bunkerkartet-offline-pack-v1", "pack_id": "pack-1", "created_at": "2026-10-03T12:00:00Z", "expires_at": "2026-10-10T12:00:00Z", "selected_fields": ["external_key", "name", "revision"], "records": [{"external_key": "krigskart:413", "name": "Synthetic site", "revision": 3}]}
+    pack = {"schema": "bunkerkartet-offline-pack-v1", "pack_id": "pack-1", "created_at": "2026-10-03T12:00:00Z", "expires_at": "2099-10-10T12:00:00Z", "selected_fields": ["external_key", "name", "revision"], "records": [{"external_key": "krigskart:413", "name": "Synthetic site", "revision": 3}]}
     payload_json = json.dumps(pack)
     payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
     page.route("**/api/pilots/offline/packs", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps({"pack_id": "pack-1", "payload_json": payload_json, "sha256": payload_hash, "created_at": pack["created_at"], "expires_at": pack["expires_at"], "site_count": 1, "stale": False, "tile_cache_included": False, "bearer_token_included": False})))
