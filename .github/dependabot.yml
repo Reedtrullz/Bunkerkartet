@@ -12,8 +12,11 @@ updates:
     open-pull-requests-limit: 5
     ignore:
       - dependency-name: python
+        # Docker tags like 3.12 -> 3.15 are "minor" to Dependabot, but they are
+        # new Python releases; the runtime stays on 3.12 (see tests/test_deploy_config.py).
         update-types:
           - version-update:semver-major
+          - version-update:semver-minor
   - package-ecosystem: github-actions
     directory: /
     schedule:
